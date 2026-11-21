@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { RefactorError } from "@jig/core";
 import type { Flag } from "@jig/core";
 import { HELP_SCHEMA_ID, schemaErrors } from "@jig/test-utils";
 import { ACTIONS, help } from "../src/main.ts";
@@ -13,23 +14,32 @@ function fakeValue(flag: Flag): string {
   return "foo";
 }
 
-// The raw object `parseParams` gets, answering the given flags; every key it reads is recorded.
-function recordingRaw(flags: Flag[], reads: Set<string>): Record<string, string | undefined> {
+// The raw object `parseParams` gets, answering the given flags (with `values` over the fake ones);
+// every key it reads is recorded.
+function recordingRaw(
+  flags: Flag[],
+  reads: Set<string>,
+  values: Record<string, string> = {},
+): Record<string, string | undefined> {
   return new Proxy({} as Record<string, string | undefined>, {
     get(_target, key) {
       if (typeof key !== "string") return undefined;
       reads.add(key);
       const flag = flags.find((f) => f.name === `--${key}`);
-      return flag === undefined ? undefined : fakeValue(flag);
+      if (flag === undefined) return undefined;
+      return values[flag.name] ?? fakeValue(flag);
     },
   });
 }
 
+// Whether `parse` refuses; a refusal must be an INVALID_ARGS RefactorError.
 function refuses(parse: () => unknown): boolean {
   try {
     parse();
     return false;
-  } catch {
+  } catch (e) {
+    assert.ok(e instanceof RefactorError, String(e));
+    assert.equal(e.code, "INVALID_ARGS");
     return true;
   }
 }
@@ -78,6 +88,24 @@ describe("typescript help", () => {
           refuses(() => action.parseParams(recordingRaw(others, new Set()))),
           flag.required,
           flag.name,
+        );
+      }
+    });
+
+    test(`${action.id}: parseParams accepts every listed choice and refuses any other value`, () => {
+      for (const flag of action.flags) {
+        if (flag.type !== "choice") continue;
+        for (const choice of flag.choices) {
+          assert.equal(
+            refuses(() => action.parseParams(recordingRaw(action.flags, new Set(), { [flag.name]: choice }))),
+            false,
+            `${flag.name} ${choice}`,
+          );
+        }
+        assert.equal(
+          refuses(() => action.parseParams(recordingRaw(action.flags, new Set(), { [flag.name]: "not-a-choice" }))),
+          true,
+          `${flag.name} not-a-choice`,
         );
       }
     });
