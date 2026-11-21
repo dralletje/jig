@@ -1,0 +1,8 @@
+{
+  "name": "jig-image-prettier",
+  "private": true,
+  "dependencies": {
+    "@jig/action-prettier": "file:packages/action-prettier",
+    "@jig/core": "file:packages/core"
+  }
+}
