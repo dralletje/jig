@@ -240,9 +240,29 @@ describe("codemod help", () => {
     assert.ok(transform && transform.type === "choice", JSON.stringify(transform));
     assert.deepEqual(transform.choices, ["alpha", "mid", "zeta"]);
     assert.equal(transform.required, true);
-    assert.match(transform.description, /alpha\b.*sweep/);
-    assert.match(transform.description, /mid\b.*rewrite/);
-    assert.match(transform.description, /zeta\b.*rewrite/);
+    assert.equal(transform.description, "Which transform to run; the commit has its kind. sweep: alpha. rewrite: every other one.");
+  });
+
+  test("--transform's description names every kind but the most common one by its transforms, once each", async () => {
+    const description = async (transforms: Record<string, ActionKind>) =>
+      help(await fakePackage(transforms)).actions[0]!.flags.find((f) => f.name === "--transform")!.description;
+    assert.equal(
+      await description({ d: "rewrite", c: "refactor", b: "sweep", a: "sweep", e: "sweep" }),
+      "Which transform to run; the commit has its kind. refactor: c. rewrite: d. sweep: every other one.",
+    );
+    assert.equal(await description({ a: "rewrite", b: "rewrite" }), "Which transform to run; the commit has its kind. rewrite: all of them.");
+    assert.equal(await description({ a: "sweep", b: "rewrite" }), "Which transform to run; the commit has its kind. sweep: a. rewrite: every other one.");
+  });
+
+  test("--transform's description for the real react-codemod table lists the sweep transforms, the rest rewrite", async () => {
+    const transforms = TRANSFORM_KINDS["react-codemod"]!;
+    const description = help({ ...(await fakePackage(transforms)), name: "react-codemod" }).actions[0]!.flags.find(
+      (f) => f.name === "--transform",
+    )!.description;
+    const sweeps = Object.keys(transforms)
+      .filter((name) => transforms[name] === "sweep")
+      .sort();
+    assert.equal(description, `Which transform to run; the commit has its kind. sweep: ${sweeps.join(", ")}. rewrite: every other one.`);
   });
 
   test("--files is required globs, --parser an optional choice of tsx, ts, babel, flow", async () => {

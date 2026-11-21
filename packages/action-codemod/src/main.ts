@@ -84,6 +84,22 @@ function firstLine(text: string): string {
 }
 
 /**
+ * `--transform`'s description: the transforms grouped by kind, in the order of `kinds`. The kind with the
+ * most transforms (the later one on a tie) is "every other one" instead of its names, as the choices are
+ * listed under the description anyway; with one kind, it is "all of them".
+ */
+function transformDescription(names: string[], transforms: Record<string, ActionKind>, kinds: ActionKind[]): string {
+  const named = (kind: ActionKind) => names.filter((name) => transforms[name] === kind);
+  let rest = kinds[0]!;
+  for (const kind of kinds) {
+    if (named(kind).length >= named(rest).length) rest = kind;
+  }
+  const groups = kinds.filter((kind) => kind !== rest).map((kind) => `${kind}: ${named(kind).join(", ")}.`);
+  groups.push(kinds.length === 1 ? `${rest}: all of them.` : `${rest}: every other one.`);
+  return `Which transform to run; the commit has its kind. ${groups.join(" ")}`;
+}
+
+/**
  * The codemod image's help: its one action, `codemod`, whose kinds are those of the carried package's
  * transforms. `pkg` is the package the image carries (injected by tests).
  */
@@ -103,7 +119,7 @@ export function help(pkg?: CodemodPackage): ImageHelp {
           type: "choice",
           choices: names,
           required: true,
-          description: `The transform to run; the commit has its kind:\n${names.map((name) => `  ${name}  ${carried.transforms[name]}`).join("\n")}`,
+          description: transformDescription(names, carried.transforms, kinds),
         },
         {
           name: "--files",
