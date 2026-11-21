@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jig:output:1",
+  "title": "jig binary output, version 1",
+  "description": "The one JSON object the binary prints on stdout. Exit code 0 with ok true, 1 with ok false.",
+  "oneOf": [{ "$ref": "#/$defs/success" }, { "$ref": "#/$defs/failure" }],
+  "$defs": {
+    "schema": { "const": "urn:jig:output:1" },
+    "success": {
+      "type": "object",
+      "required": [
+        "schema",
+        "ok",
+        "commit",
+        "parent",
+        "image",
+        "args",
+        "kind",
+        "subject",
+        "summary",
+        "filesChanged"
+      ],
+      "properties": {
+        "schema": { "$ref": "#/$defs/schema" },
+        "ok": { "const": true },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" },
+        "parent": { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" },
+        "image": { "description": "The image pinned to its ID: <name>@sha256:<id>.", "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "kind": { "$ref": "urn:jig:report:1#/$defs/kind" },
+        "subject": { "$ref": "urn:jig:report:1#/$defs/subject" },
+        "summary": { "$ref": "urn:jig:report:1#/$defs/summary" },
+        "filesChanged": { "type": "array", "items": { "type": "string" } },
+        "notes": {
+          "description": "Things the agent should know about this run, such as a cached image used because its registry could not be reached. Left out when there are none.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": ["schema", "ok", "code", "instructions"],
+      "properties": {
+        "schema": { "$ref": "#/$defs/schema" },
+        "ok": { "const": false },
+        "code": { "$ref": "urn:jig:report:1#/$defs/errorCode" },
+        "instructions": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

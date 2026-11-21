@@ -1,0 +1,5 @@
+# Test-only image: localhost/jig/probe:local, built by swift/cli/Tests/IntegrationTests/Helpers.swift.
+FROM node:26.13.1-slim
+COPY probe.ts /probe.ts
+WORKDIR /workspace
+ENTRYPOINT ["node", "/probe.ts"]

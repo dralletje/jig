@@ -1,0 +1,6 @@
+{
+  "schema": "urn:jig:report:1",
+  "ok": false,
+  "code": "REFACTOR_UNAVAILABLE",
+  "instructions": "`sendEmail` is passed as a callback in src/jobs.ts:40. Wrap that use in an arrow function first, then run again."
+}

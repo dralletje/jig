@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jig:verify:1",
+  "title": "jig verify output, version 1",
+  "description": "The one JSON object `jig verify` prints on stdout once it replays commits. Exit code 0 with ok true, 1 with ok false. Errors before any replay use urn:jig:output:1's failure shape instead.",
+  "type": "object",
+  "required": ["schema", "ok", "commits"],
+  "properties": {
+    "schema": { "const": "urn:jig:verify:1" },
+    "ok": {
+      "description": "At least one commit was verified (not skipped), and every verified one is identical.",
+      "type": "boolean"
+    },
+    "commits": { "type": "array", "items": { "$ref": "#/$defs/commit" } }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" },
+    "mismatch": {
+      "description": "A recorded value the replay did not reproduce: the Refactor-Kind trailer or the subject.",
+      "type": "object",
+      "required": ["field", "recorded", "replayed"],
+      "properties": {
+        "field": { "enum": ["kind", "subject"] },
+        "recorded": { "type": "string" },
+        "replayed": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "commit": {
+      "type": "object",
+      "required": ["commit", "verdict"],
+      "properties": {
+        "commit": { "$ref": "#/$defs/hash" },
+        "verdict": {
+          "description": "identical: the replayed tree is the commit's tree, and the kind and subject match. different: anything else that was replayed.",
+          "enum": ["identical", "different", "failed", "skipped", "invalid"]
+        },
+        "command": {
+          "description": "The commit's Refactor-Command: the pinned image and its args.",
+          "type": "object",
+          "required": ["image", "args"],
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "args": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "filesDiffering": {
+          "description": "Paths where the replayed tree and the commit's tree differ, sorted by their UTF-8 bytes.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "mismatches": { "type": "array", "items": { "$ref": "#/$defs/mismatch" } },
+        "code": { "$ref": "urn:jig:report:1#/$defs/errorCode" },
+        "reason": { "type": "string", "minLength": 1 },
+        "instructions": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "verdict": { "enum": ["identical", "different"] } } },
+          "then": {
+            "required": ["command", "filesDiffering", "mismatches"],
+            "properties": {
+              "command": true,
+              "filesDiffering": true,
+              "mismatches": true,
+              "code": false,
+              "reason": false,
+              "instructions": false
+            }
+          }
+        },
+        {
+          "if": { "properties": { "verdict": { "const": "identical" } } },
+          "then": {
+            "properties": {
+              "filesDiffering": { "type": "array", "maxItems": 0 },
+              "mismatches": { "type": "array", "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "description": "A different commit names what differs: a path, a mismatch, or both.",
+          "if": { "properties": { "verdict": { "const": "different" } } },
+          "then": {
+            "anyOf": [
+              { "required": ["filesDiffering"], "properties": { "filesDiffering": { "type": "array", "minItems": 1 } } },
+              { "required": ["mismatches"], "properties": { "mismatches": { "type": "array", "minItems": 1 } } }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "verdict": { "const": "failed" } } },
+          "then": { "required": ["code", "instructions"], "properties": { "code": true, "instructions": true } }
+        },
+        {
+          "if": { "properties": { "verdict": { "const": "skipped" } } },
+          "then": { "required": ["reason"], "properties": { "reason": true } }
+        },
+        {
+          "if": { "properties": { "verdict": { "const": "invalid" } } },
+          "then": { "required": ["instructions"], "properties": { "instructions": true } }
+        },
+        {
+          "if": { "properties": { "verdict": { "enum": ["failed", "skipped", "invalid"] } } },
+          "then": { "properties": { "filesDiffering": false, "mismatches": false } }
+        }
+      ]
+    }
+  }
+}

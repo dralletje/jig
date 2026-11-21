@@ -1,0 +1,6 @@
+{
+  "schema": "urn:jig:output:1",
+  "ok": false,
+  "code": "DIRTY_WORKTREE",
+  "instructions": "The working tree has uncommitted changes:\n M src/a.ts\nCommit or stash them, then run again."
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jig:report:1",
+  "title": "jig image report, version 1",
+  "description": "The last JSON line an action image prints on stdout. Success exits 0, failure non-zero.",
+  "oneOf": [{ "$ref": "#/$defs/success" }, { "$ref": "#/$defs/failure" }],
+  "$defs": {
+    "schema": { "const": "urn:jig:report:1" },
+    "kind": { "enum": ["refactor", "sweep", "rewrite"] },
+    "errorCode": {
+      "description": "INTERNAL is the image's own crash; the binary reports it as IMAGE_FAILED. REGISTRY_UNAVAILABLE is the binary's own (a registry it could not reach, or that sent bytes not matching their digest); an image reporting it fails as IMAGE_FAILED.",
+      "enum": [
+        "SYMBOL_NOT_FOUND",
+        "AMBIGUOUS_SYMBOL",
+        "DIRTY_WORKTREE",
+        "REFACTOR_UNAVAILABLE",
+        "NO_CHANGES",
+        "UNKNOWN_ACTION",
+        "INVALID_ARGS",
+        "IMAGE_NOT_FOUND",
+        "IMAGE_FAILED",
+        "REGISTRY_UNAVAILABLE",
+        "INTERNAL"
+      ]
+    },
+    "subject": {
+      "description": "<kind>(<label>): <description>, one line.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "summary": {
+      "description": "Plain text for people, may be several lines; not only whitespace. A partial result says here what it left alone.",
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "success": {
+      "type": "object",
+      "required": ["schema", "ok", "kind", "subject", "summary"],
+      "properties": {
+        "schema": { "$ref": "#/$defs/schema" },
+        "ok": { "const": true },
+        "kind": { "$ref": "#/$defs/kind" },
+        "subject": { "$ref": "#/$defs/subject" },
+        "summary": { "$ref": "#/$defs/summary" }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": ["schema", "ok", "code", "instructions"],
+      "properties": {
+        "schema": { "$ref": "#/$defs/schema" },
+        "ok": { "const": false },
+        "code": { "$ref": "#/$defs/errorCode" },
+        "instructions": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

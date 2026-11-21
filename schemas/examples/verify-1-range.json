@@ -1,0 +1,64 @@
+{
+  "schema": "urn:jig:verify:1",
+  "ok": false,
+  "commits": [
+    {
+      "commit": "1111111111111111111111111111111111111111",
+      "verdict": "identical",
+      "command": {
+        "image": "localhost/jig/typescript:local@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "args": ["typescript-rename", "--file", "src/orders.ts", "--symbol", "sendEmail", "--to", "sendMail"]
+      },
+      "filesDiffering": [],
+      "mismatches": []
+    },
+    {
+      "commit": "2222222222222222222222222222222222222222",
+      "verdict": "skipped",
+      "reason": "no Refactor-Command"
+    },
+    {
+      "commit": "4444444444444444444444444444444444444444",
+      "verdict": "different",
+      "command": {
+        "image": "localhost/jig/prettier:local@sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "args": ["prettier"]
+      },
+      "filesDiffering": ["src/jobs.ts"],
+      "mismatches": []
+    },
+    {
+      "commit": "7777777777777777777777777777777777777777",
+      "verdict": "different",
+      "command": {
+        "image": "localhost/jig/prettier:local@sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "args": ["prettier"]
+      },
+      "filesDiffering": [],
+      "mismatches": [
+        {
+          "field": "subject",
+          "recorded": "sweep(format): tidy the sources",
+          "replayed": "sweep(format): src/**"
+        }
+      ]
+    },
+    {
+      "commit": "9999999999999999999999999999999999999999",
+      "verdict": "failed",
+      "command": {
+        "image": "localhost/jig/typescript:local@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "args": ["typescript-rename", "--file", "src/gone.ts", "--symbol", "x", "--to", "y"]
+      },
+      "code": "SYMBOL_NOT_FOUND",
+      "instructions": "No top-level x in src/gone.ts."
+    },
+    {
+      "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "verdict": "invalid",
+      "code": "INVALID_ARGS",
+      "reason": "unreadable Refactor-Command",
+      "instructions": "The commit's Refactor-Command trailer cannot be read: it is not JSON. It must be {\"args\":[<strings>],\"image\":\"<name>@sha256:<id>\"}, as jig writes it. Verify only commits jig made, with their trailers unchanged."
+    }
+  ]
+}
