@@ -1,0 +1,19 @@
+{
+  "name": "@jig/engine-typescript",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@jig/core": "workspace:*",
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@jig/test-utils": "workspace:*"
+  }
+}

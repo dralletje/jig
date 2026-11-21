@@ -1,0 +1,8 @@
+{
+  "name": "jig-image-typescript",
+  "private": true,
+  "dependencies": {
+    "@jig/core": "file:packages/core",
+    "@jig/engine-typescript": "file:packages/engine-typescript"
+  }
+}
