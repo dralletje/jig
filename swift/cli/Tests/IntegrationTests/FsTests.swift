@@ -447,12 +447,16 @@ struct FsTests {
     #expect(err.instructions.contains("copy, move, remove, remove-matching, unwrap, wrap"), "\(err.instructions)")
   }
 
-  @Test("no command at all is UNKNOWN_ACTION", .timeLimit(.minutes(2)))
+  @Test("no command at all is jig's help call: the help, and the repo untouched", .timeLimit(.minutes(2)))
   func noCommand() throws {
     let dir = try temp.fixture("fs")
-    let err = try refused(dir, [])
-    #expect(err.code == "UNKNOWN_ACTION")
-    #expect(err.instructions.contains("copy, move, remove, remove-matching, unwrap, wrap"), "\(err.instructions)")
+    let before = try headCommit(dir)
+    let finished = try runCommand([try setup(), "--repo", dir.path, FS])
+    #expect(finished.exitCode == 0, "\(finished.stdoutText)\n\(finished.stderrText)")
+    let help = try decode(JSON.self, finished.stdoutText)
+    #expect(help["schema"] == "urn:jig:help:1")
+    #expect(try headCommit(dir) == before)
+    #expect(try status(dir) == "")
   }
 
   // Help is asked of the image directly, on an empty folder, as jig will.

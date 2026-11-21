@@ -22,7 +22,8 @@ private struct SuccessOutput: Encodable {
   var notes: [String]?
 }
 
-private func encode(_ value: some Encodable) -> String {
+/// `value` as one line of JSON, keys sorted: how every object jig prints is written.
+func encode(_ value: some Encodable) -> String {
   let encoder = JSONEncoder()
   encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
   // Encoding these value types cannot fail: no non-finite numbers ever reach them from JSON input.

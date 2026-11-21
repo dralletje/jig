@@ -3,14 +3,35 @@ import Report
 public let usage = """
   usage: jig [--repo <path>] [--message <text>] [--sandbox docker|rootlesskit] <image> [args...]
          jig verify [--repo <path>] [--sandbox docker|rootlesskit] <commit-or-range>
+         jig [--sandbox docker|rootlesskit] <image> [--help]
+         jig [--sandbox docker|rootlesskit] <image> <action> --help
+  The last two show what an image can do: its actions, or one action's flags (no repo needed).
   <image> is a registry reference (ghcr.io/acme/tool:1.0, node:26), which jig downloads, or
   localhost/<name>, an image in this machine's Docker.
   """
 
-/// What the command line asks for: a run of an image (the default form) or `verify` (first argument).
+/// What the command line asks for: a run of an image (the default form), `verify` (first argument), an
+/// image's help (`<image>`, `<image> --help`, `<image> <action> --help`) or jig's usage (`--help` alone).
 public enum Command: Equatable, Sendable {
   case run(CLIArgs)
   case verify(VerifyArgs)
+  case help(HelpArgs)
+  case usage
+}
+
+/// `jig [--repo <path>] [--sandbox docker|rootlesskit] <image> [<action>] --help`, or `<image>` alone.
+/// `--repo` is accepted and ignored: help needs no repo.
+public struct HelpArgs: Equatable, Sendable {
+  public var sandbox: SandboxKind
+  public var image: String
+  /// The action whose flags to show; nil shows every action.
+  public var action: String?
+
+  public init(sandbox: SandboxKind, image: String, action: String?) {
+    self.sandbox = sandbox
+    self.image = image
+    self.action = action
+  }
 }
 
 /// `jig verify [--repo <path>] [--sandbox docker|rootlesskit] <commit-or-range>`.
@@ -67,12 +88,31 @@ public struct VerifyArgs: Equatable, Sendable {
   }
 }
 
-/// `verify` as the first argument selects verify; anything else is the run form, parsed as before.
+/// `verify` as the first argument selects verify; `--help` alone is jig's usage. Anything else is the run
+/// form, parsed as before, and a help call when the image's arguments are exactly `[]`, `["--help"]` or
+/// `[<action>, "--help"]` (so `move --to --help` stays a run, with `--help` as a value).
 public func parseCommand(_ argv: [String]) throws -> Command {
   if argv.first == "verify" {
     return .verify(try VerifyArgs.parse(Array(argv.dropFirst())))
   }
-  return .run(try CLIArgs.parse(argv))
+  if argv == ["--help"] {
+    return .usage
+  }
+  let cli = try CLIArgs.parse(argv)
+  let action: String?
+  if cli.args.isEmpty || cli.args == ["--help"] {
+    action = nil
+  } else if cli.args.count == 2, cli.args[1] == "--help" {
+    action = cli.args[0]
+  } else {
+    return .run(cli)
+  }
+  if cli.message != nil {
+    throw RefactorError(
+      code: .INVALID_ARGS,
+      instructions: "--message has no meaning when asking an image for help: leave it out. \(usage)")
+  }
+  return .help(HelpArgs(sandbox: cli.sandbox, image: cli.image, action: action))
 }
 
 /// Where the image runs (`--sandbox`).

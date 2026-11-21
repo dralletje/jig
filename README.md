@@ -11,7 +11,11 @@ sh scripts/build-binary.sh  # builds the static Swift binary dist/jig
 
 dist/jig [--repo <path>] [--message <text>] [--sandbox docker|rootlesskit] <image> [args...]
 dist/jig verify [--repo <path>] [--sandbox docker|rootlesskit] <commit-or-range>
+dist/jig [--sandbox docker|rootlesskit] <image> [--help]           # the image's actions
+dist/jig [--sandbox docker|rootlesskit] <image> <action> --help    # one action's flags
+dist/jig --help                                                    # this usage
 
+dist/jig localhost/jig/fs:local --help
 dist/jig --repo <repo> localhost/jig/typescript:local typescript-rename --file src/a.ts --symbol foo --to bar
 dist/jig --repo <repo> localhost/jig/typescript:local typescript-extract --file src/a.ts --symbols foo,keep --to src/foo.ts
 dist/jig --repo <repo> localhost/jig/typescript:local typescript-lift-out --file src/a.ts --in outer --symbol inner [--to src/inner.ts]
@@ -21,7 +25,7 @@ dist/jig --repo <repo> localhost/jig/prettier:local format --files "src/**"
 dist/jig --repo <repo> localhost/jig/codemod-react:local codemod --transform rename-unsafe-lifecycles --files "src/**"
 dist/jig --repo <repo> localhost/jig/fs:local move --from src/old --to src/new
 #   typescript actions also take --kind function|class|interface|type|enum|variable
-#   every action, its flags and its limits: see "Actions" below
+#   every action, its flags and its limits: see "Actions" below, or ask the image (see "Help")
 ```
 
 ## Building the binary
@@ -224,6 +228,60 @@ verified (not skipped) and every verified one is `identical`; the exit code is 0
 Errors before any replay (bad arguments, an unknown commit, a range with no commits, a single commit
 that cannot be verified) use the output v1 failure shape and exit 1.
 
+## Help
+
+```sh
+dist/jig [--sandbox docker|rootlesskit] <image> [--help]
+dist/jig [--sandbox docker|rootlesskit] <image> <action> --help
+```
+
+The image is the only place that knows its actions, so jig asks it: it resolves the image as for a run
+(downloads and pins a registry image), runs it with exactly `--help` on an empty temporary folder (no
+repo mounted, no network, same sandbox as a run), removes the folder and checks the answer. No repo is
+needed and nothing is exported, committed or touched. It is help only when the image's arguments are
+exactly none, `--help`, or `<action> --help`; anything else is a run (`move --to --help` passes `--help`
+as the value of `--to`). `--repo` is accepted and ignored; `--message` is `INVALID_ARGS`.
+
+When stdout is not a terminal (an agent), jig prints one JSON object, exit 0: the image's
+[help](#writing-an-action) with `ok: true`, `image` (the pinned reference) and `notes` (as in a run's
+output, only when there are some). With `<action> --help`, `actions` holds only that action.
+
+```json
+{"actions":[{"flags":[{"description":"The file or folder to move.","name":"--from","required":true,"type":"path"},{"description":"Where it goes. …","name":"--to","required":true,"type":"path"}],"kinds":["rewrite"],"name":"move","summary":"Moves a file or folder to a free destination."}],"image":"localhost/jig/fs:local@sha256:<id>","ok":true,"schema":"urn:jig:help:1","summary":"Copies, moves and removes files and folders."}
+```
+
+In a terminal it prints text instead:
+
+```
+$ dist/jig localhost/jig/fs:local
+localhost/jig/fs:local@sha256:<id>
+Copies, moves and removes files and folders.
+
+  copy             rewrite  Copies a file or folder to a free destination.
+  move             rewrite  Moves a file or folder to a free destination.
+  …
+
+jig <image> <action> --help shows an action's flags.
+
+$ dist/jig localhost/jig/fs:local move --help
+move (rewrite)
+Moves a file or folder to a free destination.
+
+  jig <image> move --from <path> --to <path>
+
+  --from <path>  required  The file or folder to move.
+  --to <path>    required  Where it goes. …
+```
+
+Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>` and `<choice>` (its options listed under
+the flag); optional flags are in brackets in the usage line; several kinds show as `sweep|rewrite`.
+
+Failures use the output v1 failure shape and exit 1: an action the image does not have is
+`UNKNOWN_ACTION`, listing the image's actions; an image that answers `--help` with a failed report (an
+image built before help) is `IMAGE_FAILED` saying it gives no help and quoting what it said; any other
+answer that is not valid help is `IMAGE_FAILED`, as for a broken report; resolving or running the image
+fails as for a run (`IMAGE_NOT_FOUND`, …). `jig --help` prints jig's usage and exits 0.
+
 ## Image report v1
 
 An image prints its report as the last line of its stdout. The JSON Schemas (draft 2020-12) are the
@@ -321,6 +379,39 @@ The image's `main` runs it and turns its result into the report with `okReport(k
   throws `REFACTOR_UNAVAILABLE`. Plan everything before writing, so a refusal leaves no half-done work.
 - **Tests**: `assertReport(report)` from `@jig/test-utils` validates a report against the
   JSON Schema; check the `summary` of the action's report.
+- **Help**: an action also has a one-line `summary` and its `flags`, exactly the flags `parseParams`
+  reads. `runEntrypoint(main, help)` answers arguments that are exactly `["--help"]` by printing the help
+  object and exiting 0; build it with `imageHelp(summary, actions.map(actionHelp))` from `@jig/core`.
+
+### The help contract (`urn:jig:help:1`)
+
+Any image, whatever it is written in, describes itself the same way: run with exactly one argument,
+`--help` (on an empty `/workspace`, no network), it prints one JSON object as the last line of stdout
+and exits 0. [`schemas/help-1.schema.json`](schemas/help-1.schema.json) is the reference, with an
+example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
+
+```json
+{ "schema": "urn:jig:help:1",
+  "summary": "Copies, moves and removes files and folders.",
+  "actions": [
+    { "name": "move", "kinds": ["rewrite"], "summary": "Moves a file or folder to a free destination.",
+      "flags": [
+        { "name": "--from", "type": "path", "required": true, "description": "The file or folder to move." },
+        { "name": "--to", "type": "path", "required": true, "description": "Where it goes. It must be free." } ] } ] }
+```
+
+- `summary` (image and action): one line of plain text.
+- `kinds`: the kinds the action's commits can have, at least one, no repeats.
+- `flags` may be empty. Each has `name` (`--` and a name), `type`, `required` and `description` (plain
+  text, may be several lines). `type` is `path` (one repo-relative path), `paths` (comma-separated
+  repo-relative paths), `globs` (comma-separated globs), `text` (anything else) or `choice` (one of
+  `choices`, a non-empty list without repeats, present only on a `choice`).
+- **One action, one set of flags.** Each flag is required or optional; an action never takes "one of
+  these flags". A case that would need it is two actions (fs `remove` and `remove-matching`).
+- jig checks the object strictly: unknown fields (`ok`, `image` and `notes` included: jig adds those),
+  wrong types, empty `actions`, two actions or two flags of one action with the same name, or `choices`
+  missing or misplaced are `IMAGE_FAILED`. jig does not check a run's arguments against the help: the
+  image still parses them itself.
 
 ## Kinds: refactors, sweeps and rewrites
 

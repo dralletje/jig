@@ -92,6 +92,50 @@ func verifyHasNoOn(argv: [String]) {
       == .run(CLIArgs(repo: "r", message: nil, sandbox: .docker, image: "img", args: ["--x"])))
 }
 
+@Test func helpCalls() throws {
+  #expect(try parseCommand(["img"]) == .help(HelpArgs(sandbox: .docker, image: "img", action: nil)))
+  #expect(try parseCommand(["img", "--help"]) == .help(HelpArgs(sandbox: .docker, image: "img", action: nil)))
+  #expect(try parseCommand(["img", "move", "--help"]) == .help(HelpArgs(sandbox: .docker, image: "img", action: "move")))
+  #expect(try parseCommand(["--repo", "x", "img", "--help"]) == .help(HelpArgs(sandbox: .docker, image: "img", action: nil)))
+  #expect(
+    try parseCommand(["--sandbox", "rootlesskit", "img"]) == .help(HelpArgs(sandbox: .rootlesskit, image: "img", action: nil)))
+}
+
+@Test func notHelpCalls() throws {
+  #expect(
+    try parseCommand(["img", "move", "--to", "--help"])
+      == .run(CLIArgs(repo: nil, message: nil, sandbox: .docker, image: "img", args: ["move", "--to", "--help"])))
+  #expect(
+    try parseCommand(["img", "move", "--help", "x"])
+      == .run(CLIArgs(repo: nil, message: nil, sandbox: .docker, image: "img", args: ["move", "--help", "x"])))
+  #expect(
+    try parseCommand(["img", "move"])
+      == .run(CLIArgs(repo: nil, message: nil, sandbox: .docker, image: "img", args: ["move"])))
+}
+
+@Test func helpRejectsMessage() {
+  #expect {
+    try parseCommand(["--message", "m", "img", "--help"])
+  } throws: { error in
+    guard let error = error as? RefactorError else { return false }
+    return error.code == .INVALID_ARGS && error.instructions.contains("--message")
+  }
+}
+
+@Test func jigHelpIsUsage() throws {
+  #expect(try parseCommand(["--help"]) == .usage)
+  #expect {
+    try parseCommand([])
+  } throws: { error in
+    (error as? RefactorError)?.code == .INVALID_ARGS
+  }
+}
+
+@Test func usageNamesImageHelp() {
+  #expect(usage.contains("jig [--sandbox docker|rootlesskit] <image> [--help]"))
+  #expect(usage.contains("jig [--sandbox docker|rootlesskit] <image> <action> --help"))
+}
+
 @Test func usageNamesVerify() {
   #expect(
     usage.contains(
