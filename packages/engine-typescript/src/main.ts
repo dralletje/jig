@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
-import { RefactorError, okReport, writeChanges } from "@jig/core";
-import type { Action, Report } from "@jig/core";
+import { RefactorError, actionHelp, imageHelp, okReport, writeChanges } from "@jig/core";
+import type { Action, ImageHelp, Report } from "@jig/core";
 import { extractAction, renameAction } from "./actions.ts";
 import { removeBarrelsAction } from "./barrels.ts";
 import { removeConsoleAction } from "./console.ts";
@@ -40,6 +40,11 @@ export const ACTIONS: Action[] = [
   defaultToNamedAction,
   inlineFunctionAction,
 ];
+
+/** What the image prints for `--help`: its actions, their summaries and flags. */
+export function help(): ImageHelp {
+  return imageHelp("Refactors TypeScript and JavaScript with the TypeScript language service.", ACTIONS.map(actionHelp));
+}
 
 const FLAGS = [
   "file",

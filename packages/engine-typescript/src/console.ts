@@ -252,7 +252,10 @@ export const removeConsoleAction: Action<RemoveConsoleParams, TsEngine> = {
   id: "typescript-remove-console",
   kind: "rewrite",
   summary: "Removes console.<method>(...) statements.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files to remove the calls from, as comma-separated globs from the repo root." },
+    { name: "--methods", type: "text", required: false, description: "The console methods, comma-separated (log,debug). Default log." },
+  ],
   parseParams: (raw) => {
     const methods = raw.methods === undefined ? ["log"] : globList(raw, "methods");
     for (const m of methods) {

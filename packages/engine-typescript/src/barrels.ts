@@ -435,7 +435,9 @@ export const removeBarrelsAction: Action<RemoveBarrelsParams, TsEngine> = {
   id: "typescript-remove-barrels",
   kind: "refactor",
   summary: "Imports through barrel files from the defining modules, and deletes barrels nothing imports any more.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose imports go through barrels, as comma-separated globs from the repo root." },
+  ],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => `${p.files.join(", ")}`,
 

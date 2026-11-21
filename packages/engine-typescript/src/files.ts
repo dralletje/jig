@@ -27,7 +27,10 @@ export const moveFileAction: Action<MoveFileParams, TsEngine> = {
   id: "typescript-move-file",
   kind: "refactor",
   summary: "Moves or renames a file, rewriting the imports of and in it.",
-  flags: [],
+  flags: [
+    { name: "--file", type: "path", required: true, description: "The file to move." },
+    { name: "--to", type: "path", required: true, description: "Where it goes. It must be free." },
+  ],
   parseParams: (raw) => ({ file: required(raw, "file"), to: required(raw, "to") }),
   describe: (p) => `${p.file} → ${p.to}`,
 
@@ -58,7 +61,9 @@ export const organizeImportsAction: Action<OrganizeImportsParams, TsEngine> = {
   id: "typescript-organize-imports",
   kind: "sweep",
   summary: "Merges, sorts and drops unused imports.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files to organize, as comma-separated globs from the repo root." },
+  ],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => p.files.join(", "),
 

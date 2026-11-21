@@ -79,7 +79,9 @@ export const templateStringAction: Action<TemplateStringParams, TsEngine> = {
   id: "typescript-template-string",
   kind: "refactor",
   summary: "Turns a + chain with a string literal into a template literal.",
-  flags: [],
+  flags: [
+    { name: "--at", type: "text", required: true, description: "A place in the chain, as <path>:<line>[:<column>] (1-based)." },
+  ],
   parseParams(raw) {
     return parseAt(required(raw, "at"));
   },

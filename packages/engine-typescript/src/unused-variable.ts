@@ -132,7 +132,9 @@ export const removeUnusedVariableAction: Action<RemoveUnusedVariableParams, TsEn
   id: "typescript-remove-unused-variable",
   kind: "refactor",
   summary: "Removes the unused variable or destructured element at a position.",
-  flags: [],
+  flags: [
+    { name: "--at", type: "text", required: true, description: "The variable's name, as <path>:<line>[:<column>] (1-based)." },
+  ],
   parseParams(raw) {
     return parseAt(required(raw, "at"));
   },

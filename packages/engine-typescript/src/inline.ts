@@ -1023,7 +1023,11 @@ export const inlineFunctionAction: Action<InlineParams, TsEngine> = {
   id: "typescript-inline-function",
   kind: "refactor",
   summary: "Inlines one call, or every call, of a top-level function.",
-  flags: [],
+  flags: [
+    { name: "--file", type: "path", required: true, description: "The file that declares the function." },
+    { name: "--symbol", type: "text", required: true, description: "The top-level function or arrow const." },
+    { name: "--at", type: "text", required: false, description: "One call to inline, as <path>:<line>[:<column>] (1-based); the declaration stays. Without it, every call, and the declaration goes." },
+  ],
   parseParams(raw) {
     return {
       file: required(raw, "file"),

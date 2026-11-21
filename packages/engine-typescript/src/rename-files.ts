@@ -111,7 +111,16 @@ export const renameFilesAction: Action<RenameFilesParams, TsEngine> = {
   id: "typescript-rename-files",
   kind: "sweep",
   summary: "Renames files to a case (kebab, camel, pascal or snake), rewriting their imports.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files to rename, as comma-separated globs from the repo root." },
+    {
+      name: "--case",
+      type: "choice",
+      choices: ["kebab", "camel", "pascal", "snake"],
+      required: true,
+      description: "The case of the new names (the part before the first dot).",
+    },
+  ],
   parseParams: (raw) => {
     const nameCase = required(raw, "case");
     if (!(CASES as readonly string[]).includes(nameCase)) {

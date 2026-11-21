@@ -449,7 +449,16 @@ export const convertFunctionAction: Action<ConvertFunctionParams, TsEngine> = {
   id: "typescript-convert-function",
   kind: "refactor",
   summary: "Converts a function declaration or expression to a const arrow function, or the reverse.",
-  flags: [],
+  flags: [
+    { name: "--at", type: "text", required: true, description: "The function, as <path>:<line>[:<column>] (1-based)." },
+    {
+      name: "--to",
+      type: "choice",
+      choices: ["arrow", "function"],
+      required: true,
+      description: "A const arrow function (arrow), or a function declaration (function).",
+    },
+  ],
   parseParams(raw) {
     const to = required(raw, "to");
     if (to !== "arrow" && to !== "function") {

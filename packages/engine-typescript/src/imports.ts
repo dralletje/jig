@@ -95,7 +95,9 @@ export const namespaceToNamedAction: Action<NamespaceToNamedParams, TsEngine> = 
   id: "typescript-namespace-to-named",
   kind: "sweep",
   summary: "Turns import * as x into named imports where every use is x.name.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose namespace imports change, as comma-separated globs from the repo root." },
+  ],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => p.files.join(", "),
 
@@ -331,7 +333,9 @@ export const importTypeAction: Action<ImportTypeParams, TsEngine> = {
   id: "typescript-import-type",
   kind: "sweep",
   summary: "Turns imports used only as types into import type.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose imports change, as comma-separated globs from the repo root." },
+  ],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => p.files.join(", "),
 

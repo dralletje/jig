@@ -1,6 +1,4 @@
-import { actionHelp, imageHelp, runEntrypoint } from "@jig/core";
-import { ACTIONS, main } from "./main.ts";
+import { runEntrypoint } from "@jig/core";
+import { help, main } from "./main.ts";
 
-await runEntrypoint(main, () =>
-  imageHelp("Refactors TypeScript and JavaScript with the TypeScript language service.", ACTIONS.map(actionHelp)),
-);
+await runEntrypoint(main, help);

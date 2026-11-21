@@ -151,7 +151,9 @@ export const addImportExtensionsAction: Action<AddImportExtensionsParams, TsEngi
   id: "typescript-add-import-extensions",
   kind: "sweep",
   summary: "Gives relative imports and re-exports the real file extension (./a to ./a.ts).",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose imports get extensions, as comma-separated globs from the repo root." },
+  ],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => `${p.files.join(", ")}`,
 

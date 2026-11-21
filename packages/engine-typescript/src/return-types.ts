@@ -162,7 +162,16 @@ export const inferReturnTypesAction: Action<InferReturnTypesParams, TsEngine> = 
   id: "typescript-infer-return-types",
   kind: "sweep",
   summary: "Adds the inferred return type to functions that have none.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose functions get return types, as comma-separated globs from the repo root." },
+    {
+      name: "--exported-only",
+      type: "choice",
+      choices: ["true", "false"],
+      required: false,
+      description: "Only exported functions (true, the default), or every function (false).",
+    },
+  ],
   parseParams: (raw) => {
     const flag = raw["exported-only"];
     if (flag !== undefined && flag !== "true" && flag !== "false") {

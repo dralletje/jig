@@ -80,7 +80,10 @@ export const paramsToObjectAction: Action<ParamsToObjectParams, TsEngine> = {
   id: "typescript-params-to-object",
   kind: "refactor",
   summary: "Turns a top-level function's positional parameters into one destructured object, at every call too.",
-  flags: [],
+  flags: [
+    { name: "--file", type: "path", required: true, description: "The file that declares the function." },
+    { name: "--symbol", type: "text", required: true, description: "The top-level function." },
+  ],
   parseParams(raw) {
     return { file: required(raw, "file"), symbol: required(raw, "symbol") };
   },

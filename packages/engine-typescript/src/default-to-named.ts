@@ -405,7 +405,10 @@ export const defaultToNamedAction: Action<DefaultToNamedParams, TsEngine> = {
   id: "typescript-default-to-named",
   kind: "sweep",
   summary: "Turns default exports into named exports, and switches their importers.",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose default exports change, as comma-separated globs from the repo root." },
+    { name: "--keep", type: "globs", required: false, description: "Files that keep their default export, as comma-separated globs." },
+  ],
   parseParams: (raw) => ({
     files: globList(raw, "files"),
     keep: raw.keep === undefined || raw.keep === "" ? [] : globList(raw, "keep"),

@@ -24,7 +24,18 @@ export const renameAction: Action<RenameParams, TsEngine> = {
   id: "typescript-rename",
   kind: "refactor",
   summary: "Renames a top-level declaration and all its references in the project.",
-  flags: [],
+  flags: [
+    { name: "--file", type: "path", required: true, description: "The file that declares the symbol." },
+    { name: "--symbol", type: "text", required: true, description: "The top-level declaration to rename." },
+    { name: "--to", type: "text", required: true, description: "The new name. It must be an identifier." },
+    {
+      name: "--kind",
+      type: "choice",
+      choices: ["function", "class", "interface", "type", "enum", "variable"],
+      required: false,
+      description: "Which declaration to rename, when several in the file have the name.",
+    },
+  ],
   parseParams(raw) {
     const to = required(raw, "to");
     if (!IDENTIFIER.test(to)) {
@@ -69,7 +80,18 @@ export const extractAction: Action<ExtractParams, TsEngine> = {
   id: "typescript-extract",
   kind: "refactor",
   summary: "Moves top-level declarations to another file; their imports follow.",
-  flags: [],
+  flags: [
+    { name: "--file", type: "path", required: true, description: "The file that declares the symbols." },
+    { name: "--symbols", type: "text", required: true, description: "The top-level declarations to move, comma-separated (foo,keep)." },
+    { name: "--to", type: "path", required: true, description: "The file they move to; it is created when it does not exist." },
+    {
+      name: "--kind",
+      type: "choice",
+      choices: ["function", "class", "interface", "type", "enum", "variable"],
+      required: false,
+      description: "Which declarations to move, when several in the file have a name.",
+    },
+  ],
   parseParams(raw) {
     return { file: required(raw, "file"), symbols: list(raw, "symbols"), to: required(raw, "to"), ...kindParam(raw) };
   },

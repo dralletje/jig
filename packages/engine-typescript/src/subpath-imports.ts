@@ -273,7 +273,10 @@ export const subpathImportsAction: Action<SubpathImportsParams, TsEngine> = {
   id: "typescript-subpath-imports",
   kind: "sweep",
   summary: "Turns imports through a tsconfig paths alias into Node subpath imports (#/x).",
-  flags: [],
+  flags: [
+    { name: "--files", type: "globs", required: true, description: "The files whose imports change, as comma-separated globs from the repo root." },
+    { name: "--alias", type: "text", required: false, description: "The tsconfig paths alias up to its \"*\", ending in \"/\". Default \"@/\"." },
+  ],
   parseParams: (raw) => {
     const files = globList(raw, "files");
     const alias = raw.alias === undefined || raw.alias === "" ? DEFAULT_ALIAS : raw.alias;
