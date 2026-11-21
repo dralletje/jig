@@ -119,6 +119,11 @@ private let move = ActionHelp(
   ("multi-line action summary", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"One.\nTwo.","flags":[]}"#)),
   ("empty action summary", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"","flags":[]}"#)),
   ("empty action name", help(actions: action(name: ""))),
+  ("action name that is a flag", help(actions: action(name: "--help"))),
+  ("action name starting with -", help(actions: action(name: "-x"))),
+  ("action name with a space", help(actions: action(name: "a b"))),
+  ("action name with a line break", help(actions: action(name: #"a\nb"#))),
+  ("action name with a tab", help(actions: action(name: #"a\tb"#))),
 ])
 func strictChecksRefuse(problem: String, line: String) {
   let error = refused(line)
@@ -145,6 +150,17 @@ func strictChecksRefuse(problem: String, line: String) {
   #expect(error.instructions.contains("gives no help"))
   #expect(error.instructions.contains("UNKNOWN_ACTION"))
   #expect(error.instructions.contains("This image has: format."))
+}
+
+@Test func anImageWhoseHelpCrashesFailedToAnswer() {
+  let line = #"{"schema":"urn:jig:report:1","ok":false,"code":"INTERNAL","instructions":"the help crashed: boom"}"#
+  let error = refused(line, termination: .exited(1))
+  #expect(error.code == .IMAGE_FAILED)
+  #expect(error.instructions.contains("failed to answer --help"))
+  #expect(error.instructions.contains(#""the help crashed: boom""#))
+  #expect(error.instructions.contains("report it to its maintainers"))
+  #expect(!error.instructions.contains("gives no help"))
+  #expect(!error.instructions.contains("built before help"))
 }
 
 @Test func noJSONLineAtAll() {

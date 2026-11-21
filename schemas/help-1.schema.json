@@ -30,7 +30,11 @@
       "type": "object",
       "required": ["name", "kinds", "summary", "flags"],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
+        "name": {
+          "description": "What the action is called on the command line: not starting with -, without whitespace.",
+          "type": "string",
+          "pattern": "^[^-\\s][^\\s]*$"
+        },
         "kinds": {
           "description": "The kinds the action's commits can have.",
           "type": "array",

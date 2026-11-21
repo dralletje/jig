@@ -91,7 +91,8 @@ public enum ImageHelpAnswer: Equatable, Sendable {
   }
 
   /// The image's help, checked strictly against help v1. An image that answered with a failed report
-  /// (every image from before help answers `UNKNOWN_ACTION`) gives no help; anything else that is not a
+  /// (every image from before help answers `UNKNOWN_ACTION`) gives no help, except `INTERNAL`: its help
+  /// threw, so it failed to answer; anything else that is not a
   /// valid help object is `IMAGE_FAILED` as for a broken report.
   public static func parse(stdout: String, stderr: String, termination: Termination) -> ImageHelpAnswer {
     guard let fields = findObject(stdout) else {
@@ -108,6 +109,14 @@ public enum ImageHelpAnswer: Equatable, Sendable {
       if case .string(let text) = fields["code"] { code = text } else { code = "no code" }
       let instructions: String
       if case .string(let text) = fields["instructions"] { instructions = text } else { instructions = "" }
+      if code == "INTERNAL" {
+        // The image does answer --help, but its help threw: it is broken, not too old to have help.
+        return .failed(
+          RefactorError(
+            code: .IMAGE_FAILED,
+            instructions: "The image failed to answer --help: it answered with a failed report, INTERNAL, saying "
+              + "\(javaScriptJSONString(instructions)). The image is broken; report it to its maintainers."))
+      }
       return .failed(
         RefactorError(
           code: .IMAGE_FAILED,
@@ -158,6 +167,9 @@ public enum ImageHelpAnswer: Equatable, Sendable {
     }
     guard case .string(let name) = fields["name"], !name.isEmpty else {
       return .failure(Problem("\(at).name is missing, empty or not a string"))
+    }
+    guard !name.hasPrefix("-"), !name.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else {
+      return .failure(Problem("\(at).name must not start with - or have spaces: \(javaScriptJSONString(name))"))
     }
     guard case .array(let rawKinds) = fields["kinds"] else {
       return .failure(Problem("\(at).kinds is missing or not an array"))
