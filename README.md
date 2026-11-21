@@ -381,7 +381,8 @@ The image's `main` runs it and turns its result into the report with `okReport(k
   JSON Schema; check the `summary` of the action's report.
 - **Help**: an action also has a one-line `summary` and its `flags`, exactly the flags `parseParams`
   reads. `runEntrypoint(main, help)` answers arguments that are exactly `["--help"]` by printing the help
-  object and exiting 0; build it with `imageHelp(summary, actions.map(actionHelp))` from `@jig/core`.
+  object and exiting 0. `help` is a function that returns it (or a promise of it), built with `imageHelp`
+  and `actionHelp` from `@jig/core`: `runEntrypoint(main, () => imageHelp(summary, ACTIONS.map(actionHelp)))`.
 
 ### The help contract (`urn:jig:help:1`)
 
@@ -401,6 +402,7 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
 ```
 
 - `summary` (image and action): one line of plain text.
+- `name` (action): what it is called on the command line; it does not start with `-` and has no whitespace.
 - `kinds`: the kinds the action's commits can have, at least one, no repeats.
 - `flags` may be empty. Each has `name` (`--` and a name), `type`, `required` and `description` (plain
   text, may be several lines). `type` is `path` (one repo-relative path), `paths` (comma-separated
