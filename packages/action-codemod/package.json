@@ -1,0 +1,21 @@
+{
+  "name": "@jig/action-codemod",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@jig/core": "workspace:*",
+    "jscodeshift": "0.11.0"
+  },
+  "devDependencies": {
+    "@jig/test-utils": "workspace:*",
+    "@types/jscodeshift": "0.11.11",
+    "lodash": "4.17.21"
+  }
+}

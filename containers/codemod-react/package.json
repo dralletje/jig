@@ -1,0 +1,10 @@
+{
+  "name": "jig-image-codemod-react",
+  "private": true,
+  "dependencies": {
+    "@jig/action-codemod": "file:packages/action-codemod",
+    "@jig/core": "file:packages/core",
+    "jscodeshift": "0.11.0",
+    "react-codemod": "5.4.4"
+  }
+}
