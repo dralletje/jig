@@ -448,6 +448,8 @@ function toFunction(engine: TsEngine, file: string, sf: ts.SourceFile, fn: ts.Ar
 export const convertFunctionAction: Action<ConvertFunctionParams, TsEngine> = {
   id: "typescript-convert-function",
   kind: "refactor",
+  summary: "Converts a function declaration or expression to a const arrow function, or the reverse.",
+  flags: [],
   parseParams(raw) {
     const to = required(raw, "to");
     if (to !== "arrow" && to !== "function") {

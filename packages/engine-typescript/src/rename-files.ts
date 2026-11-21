@@ -110,6 +110,8 @@ function plan(files: string[], all: string[], nameCase: NameCase): { renames: Re
 export const renameFilesAction: Action<RenameFilesParams, TsEngine> = {
   id: "typescript-rename-files",
   kind: "sweep",
+  summary: "Renames files to a case (kebab, camel, pascal or snake), rewriting their imports.",
+  flags: [],
   parseParams: (raw) => {
     const nameCase = required(raw, "case");
     if (!(CASES as readonly string[]).includes(nameCase)) {

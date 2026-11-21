@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import type { OkReport, RefactorError } from "@jig/core";
-import { assertReport, makeRepo, readTree } from "@jig/test-utils";
-import { main } from "../src/index.ts";
+import { HELP_SCHEMA_ID, assertReport, makeRepo, readTree, schemaErrors } from "@jig/test-utils";
+import { help, main } from "../src/index.ts";
 
 async function rejects(p: Promise<unknown>): Promise<RefactorError> {
   try {
@@ -93,6 +93,25 @@ describe("prettier format", () => {
   test("missing --files", async () => {
     const dir = await makeRepo("simple");
     assert.equal((await rejects(main(["format"], dir))).code, "INVALID_ARGS");
+  });
+});
+
+describe("prettier help", () => {
+  test("is a valid help object", () => {
+    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help()), []);
+  });
+
+  test("lists exactly the action main dispatches, format, a sweep taking --files", () => {
+    assert.deepEqual(
+      help().actions.map((a) => a.name),
+      ["format"],
+    );
+    const [format] = help().actions;
+    assert.deepEqual(format!.kinds, ["sweep"]);
+    assert.deepEqual(
+      format!.flags.map(({ name, type, required }) => ({ name, type, required })),
+      [{ name: "--files", type: "globs", required: true }],
+    );
   });
 });
 

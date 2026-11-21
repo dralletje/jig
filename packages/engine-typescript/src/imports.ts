@@ -94,6 +94,8 @@ type Skipped = { index: number; name: string; reason: string; instructions?: str
 export const namespaceToNamedAction: Action<NamespaceToNamedParams, TsEngine> = {
   id: "typescript-namespace-to-named",
   kind: "sweep",
+  summary: "Turns import * as x into named imports where every use is x.name.",
+  flags: [],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => p.files.join(", "),
 
@@ -328,6 +330,8 @@ export type ImportTypeParams = { files: string[] };
 export const importTypeAction: Action<ImportTypeParams, TsEngine> = {
   id: "typescript-import-type",
   kind: "sweep",
+  summary: "Turns imports used only as types into import type.",
+  flags: [],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => p.files.join(", "),
 

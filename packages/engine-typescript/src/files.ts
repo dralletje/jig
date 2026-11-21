@@ -26,6 +26,8 @@ export type MoveFileParams = { file: string; to: string };
 export const moveFileAction: Action<MoveFileParams, TsEngine> = {
   id: "typescript-move-file",
   kind: "refactor",
+  summary: "Moves or renames a file, rewriting the imports of and in it.",
+  flags: [],
   parseParams: (raw) => ({ file: required(raw, "file"), to: required(raw, "to") }),
   describe: (p) => `${p.file} → ${p.to}`,
 
@@ -55,6 +57,8 @@ export type OrganizeImportsParams = { files: string[] };
 export const organizeImportsAction: Action<OrganizeImportsParams, TsEngine> = {
   id: "typescript-organize-imports",
   kind: "sweep",
+  summary: "Merges, sorts and drops unused imports.",
+  flags: [],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => p.files.join(", "),
 

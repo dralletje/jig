@@ -178,6 +178,8 @@ function dedent(block: string, indent: string): string {
 export const liftOutAction: Action<LiftParams, TsEngine> = {
   id: "typescript-lift-out",
   kind: "refactor",
+  summary: "Lifts a nested function or const to module level, with the locals it uses.",
+  flags: [],
   parseParams(raw) {
     return {
       file: required(raw, "file"),

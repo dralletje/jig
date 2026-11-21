@@ -434,6 +434,8 @@ export type RemoveBarrelsParams = { files: string[] };
 export const removeBarrelsAction: Action<RemoveBarrelsParams, TsEngine> = {
   id: "typescript-remove-barrels",
   kind: "refactor",
+  summary: "Imports through barrel files from the defining modules, and deletes barrels nothing imports any more.",
+  flags: [],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => `${p.files.join(", ")}`,
 

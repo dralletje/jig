@@ -79,6 +79,8 @@ function describeUse(engine: TsEngine, id: ts.Identifier): string {
 export const paramsToObjectAction: Action<ParamsToObjectParams, TsEngine> = {
   id: "typescript-params-to-object",
   kind: "refactor",
+  summary: "Turns a top-level function's positional parameters into one destructured object, at every call too.",
+  flags: [],
   parseParams(raw) {
     return { file: required(raw, "file"), symbol: required(raw, "symbol") };
   },

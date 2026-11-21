@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { RefactorError, listFiles, listLines, matchesAnyGlob, okReport, plural } from "@jig/core";
-import type { Report } from "@jig/core";
+import { RefactorError, imageHelp, listFiles, listLines, matchesAnyGlob, okReport, plural } from "@jig/core";
+import type { ImageHelp, Report } from "@jig/core";
 import * as prettier from "prettier";
 
 function filesFlag(args: string[]): string[] {
@@ -18,6 +18,25 @@ function filesFlag(args: string[]): string[] {
     .filter(Boolean);
   if (globs.length === 0) throw new RefactorError("INVALID_ARGS", "Missing --files. Pass --files <glob,glob>.");
   return globs;
+}
+
+/** The prettier image's help: its one action, `format`. */
+export function help(): ImageHelp {
+  return imageHelp(`Formats files with prettier ${prettier.version}.`, [
+    {
+      name: "format",
+      kinds: ["sweep"],
+      summary: "Formats the matching files with the repo's own prettier config (prettier's defaults when there is none).",
+      flags: [
+        {
+          name: "--files",
+          type: "globs",
+          required: true,
+          description: "The files to format. Files prettier ignores (.prettierignore) or cannot parse are skipped.",
+        },
+      ],
+    },
+  ]);
 }
 
 /**

@@ -161,6 +161,8 @@ export type InferReturnTypesParams = { files: string[]; exportedOnly: boolean };
 export const inferReturnTypesAction: Action<InferReturnTypesParams, TsEngine> = {
   id: "typescript-infer-return-types",
   kind: "sweep",
+  summary: "Adds the inferred return type to functions that have none.",
+  flags: [],
   parseParams: (raw) => {
     const flag = raw["exported-only"];
     if (flag !== undefined && flag !== "true" && flag !== "false") {

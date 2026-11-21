@@ -1,4 +1,5 @@
 import { RefactorError } from "./errors.ts";
+import type { ImageHelp } from "./help.ts";
 import type { ActionKind, ActionResult } from "./types.ts";
 
 /** The `schema` of every image report this version writes (`schemas/report-1.schema.json`). */
@@ -44,11 +45,29 @@ export function plural(n: number, word: string, many = `${word}s`): string {
  * Runs an image's `main` on its arguments and working directory, prints the report as the last line
  * and exits 0 when it is ok, else 1. A thrown RefactorError becomes its code and instructions; anything
  * else `INTERNAL` (which the binary reports as `IMAGE_FAILED`).
+ *
+ * Arguments that are exactly `["--help"]` print the image's help as one JSON line instead and exit 0
+ * (a `help` that throws is an `INTERNAL` failure); any other arguments go to `main` as they are.
  */
-export async function runEntrypoint(main: (argv: string[], root: string) => Promise<Report>): Promise<never> {
+export async function runEntrypoint(
+  main: (argv: string[], root: string) => Promise<Report>,
+  help: () => ImageHelp | Promise<ImageHelp>,
+): Promise<never> {
+  const argv = process.argv.slice(2);
+  if (argv.length === 1 && argv[0] === "--help") {
+    let answer: ImageHelp;
+    try {
+      answer = await help();
+    } catch (e) {
+      console.log(JSON.stringify(failedReport("INTERNAL", `the help crashed: ${e instanceof Error ? e.message : String(e)}`)));
+      process.exit(1);
+    }
+    console.log(JSON.stringify(answer));
+    process.exit(0);
+  }
   let report: Report;
   try {
-    report = await main(process.argv.slice(2), process.cwd());
+    report = await main(argv, process.cwd());
   } catch (e) {
     report =
       e instanceof RefactorError

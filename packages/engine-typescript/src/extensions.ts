@@ -150,6 +150,8 @@ export type AddImportExtensionsParams = { files: string[] };
 export const addImportExtensionsAction: Action<AddImportExtensionsParams, TsEngine> = {
   id: "typescript-add-import-extensions",
   kind: "sweep",
+  summary: "Gives relative imports and re-exports the real file extension (./a to ./a.ts).",
+  flags: [],
   parseParams: (raw) => ({ files: globList(raw, "files") }),
   describe: (p) => `${p.files.join(", ")}`,
 

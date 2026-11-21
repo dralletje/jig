@@ -1022,6 +1022,8 @@ function findFunction(engine: TsEngine, file: string, name: string): ReturnType<
 export const inlineFunctionAction: Action<InlineParams, TsEngine> = {
   id: "typescript-inline-function",
   kind: "refactor",
+  summary: "Inlines one call, or every call, of a top-level function.",
+  flags: [],
   parseParams(raw) {
     return {
       file: required(raw, "file"),

@@ -1,3 +1,5 @@
+import type { Flag } from "./help.ts";
+
 export type DeclKind = "function" | "class" | "interface" | "type" | "enum" | "variable";
 
 /** A top-level declaration. Offsets are into the file's current (overlay) text. */
@@ -42,6 +44,10 @@ export type ActionResult = {
 export interface Action<P = any, E extends Engine = any> {
   id: string;
   kind: ActionKind;
+  /** One line on what it does, for the image's help. */
+  summary: string;
+  /** The flags `parseParams` reads, for the image's help. */
+  flags: Flag[];
   parseParams(raw: Record<string, string | undefined>): P;
   /** What the commit subject says after `<kind>(<id>): `. */
   describe(p: P): string;

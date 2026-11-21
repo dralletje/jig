@@ -46,12 +46,13 @@ export async function makeRepo(fixture: string): Promise<string> {
 export const REPORT_SCHEMA_ID = "urn:jig:report:1";
 export const OUTPUT_SCHEMA_ID = "urn:jig:output:1";
 export const VERIFY_SCHEMA_ID = "urn:jig:verify:1";
+export const HELP_SCHEMA_ID = "urn:jig:help:1";
 
 let ajv: Ajv2020 | undefined;
 function validator(): Ajv2020 {
   if (!ajv) {
     ajv = new Ajv2020({ allErrors: true, strict: true, allowUnionTypes: true });
-    for (const name of ["report-1.schema.json", "output-1.schema.json", "verify-1.schema.json"]) {
+    for (const name of ["report-1.schema.json", "output-1.schema.json", "verify-1.schema.json", "help-1.schema.json"]) {
       ajv.addSchema(JSON.parse(readFileSync(join(repoRoot, "schemas", name), "utf8")) as object);
     }
   }

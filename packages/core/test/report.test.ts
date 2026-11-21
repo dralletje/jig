@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import {
+  HELP_SCHEMA_ID,
   OUTPUT_SCHEMA_ID,
   REPORT_SCHEMA_ID,
   VERIFY_SCHEMA_ID,
@@ -48,6 +49,7 @@ describe("schemas", () => {
   test("the examples in schemas/examples are valid", () => {
     const names = readdirSync(EXAMPLES).sort();
     assert.deepEqual(names, [
+      "help-1.json",
       "output-failure.json",
       "output-success.json",
       "report-complete.json",
@@ -59,7 +61,9 @@ describe("schemas", () => {
         ? REPORT_SCHEMA_ID
         : name.startsWith("verify-")
           ? VERIFY_SCHEMA_ID
-          : OUTPUT_SCHEMA_ID;
+          : name.startsWith("help-")
+            ? HELP_SCHEMA_ID
+            : OUTPUT_SCHEMA_ID;
       assert.deepEqual(schemaErrors(id, example(name)), [], name);
     }
   });

@@ -1,1 +1,1 @@
-export { main } from "./main.ts";
+export { help, main } from "./main.ts";

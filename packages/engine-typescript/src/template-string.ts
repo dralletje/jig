@@ -78,6 +78,8 @@ function hasCommentInChain(sf: ts.SourceFile, parts: ts.Expression[]): boolean {
 export const templateStringAction: Action<TemplateStringParams, TsEngine> = {
   id: "typescript-template-string",
   kind: "refactor",
+  summary: "Turns a + chain with a string literal into a template literal.",
+  flags: [],
   parseParams(raw) {
     return parseAt(required(raw, "at"));
   },

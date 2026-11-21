@@ -4,8 +4,8 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { RefactorError, listFiles, listLines, matchesAnyGlob, okReport, plural } from "@jig/core";
-import type { ActionKind, Report } from "@jig/core";
+import { RefactorError, imageHelp, listFiles, listLines, matchesAnyGlob, okReport, plural } from "@jig/core";
+import type { ActionKind, ImageHelp, Report } from "@jig/core";
 import jscodeshift from "jscodeshift";
 import { TRANSFORM_KINDS } from "./catalog.ts";
 
@@ -81,6 +81,46 @@ function splitPosition(message: string): { text: string; line: number } {
 
 function firstLine(text: string): string {
   return text.split("\n")[0]!.trim() || "unknown error";
+}
+
+/**
+ * The codemod image's help: its one action, `codemod`, whose kinds are those of the carried package's
+ * transforms. `pkg` is the package the image carries (injected by tests).
+ */
+export function help(pkg?: CodemodPackage): ImageHelp {
+  const carried = pkg ?? installedPackage();
+  const names = Object.keys(carried.transforms).sort();
+  const used = Object.values(carried.transforms);
+  const kinds = (["refactor", "sweep", "rewrite"] as const).filter((kind) => used.includes(kind));
+  return imageHelp(`Runs a transform of ${carried.name} ${carried.version} with jscodeshift.`, [
+    {
+      name: "codemod",
+      kinds,
+      summary: `Runs one transform of ${carried.name} ${carried.version} over the matching JavaScript and TypeScript files.`,
+      flags: [
+        {
+          name: "--transform",
+          type: "choice",
+          choices: names,
+          required: true,
+          description: `The transform to run; the commit has its kind:\n${names.map((name) => `  ${name}  ${carried.transforms[name]}`).join("\n")}`,
+        },
+        {
+          name: "--files",
+          type: "globs",
+          required: true,
+          description: "The files to run it on. Only JavaScript and TypeScript files are passed to it, declaration files not.",
+        },
+        {
+          name: "--parser",
+          type: "choice",
+          choices: [...PARSERS],
+          required: false,
+          description: "The parser for every file. Without it: tsx for .tsx, ts for .ts, .mts and .cts, else the transform's own or babel.",
+        },
+      ],
+    },
+  ]);
 }
 
 /**

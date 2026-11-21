@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import type { ActionKind, OkReport, RefactorError } from "@jig/core";
-import { assertReport, readTree } from "@jig/test-utils";
-import { TRANSFORM_KINDS, installedPackage, main } from "../src/index.ts";
+import { HELP_SCHEMA_ID, assertReport, readTree, schemaErrors } from "@jig/test-utils";
+import { TRANSFORM_KINDS, help, installedPackage, main } from "../src/index.ts";
 import type { CodemodPackage } from "../src/index.ts";
 
 async function rejects(p: Promise<unknown>): Promise<RefactorError> {
@@ -214,6 +214,56 @@ describe("codemod arguments", () => {
   test("CODEMOD_PACKAGE must name a package of the table", () => {
     assert.throws(() => installedPackage({ CODEMOD_PACKAGE: "nope" }), /not a known codemod package/);
     assert.throws(() => installedPackage({}), /not a known codemod package/);
+  });
+});
+
+describe("codemod help", () => {
+  test("is a valid help object with one action, codemod", async () => {
+    const h = help(await fakePackage({ rename: "rewrite" }));
+    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, h), []);
+    assert.deepEqual(
+      h.actions.map((a) => a.name),
+      ["codemod"],
+    );
+  });
+
+  test("kinds are the distinct kinds of the transforms, in the order refactor, sweep, rewrite", async () => {
+    const kinds = async (transforms: Record<string, ActionKind>) => help(await fakePackage(transforms)).actions[0]!.kinds;
+    assert.deepEqual(await kinds({ a: "rewrite", b: "sweep", c: "rewrite" }), ["sweep", "rewrite"]);
+    assert.deepEqual(await kinds({ a: "rewrite", b: "refactor" }), ["refactor", "rewrite"]);
+    assert.deepEqual(await kinds({ a: "sweep" }), ["sweep"]);
+  });
+
+  test("--transform is a required choice of the sorted transform names, each named with its kind", async () => {
+    const [codemod] = help(await fakePackage({ zeta: "rewrite", alpha: "sweep", mid: "rewrite" })).actions;
+    const transform = codemod!.flags.find((f) => f.name === "--transform");
+    assert.ok(transform && transform.type === "choice", JSON.stringify(transform));
+    assert.deepEqual(transform.choices, ["alpha", "mid", "zeta"]);
+    assert.equal(transform.required, true);
+    assert.match(transform.description, /alpha\b.*sweep/);
+    assert.match(transform.description, /mid\b.*rewrite/);
+    assert.match(transform.description, /zeta\b.*rewrite/);
+  });
+
+  test("--files is required globs, --parser an optional choice of tsx, ts, babel, flow", async () => {
+    const [codemod] = help(await fakePackage({ rename: "rewrite" })).actions;
+    assert.deepEqual(
+      codemod!.flags.map((f) => f.name),
+      ["--transform", "--files", "--parser"],
+    );
+    const files = codemod!.flags.find((f) => f.name === "--files");
+    assert.deepEqual([files?.type, files?.required], ["globs", true]);
+    const parser = codemod!.flags.find((f) => f.name === "--parser");
+    assert.ok(parser && parser.type === "choice", JSON.stringify(parser));
+    assert.deepEqual(parser.choices, ["tsx", "ts", "babel", "flow"]);
+    assert.equal(parser.required, false);
+  });
+
+  test("every package of the table gives a valid help", async () => {
+    for (const [name, transforms] of Object.entries(TRANSFORM_KINDS)) {
+      const pkg = await fakePackage(transforms);
+      assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help({ ...pkg, name })), [], name);
+    }
   });
 });
 

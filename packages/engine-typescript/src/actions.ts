@@ -23,6 +23,8 @@ export type RenameParams = { file: string; symbol: string; to: string; kind?: De
 export const renameAction: Action<RenameParams, TsEngine> = {
   id: "typescript-rename",
   kind: "refactor",
+  summary: "Renames a top-level declaration and all its references in the project.",
+  flags: [],
   parseParams(raw) {
     const to = required(raw, "to");
     if (!IDENTIFIER.test(to)) {
@@ -66,6 +68,8 @@ export type ExtractParams = { file: string; symbols: string[]; to: string; kind?
 export const extractAction: Action<ExtractParams, TsEngine> = {
   id: "typescript-extract",
   kind: "refactor",
+  summary: "Moves top-level declarations to another file; their imports follow.",
+  flags: [],
   parseParams(raw) {
     return { file: required(raw, "file"), symbols: list(raw, "symbols"), to: required(raw, "to"), ...kindParam(raw) };
   },

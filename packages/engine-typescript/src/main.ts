@@ -19,7 +19,7 @@ import { subpathImportsAction } from "./subpath-imports.ts";
 import { templateStringAction } from "./template-string.ts";
 import { removeUnusedVariableAction } from "./unused-variable.ts";
 
-const ACTIONS: Action[] = [
+export const ACTIONS: Action[] = [
   renameAction,
   extractAction,
   liftOutAction,

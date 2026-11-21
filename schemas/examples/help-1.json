@@ -1,0 +1,15 @@
+{
+  "schema": "urn:jig:help:1",
+  "summary": "Copies, moves and removes files and folders.",
+  "actions": [
+    {
+      "name": "move",
+      "kinds": ["rewrite"],
+      "summary": "Moves a file or folder to a free destination.",
+      "flags": [
+        { "name": "--from", "type": "path", "required": true, "description": "The file or folder to move." },
+        { "name": "--to", "type": "path", "required": true, "description": "Where it goes. It must be free." }
+      ]
+    }
+  ]
+}

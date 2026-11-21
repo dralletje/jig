@@ -404,6 +404,8 @@ type MissKind =
 export const defaultToNamedAction: Action<DefaultToNamedParams, TsEngine> = {
   id: "typescript-default-to-named",
   kind: "sweep",
+  summary: "Turns default exports into named exports, and switches their importers.",
+  flags: [],
   parseParams: (raw) => ({
     files: globList(raw, "files"),
     keep: raw.keep === undefined || raw.keep === "" ? [] : globList(raw, "keep"),

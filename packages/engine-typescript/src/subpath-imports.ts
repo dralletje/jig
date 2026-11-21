@@ -272,6 +272,8 @@ export type SubpathImportsParams = { files: string[]; alias: string };
 export const subpathImportsAction: Action<SubpathImportsParams, TsEngine> = {
   id: "typescript-subpath-imports",
   kind: "sweep",
+  summary: "Turns imports through a tsconfig paths alias into Node subpath imports (#/x).",
+  flags: [],
   parseParams: (raw) => {
     const files = globList(raw, "files");
     const alias = raw.alias === undefined || raw.alias === "" ? DEFAULT_ALIAS : raw.alias;

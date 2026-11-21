@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jig:help:1",
+  "title": "jig image help, version 1",
+  "description": "What an image prints as the last line of stdout when run with exactly one argument, --help (exit 0): its actions, their kinds and their flags. jig prints the same object with ok, image and notes added; an image never sends those.",
+  "type": "object",
+  "required": ["schema", "summary", "actions"],
+  "properties": {
+    "schema": { "const": "urn:jig:help:1" },
+    "ok": { "description": "Added by jig, like on every object it prints.", "const": true },
+    "image": { "description": "Added by jig: the image pinned to its ID, <name>@sha256:<id>.", "type": "string", "minLength": 1 },
+    "notes": {
+      "description": "Added by jig: what resolving the image had to say, such as a cached image used because its registry could not be reached. Left out when there is nothing.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "summary": { "$ref": "#/$defs/line" },
+    "actions": { "type": "array", "items": { "$ref": "#/$defs/action" }, "minItems": 1 }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "line": {
+      "description": "One line of plain text.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "action": {
+      "type": "object",
+      "required": ["name", "kinds", "summary", "flags"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "kinds": {
+          "description": "The kinds the action's commits can have.",
+          "type": "array",
+          "items": { "$ref": "urn:jig:report:1#/$defs/kind" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "summary": { "$ref": "#/$defs/line" },
+        "flags": { "type": "array", "items": { "$ref": "#/$defs/flag" } }
+      },
+      "additionalProperties": false
+    },
+    "flagName": { "type": "string", "pattern": "^--[^\\s]+$" },
+    "flagDescription": { "description": "Plain text, may be several lines.", "type": "string", "minLength": 1 },
+    "flag": {
+      "description": "path: one repo-relative path; paths: comma-separated repo-relative paths; globs: comma-separated globs; text: anything else; choice: one of choices (only there, and always).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["name", "type", "required", "description"],
+          "properties": {
+            "name": { "$ref": "#/$defs/flagName" },
+            "type": { "enum": ["path", "paths", "globs", "text"] },
+            "required": { "type": "boolean" },
+            "description": { "$ref": "#/$defs/flagDescription" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["name", "type", "choices", "required", "description"],
+          "properties": {
+            "name": { "$ref": "#/$defs/flagName" },
+            "type": { "const": "choice" },
+            "choices": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "required": { "type": "boolean" },
+            "description": { "$ref": "#/$defs/flagDescription" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

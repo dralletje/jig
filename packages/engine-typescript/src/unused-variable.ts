@@ -131,6 +131,8 @@ type Plan = { span: Span; newText: string; whole: boolean };
 export const removeUnusedVariableAction: Action<RemoveUnusedVariableParams, TsEngine> = {
   id: "typescript-remove-unused-variable",
   kind: "refactor",
+  summary: "Removes the unused variable or destructured element at a position.",
+  flags: [],
   parseParams(raw) {
     return parseAt(required(raw, "at"));
   },
