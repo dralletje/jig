@@ -168,48 +168,48 @@ def move [args: list<string>] {
 }
 
 def remove [args: list<string>] {
-  let usage = "remove --paths <path,path> | remove --files <glob,glob>"
-  let given = (flags $args [paths files] $usage)
-  if "paths" in $given and "files" in $given {
-    fail "INVALID_ARGS" $"remove takes --paths or --files, not both. Usage: ($usage)"
+  let usage = "remove --paths <path,path>"
+  let given = (flags $args [paths] $usage)
+  if "paths" not-in $given {
+    fail "INVALID_ARGS" $"remove needs --paths. Usage: ($usage)"
   }
-  if "paths" not-in $given and "files" not-in $given {
-    fail "INVALID_ARGS" $"remove needs --paths or --files. Usage: ($usage)"
+  # Each item trimmed and empty items dropped, as the other images read their lists.
+  let items = ($given.paths | split row "," | each {|item| $item | str trim } | where {|item| $item != "" })
+  if ($items | is-empty) {
+    fail "INVALID_ARGS" $"--paths \"($given.paths)\" names no path. Usage: ($usage)"
   }
-
-  if "paths" in $given {
-    # Each item trimmed and empty items dropped, as the other images read their lists.
-    let items = ($given.paths | split row "," | each {|item| $item | str trim } | where {|item| $item != "" })
-    if ($items | is-empty) {
-      fail "INVALID_ARGS" $"--paths \"($given.paths)\" names no path. Usage: ($usage)"
-    }
-    let paths = ($items | each {|path| normalize $path })
-    for path in $paths {
-      require-exists $path
-    }
-    for path in $paths {
-      for other in $paths {
-        if $path == $other {
-          continue
-        }
-        if ($path | str starts-with $"($other)/") {
-          fail "INVALID_ARGS" $"\"($path)\" is inside \"($other)\", which is removed too. Pass only \"($other)\"."
-        }
+  let paths = ($items | each {|path| normalize $path })
+  for path in $paths {
+    require-exists $path
+  }
+  for path in $paths {
+    for other in $paths {
+      if $path == $other {
+        continue
+      }
+      if ($path | str starts-with $"($other)/") {
+        fail "INVALID_ARGS" $"\"($path)\" is inside \"($other)\", which is removed too. Pass only \"($other)\"."
       }
     }
-    if ($paths | uniq | length) != ($paths | length) {
-      fail "INVALID_ARGS" $"A path is given twice in \"($given.paths)\". Pass each path once."
-    }
-    let count = ($paths | each {|path| count-files $path } | math sum)
-    for path in $paths {
-      rm --recursive --permanent $path
-    }
-    let files = if $count == 1 { "1 file" } else { $"($count) files" }
-    let named = ($paths | str join ", ")
-    ok $"rewrite\(remove\): ($named)" $"Removed ($named) \(($files)\)."
-    return
   }
+  if ($paths | uniq | length) != ($paths | length) {
+    fail "INVALID_ARGS" $"A path is given twice in \"($given.paths)\". Pass each path once."
+  }
+  let count = ($paths | each {|path| count-files $path } | math sum)
+  for path in $paths {
+    rm --recursive --permanent $path
+  }
+  let files = if $count == 1 { "1 file" } else { $"($count) files" }
+  let named = ($paths | str join ", ")
+  ok $"rewrite\(remove\): ($named)" $"Removed ($named) \(($files)\)."
+}
 
+def remove-matching [args: list<string>] {
+  let usage = "remove-matching --files <glob,glob>"
+  let given = (flags $args [files] $usage)
+  if "files" not-in $given {
+    fail "INVALID_ARGS" $"remove-matching needs --files. Usage: ($usage)"
+  }
   # Each glob trimmed and empty ones dropped, as the other images read their lists.
   let globs = ($given.files | split row "," | each {|item| $item | str trim } | where {|item| $item != "" })
   if ($globs | is-empty) {
@@ -231,7 +231,7 @@ def remove [args: list<string>] {
   }
   let root = (pwd)
   # glob matches dotfiles, does not follow symlinks into folders, and gives absolute paths. Folders are
-  # left out (they are removed with --paths), and so is anything in git's own folder.
+  # left out (they are removed with `remove --paths`), and so is anything in git's own folder.
   let matched = (
     $globs
     | each {|pattern| glob --no-dir $pattern }
@@ -259,7 +259,7 @@ def remove [args: list<string>] {
   if $count > 20 {
     $listed = ($listed | append $"  … and ($count - 20) more")
   }
-  ok $"rewrite\(remove\): ($named)" $"Removed ($files) matching ($named):\n($listed | str join "\n")"
+  ok $"rewrite\(remove-matching\): ($named)" $"Removed ($files) matching ($named):\n($listed | str join "\n")"
 }
 
 def unwrap [args: list<string>] {
@@ -380,19 +380,87 @@ def wrap [args: list<string>] {
   ok $"rewrite\(wrap\): ($named) → ($into)" $"Wrapped ($named) into ($into) \(($files)\)."
 }
 
+# Prints the help (help v1, urn:jig:help:1): every command, its kinds and its flags.
+def print-help [] {
+  let help = {
+    schema: "urn:jig:help:1"
+    summary: "Copies, moves and removes files and folders."
+    actions: [
+      {
+        name: "copy"
+        kinds: ["rewrite"]
+        summary: "Copies a file or folder to a free destination."
+        flags: [
+          {name: "--from", type: "path", required: true, description: "The file or folder to copy. Symlinks stay links and file modes are kept."}
+          {name: "--to", type: "path", required: true, description: "Where the copy goes. It must be free and not inside --from; missing parent folders are created."}
+        ]
+      }
+      {
+        name: "move"
+        kinds: ["rewrite"]
+        summary: "Moves a file or folder to a free destination."
+        flags: [
+          {name: "--from", type: "path", required: true, description: "The file or folder to move."}
+          {name: "--to", type: "path", required: true, description: "Where it goes. It must be free and not inside --from; missing parent folders are created."}
+        ]
+      }
+      {
+        name: "remove"
+        kinds: ["rewrite"]
+        summary: "Removes files and folders by path."
+        flags: [
+          {name: "--paths", type: "paths", required: true, description: "The files and folders to remove. Every path must exist."}
+        ]
+      }
+      {
+        name: "remove-matching"
+        kinds: ["rewrite"]
+        summary: "Removes every file a glob matches."
+        flags: [
+          {name: "--files", type: "globs", required: true, description: "The globs. Every file and symlink they match is removed, dotfiles too, never folders. No match is NO_CHANGES."}
+        ]
+      }
+      {
+        name: "unwrap"
+        kinds: ["rewrite"]
+        summary: "Moves a folder's contents up one level and removes the folder."
+        flags: [
+          {name: "--folder", type: "path", required: true, description: "The folder to unwrap. A name that collides with one already next to it refuses the whole run."}
+        ]
+      }
+      {
+        name: "wrap"
+        kinds: ["rewrite"]
+        summary: "Moves files and folders into a new folder."
+        flags: [
+          {name: "--paths", type: "paths", required: true, description: "The files and folders to move. Two with the same base name are refused."}
+          {name: "--into", type: "path", required: true, description: "The new folder. It must be free and not inside any of --paths."}
+        ]
+      }
+    ]
+  }
+  print ($help | to json --raw)
+}
+
 # Hand parsing (--wrapped), so nu's own flag errors never replace the JSON report.
 def --wrapped main [...args: string] {
   try {
+    # Help only when it is the one argument: `copy --help` is a normal run (and refused).
+    if $args == ["--help"] {
+      print-help
+      return
+    }
     let command = ($args | get 0?)
     let rest = ($args | skip 1)
     match $command {
       "copy" => { copy $rest }
       "move" => { move $rest }
       "remove" => { remove $rest }
+      "remove-matching" => { remove-matching $rest }
       "unwrap" => { unwrap $rest }
       "wrap" => { wrap $rest }
-      null => { fail "UNKNOWN_ACTION" "No command given. The fs image has: copy, move, remove, unwrap, wrap." }
-      _ => { fail "UNKNOWN_ACTION" $"Unknown command \"($command)\". The fs image has: copy, move, remove, unwrap, wrap." }
+      null => { fail "UNKNOWN_ACTION" "No command given. The fs image has: copy, move, remove, remove-matching, unwrap, wrap." }
+      _ => { fail "UNKNOWN_ACTION" $"Unknown command \"($command)\". The fs image has: copy, move, remove, remove-matching, unwrap, wrap." }
     }
   } catch {|err|
     # The message, then what nu's error adds: its label texts, its help and its code.

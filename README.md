@@ -331,7 +331,7 @@ commits:
 |---|---|---|
 | `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `typescript-rename`, `typescript-extract`, `typescript-lift-out`, `typescript-move-file`, `typescript-remove-barrels`, `typescript-params-to-object`, `typescript-inline-function` (one call or the definition), `typescript-template-string`, `typescript-remove-unused-variable`, `typescript-convert-function` |
 | `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `typescript-organize-imports`, `typescript-add-import-extensions`, `typescript-subpath-imports`, `typescript-default-to-named`, `typescript-infer-return-types`, `typescript-namespace-to-named`, `typescript-import-type`, `typescript-rename-files` |
-| `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `typescript-remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `unwrap`, `wrap`) |
+| `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `typescript-remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
 The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(format): src/**`),
 the commit carries it in the `Refactor-Kind` trailer, and the binary's success JSON has it as `kind`.
@@ -489,7 +489,8 @@ only; imports and paths in config are not updated (that is `typescript-move-file
 |---|---|---|
 | `copy` | `--from --to` | copies a file or a folder; symlinks stay links, file modes are kept |
 | `move` | `--from --to` | moves or renames a file or a folder; `--to` must not be inside `--from` |
-| `remove` | `--paths a,b` or `--files <glob,glob>` | removes files and folders (every path must exist), or every file and symlink a glob matches (dotfiles too, never folders; the summary lists them; no match is `NO_CHANGES`) |
+| `remove` | `--paths a,b` | removes files and folders (every path must exist) |
+| `remove-matching` | `--files <glob,glob>` | removes every file and symlink a glob matches (dotfiles too, never folders; the summary lists them; no match is `NO_CHANGES`) |
 | `unwrap` | `--folder` | moves everything in the folder (dotfiles too) up one level and removes the folder; any name that collides with one already there refuses the whole run; a folder with no files in it is `NO_CHANGES` |
 | `wrap` | `--paths a,b --into` | moves the paths into a new folder; `--into` must not be inside a path, and two paths with the same base name are refused |
 

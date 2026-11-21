@@ -150,8 +150,8 @@ struct FsTests {
       (["copy", "--from", "src/old", "--to", "a/..../j"], "\"a/..../j\""),
       (["remove", "--paths", "keep.txt,~"], "\"~\""),
       (["wrap", "--paths", "keep.txt,~", "--into", "box"], "\"~\""),
-      (["remove", "--files", "~/*"], "\"~/*\""),
-      (["remove", "--files", ".../*"], "\".../*\""),
+      (["remove-matching", "--files", "~/*"], "\"~/*\""),
+      (["remove-matching", "--files", ".../*"], "\".../*\""),
     ] as [([String], String)])
   func dotsAndTilde(args: [String], named: String) throws {
     let dir = try temp.fixture("fs")
@@ -242,31 +242,32 @@ struct FsTests {
     try expectIdentical(dir)
   }
 
-  @Test("remove --files lists the matched files, sorted", .timeLimit(.minutes(3)))
+  @Test("remove-matching --files lists the matched files, sorted", .timeLimit(.minutes(3)))
   func removeFiles() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["remove", "--files", "**/*.bak"])
-    #expect(result.subject == "rewrite(remove): **/*.bak")
+    let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "**/*.bak"])
+    #expect(result.subject == "rewrite(remove-matching): **/*.bak")
     #expect(result.summary == "Removed 2 files matching **/*.bak:\n  src/y.bak\n  x.bak")
     #expect(result.filesChanged == ["src/y.bak", "x.bak"])
     try expectIdentical(dir)
   }
 
-  @Test("remove --files takes several globs and matches dotfiles", .timeLimit(.minutes(3)))
+  @Test("remove-matching --files takes several globs and matches dotfiles", .timeLimit(.minutes(3)))
   func removeFilesDotfiles() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["remove", "--files", "**/.DS_Store,**/*.bak"])
+    let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "**/.DS_Store,**/*.bak"])
     #expect(result.filesChanged == ["src/deep/.DS_Store", "src/y.bak", "x.bak"])
     #expect(result.summary.hasPrefix("Removed 3 files matching **/.DS_Store, **/*.bak:\n"), "\(result.summary)")
     try expectIdentical(dir)
   }
 
-  @Test("remove --files trims each glob", .timeLimit(.minutes(3)))
+  @Test("remove-matching --files trims each glob", .timeLimit(.minutes(3)))
   func removeFilesTrimmed() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["remove", "--files", "**/*.bak, src/deep/.DS_Store"])
+    let result = try runImage(
+      repo: dir, image: FS, args: ["remove-matching", "--files", "**/*.bak, src/deep/.DS_Store"])
     #expect(result.filesChanged == ["src/deep/.DS_Store", "src/y.bak", "x.bak"])
-    #expect(result.subject == "rewrite(remove): **/*.bak, src/deep/.DS_Store")
+    #expect(result.subject == "rewrite(remove-matching): **/*.bak, src/deep/.DS_Store")
     try expectIdentical(dir)
   }
 
@@ -281,7 +282,7 @@ struct FsTests {
     try expectIdentical(dir)
   }
 
-  @Test("remove --files lists at most 20 files", .timeLimit(.minutes(3)))
+  @Test("remove-matching --files lists at most 20 files", .timeLimit(.minutes(3)))
   func removeFilesCapped() throws {
     let dir = try temp.fixture("fs")
     try fm.createDirectory(at: dir.appendingPathComponent("many"), withIntermediateDirectories: false)
@@ -290,7 +291,7 @@ struct FsTests {
     }
     try git(dir, ["add", "many"])
     try git(dir, ["commit", "-q", "-m", "add many"])
-    let result = try runImage(repo: dir, image: FS, args: ["remove", "--files", "many/*.tmp"])
+    let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "many/*.tmp"])
     #expect(result.filesChanged.count == 21)
     #expect(result.summary.hasPrefix("Removed 21 files matching many/*.tmp:\n  many/f01.tmp\n"), "\(result.summary)")
     #expect(result.summary.hasSuffix("\n  many/f20.tmp\n  … and 1 more"), "\(result.summary)")
@@ -372,22 +373,24 @@ struct FsTests {
     try expectIdentical(dir)
   }
 
-  @Test("remove --files that matches nothing is NO_CHANGES", .timeLimit(.minutes(2)))
+  @Test("remove-matching --files that matches nothing is NO_CHANGES", .timeLimit(.minutes(2)))
   func removeNothing() throws {
     let dir = try temp.fixture("fs")
-    let err = try refused(dir, ["remove", "--files", "**/*.nothing"])
+    let err = try refused(dir, ["remove-matching", "--files", "**/*.nothing"])
     #expect(err.code == "NO_CHANGES")
   }
 
   @Test(
-    "remove, unwrap and wrap refusals are INVALID_ARGS naming the path",
+    "remove, remove-matching, unwrap and wrap refusals are INVALID_ARGS naming the path",
     .timeLimit(.minutes(2)),
     arguments: [
       (["remove", "--paths", "src/old,nope"], "\"nope\""),
-      (["remove", "--paths", "a", "--files", "*"], "remove --paths <path,path> | remove --files <glob,glob>"),
-      (["remove"], "remove --paths <path,path> | remove --files <glob,glob>"),
-      (["remove", "--paths", " , "], "remove --paths <path,path> | remove --files <glob,glob>"),
-      (["remove", "--files", ","], "remove --paths <path,path> | remove --files <glob,glob>"),
+      (["remove", "--files", "**/*.bak"], "remove --paths <path,path>"),
+      (["remove"], "remove --paths <path,path>"),
+      (["remove", "--paths", " , "], "remove --paths <path,path>"),
+      (["remove-matching", "--files", ","], "remove-matching --files <glob,glob>"),
+      (["remove-matching"], "remove-matching --files <glob,glob>"),
+      (["remove-matching", "--paths", "keep.txt"], "remove-matching --files <glob,glob>"),
       (["unwrap", "--folder", "keep.txt"], "\"keep.txt\""),
       (["unwrap", "--folder", "."], "\".\""),
       (["wrap", "--paths", "src/old", "--into", "src/old/box"], "\"src/old/box\""),
@@ -441,7 +444,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, ["nope"])
     #expect(err.code == "UNKNOWN_ACTION")
-    #expect(err.instructions.contains("copy, move, remove, unwrap, wrap"), "\(err.instructions)")
+    #expect(err.instructions.contains("copy, move, remove, remove-matching, unwrap, wrap"), "\(err.instructions)")
   }
 
   @Test("no command at all is UNKNOWN_ACTION", .timeLimit(.minutes(2)))
@@ -449,6 +452,25 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, [])
     #expect(err.code == "UNKNOWN_ACTION")
-    #expect(err.instructions.contains("copy, move, remove, unwrap, wrap"), "\(err.instructions)")
+    #expect(err.instructions.contains("copy, move, remove, remove-matching, unwrap, wrap"), "\(err.instructions)")
+  }
+
+  // Help is asked of the image directly, on an empty folder, as jig will.
+  @Test("--help prints urn:jig:help:1 with the six actions in order", .timeLimit(.minutes(2)))
+  func help() throws {
+    let dir = try temp.make("fs-help")
+    let run = try runCommand([
+      "docker", "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
+      "-v", "\(dir.path):/workspace", "-w", "/workspace", FS, "--help",
+    ])
+    #expect(run.exitCode == 0, "\(run.stdoutText)\n\(run.stderrText)")
+    let last = try #require(run.stdoutText.split(separator: "\n").last)
+    let help = try #require(try JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: Any])
+    #expect(help["schema"] as? String == "urn:jig:help:1")
+    #expect(help["ok"] == nil)
+    let actions = try #require(help["actions"] as? [[String: Any]])
+    #expect(
+      actions.map { $0["name"] as? String } == ["copy", "move", "remove", "remove-matching", "unwrap", "wrap"])
+    #expect(actions.allSatisfy { $0["kinds"] as? [String] == ["rewrite"] })
   }
 }
