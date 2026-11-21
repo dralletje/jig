@@ -1,0 +1,22 @@
+# The fs image: busybox, the static (musl) Nushell release binary and one script, containers/fs/fs.nu.
+# The download happens in a build stage, so the final image holds only busybox, nu and the script.
+FROM busybox:1.38.0 AS nu
+ARG TARGETARCH
+WORKDIR /download
+# The SHA-256 of each archive is the one in the release's SHA256SUMS.
+RUN case "$TARGETARCH" in \
+      amd64) target=x86_64-unknown-linux-musl; sha=2b808786d44af41170a29f8b9a15b5113bb6ea5dda9221098eca932f8a149924 ;; \
+      arm64) target=aarch64-unknown-linux-musl; sha=19966b94ae19f52e2cf0402cb99844ddfa06e2361cf6c77b1b2e29abd17e9188 ;; \
+      *) echo "no nu archive for TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && wget -q -O nu.tar.gz "https://github.com/nushell/nushell/releases/download/0.117.0/nu-0.117.0-$target.tar.gz" \
+ && echo "$sha  nu.tar.gz" | sha256sum -c - \
+ && tar -xzf nu.tar.gz \
+ && mv "nu-0.117.0-$target/nu" /download/nu-bin
+
+FROM busybox:1.38.0
+COPY --from=nu /download/nu-bin /usr/local/bin/nu
+COPY containers/fs/fs.nu /app/fs.nu
+WORKDIR /workspace
+# No config file: the root is read-only and HOME may not exist.
+ENTRYPOINT ["nu", "--no-config-file", "/app/fs.nu"]
