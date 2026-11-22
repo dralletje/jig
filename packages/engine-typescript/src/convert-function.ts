@@ -454,9 +454,12 @@ export const convertFunctionAction: Action<ConvertFunctionParams, TsEngine> = {
     {
       name: "--to",
       type: "choice",
-      choices: ["arrow", "function"],
+      choices: [
+        { name: "arrow", description: "A const arrow function." },
+        { name: "function", description: "A function declaration." },
+      ],
       required: true,
-      description: "A const arrow function (arrow), or a function declaration (function).",
+      description: "What the function becomes.",
     },
   ],
   parseParams(raw) {

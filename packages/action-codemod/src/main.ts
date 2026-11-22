@@ -5,17 +5,18 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { RefactorError, imageHelp, listFiles, listLines, matchesAnyGlob, okReport, plural } from "@jig/core";
-import type { ActionKind, ImageHelp, Report } from "@jig/core";
+import type { ImageHelp, Report } from "@jig/core";
 import jscodeshift from "jscodeshift";
-import { TRANSFORM_KINDS } from "./catalog.ts";
+import { TRANSFORMS } from "./catalog.ts";
+import type { TransformInfo } from "./catalog.ts";
 
-/** The published codemod package an image carries: where it is, its version, and its transforms' kinds. */
+/** The published codemod package an image carries: where it is, its version, and its transforms. */
 export type CodemodPackage = {
   name: string;
   version: string;
   /** Folder of the package; transform `<t>` is `<dir>/transforms/<t>.js`. */
   dir: string;
-  transforms: Record<string, ActionKind>;
+  transforms: Record<string, TransformInfo>;
 };
 
 const PARSERS = ["tsx", "ts", "babel", "flow"] as const;
@@ -27,9 +28,9 @@ const DECLARATION_FILE = /\.d\.[cm]?ts$/;
 /** The package named by `CODEMOD_PACKAGE`, resolved from this image's node_modules. */
 export function installedPackage(env: NodeJS.ProcessEnv = process.env): CodemodPackage {
   const name = env.CODEMOD_PACKAGE ?? "";
-  const transforms = Object.hasOwn(TRANSFORM_KINDS, name) ? TRANSFORM_KINDS[name] : undefined;
+  const transforms = Object.hasOwn(TRANSFORMS, name) ? TRANSFORMS[name] : undefined;
   if (!transforms) {
-    throw new Error(`CODEMOD_PACKAGE ${JSON.stringify(name)} is not a known codemod package (${Object.keys(TRANSFORM_KINDS).join(", ")})`);
+    throw new Error(`CODEMOD_PACKAGE ${JSON.stringify(name)} is not a known codemod package (${Object.keys(TRANSFORMS).join(", ")})`);
   }
   const manifest = createRequire(import.meta.url).resolve(`${name}/package.json`);
   const version = (JSON.parse(readFileSync(manifest, "utf8")) as { version: string }).version;
@@ -84,29 +85,14 @@ function firstLine(text: string): string {
 }
 
 /**
- * `--transform`'s description: the transforms grouped by kind, in the order of `kinds`. The kind with the
- * most transforms (the later one on a tie) is "every other one" instead of its names, as the choices are
- * listed under the description anyway; with one kind, it is "all of them".
- */
-function transformDescription(names: string[], transforms: Record<string, ActionKind>, kinds: ActionKind[]): string {
-  const named = (kind: ActionKind) => names.filter((name) => transforms[name] === kind);
-  let rest = kinds[0]!;
-  for (const kind of kinds) {
-    if (named(kind).length >= named(rest).length) rest = kind;
-  }
-  const groups = kinds.filter((kind) => kind !== rest).map((kind) => `${kind}: ${named(kind).join(", ")}.`);
-  groups.push(kinds.length === 1 ? `${rest}: all of them.` : `${rest}: every other one.`);
-  return `Which transform to run; the commit has its kind. ${groups.join(" ")}`;
-}
-
-/**
  * The codemod image's help: its one action, `codemod`, whose kinds are those of the carried package's
- * transforms. `pkg` is the package the image carries (injected by tests).
+ * transforms; each `--transform` choice carries its transform's kind, the kind of the commit it makes.
+ * `pkg` is the package the image carries (injected by tests).
  */
 export function help(pkg?: CodemodPackage): ImageHelp {
   const carried = pkg ?? installedPackage();
   const names = Object.keys(carried.transforms).sort();
-  const used = Object.values(carried.transforms);
+  const used = Object.values(carried.transforms).map((transform) => transform.kind);
   const kinds = (["refactor", "sweep", "rewrite"] as const).filter((kind) => used.includes(kind));
   return imageHelp(`Runs a transform of ${carried.name} ${carried.version} with jscodeshift.`, [
     {
@@ -117,9 +103,13 @@ export function help(pkg?: CodemodPackage): ImageHelp {
         {
           name: "--transform",
           type: "choice",
-          choices: names,
+          choices: names.map((name) => ({
+            name,
+            description: carried.transforms[name]!.description,
+            kind: carried.transforms[name]!.kind,
+          })),
           required: true,
-          description: transformDescription(names, carried.transforms, kinds),
+          description: "Which transform to run.",
         },
         {
           name: "--files",
@@ -130,7 +120,12 @@ export function help(pkg?: CodemodPackage): ImageHelp {
         {
           name: "--parser",
           type: "choice",
-          choices: [...PARSERS],
+          choices: [
+            { name: "tsx", description: "TypeScript with JSX." },
+            { name: "ts", description: "TypeScript without JSX." },
+            { name: "babel", description: "JavaScript with JSX, through Babel." },
+            { name: "flow", description: "JavaScript with Flow types." },
+          ],
           required: false,
           description: "The parser for every file. Without it: tsx for .tsx, ts for .ts, .mts and .cts, else the transform's own or babel.",
         },
@@ -151,7 +146,7 @@ export async function main(argv: string[], root: string, pkg?: CodemodPackage): 
   }
   const { transform: name, globs, parser: flag } = parseFlags(args);
   const carried = pkg ?? installedPackage();
-  const kind = Object.hasOwn(carried.transforms, name) ? carried.transforms[name] : undefined;
+  const kind = Object.hasOwn(carried.transforms, name) ? carried.transforms[name]!.kind : undefined;
   if (kind === undefined) {
     throw new RefactorError(
       "INVALID_ARGS",

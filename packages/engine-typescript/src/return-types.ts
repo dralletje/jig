@@ -167,9 +167,12 @@ export const inferReturnTypesAction: Action<InferReturnTypesParams, TsEngine> = 
     {
       name: "--exported-only",
       type: "choice",
-      choices: ["true", "false"],
+      choices: [
+        { name: "true", description: "Only exported functions (the default)." },
+        { name: "false", description: "Every function." },
+      ],
       required: false,
-      description: "Only exported functions (true, the default), or every function (false).",
+      description: "Which functions get a return type.",
     },
   ],
   parseParams: (raw) => {

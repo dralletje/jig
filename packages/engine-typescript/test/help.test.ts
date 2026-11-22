@@ -7,7 +7,7 @@ import { ACTIONS, help } from "../src/main.ts";
 
 // A value each declared flag accepts, by its type. Two text flags check their format and get a valid one.
 function fakeValue(flag: Flag): string {
-  if (flag.type === "choice") return flag.choices[0]!;
+  if (flag.type === "choice") return flag.choices[0]!.name;
   if (flag.type === "path" || flag.type === "paths" || flag.type === "globs") return "src/a.ts";
   if (flag.name === "--at") return "src/a.ts:12:20";
   if (flag.name === "--alias") return "@/";
@@ -97,9 +97,9 @@ describe("typescript help", () => {
         if (flag.type !== "choice") continue;
         for (const choice of flag.choices) {
           assert.equal(
-            refuses(() => action.parseParams(recordingRaw(action.flags, new Set(), { [flag.name]: choice }))),
+            refuses(() => action.parseParams(recordingRaw(action.flags, new Set(), { [flag.name]: choice.name }))),
             false,
-            `${flag.name} ${choice}`,
+            `${flag.name} ${choice.name}`,
           );
         }
         assert.equal(

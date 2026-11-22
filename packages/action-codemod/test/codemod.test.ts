@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import type { ActionKind, OkReport, RefactorError } from "@jig/core";
 import { HELP_SCHEMA_ID, assertReport, readTree, schemaErrors } from "@jig/test-utils";
-import { TRANSFORM_KINDS, help, installedPackage, main } from "../src/index.ts";
-import type { CodemodPackage } from "../src/index.ts";
+import { TRANSFORMS, help, installedPackage, main } from "../src/index.ts";
+import type { CodemodPackage, TransformInfo } from "../src/index.ts";
 
 async function rejects(p: Promise<unknown>): Promise<RefactorError> {
   try {
@@ -21,8 +21,18 @@ const RENAME = `module.exports = (file, api) => api.j(file.source).find(api.j.Id
 const NOTHING = `module.exports = () => null;\n`;
 const THROWS = `module.exports = () => { throw new Error("cannot handle this\\nsecond line"); };\n`;
 
-/** A stand-in for a published codemod package: a folder with `transforms/<name>.js` files. */
-async function fakePackage(transforms: Record<string, ActionKind>, sources: Record<string, string> = {}): Promise<CodemodPackage> {
+/**
+ * A stand-in for a published codemod package: a folder with `transforms/<name>.js` files, each transform
+ * of the given kind and described as "Runs <name>.".
+ */
+async function fakePackage(kinds: Record<string, ActionKind>, sources: Record<string, string> = {}): Promise<CodemodPackage> {
+  const transforms: Record<string, TransformInfo> = {};
+  for (const [name, kind] of Object.entries(kinds)) transforms[name] = { kind, description: `Runs ${name}.` };
+  return fakePackageOf(transforms, sources);
+}
+
+/** A stand-in for a published codemod package with exactly these transforms (the real table's, say). */
+async function fakePackageOf(transforms: Record<string, TransformInfo>, sources: Record<string, string> = {}): Promise<CodemodPackage> {
   const dir = await mkdtemp(join(tmpdir(), "fake-codemods-"));
   await mkdir(join(dir, "transforms"));
   for (const name of Object.keys(transforms)) await writeFile(join(dir, "transforms", `${name}.js`), sources[name] ?? RENAME);
@@ -74,20 +84,23 @@ describe("codemod", () => {
   });
 
   test("every transform of the table reports the kind the table gives it", async () => {
-    for (const [name, transforms] of Object.entries(TRANSFORM_KINDS)) {
-      for (const [transform, kind] of Object.entries(transforms)) {
-        const pkg = await fakePackage({ [transform]: kind });
+    for (const [name, transforms] of Object.entries(TRANSFORMS)) {
+      for (const [transform, info] of Object.entries(transforms)) {
+        const pkg = await fakePackage({ [transform]: info.kind });
         const dir = await workspace({ "a.ts": SRC });
         const report = (await main(["codemod", "--transform", transform, "--files", "a.ts"], dir, { ...pkg, name })) as OkReport;
-        assert.equal(report.kind, kind, `${name}/${transform}`);
-        assert.ok(report.subject.startsWith(`${kind}(${name}@1.2.3/${transform}): `), report.subject);
+        assert.equal(report.kind, info.kind, `${name}/${transform}`);
+        assert.ok(report.subject.startsWith(`${info.kind}(${name}@1.2.3/${transform}): `), report.subject);
       }
     }
   });
 
-  test("the table holds only valid kinds", () => {
-    for (const transforms of Object.values(TRANSFORM_KINDS)) {
-      for (const kind of Object.values(transforms)) assert.ok(["refactor", "sweep", "rewrite"].includes(kind), kind);
+  test("the table holds only valid kinds and one-line descriptions", () => {
+    for (const transforms of Object.values(TRANSFORMS)) {
+      for (const [transform, info] of Object.entries(transforms)) {
+        assert.ok(["refactor", "sweep", "rewrite"].includes(info.kind), `${transform}: ${info.kind}`);
+        assert.match(info.description, /^[^\r\n]+\.$/, transform);
+      }
     }
   });
 
@@ -234,35 +247,35 @@ describe("codemod help", () => {
     assert.deepEqual(await kinds({ a: "sweep" }), ["sweep"]);
   });
 
-  test("--transform is a required choice of the sorted transform names, each named with its kind", async () => {
+  test("--transform is a required choice of the sorted transforms, each with its description and kind", async () => {
     const [codemod] = help(await fakePackage({ zeta: "rewrite", alpha: "sweep", mid: "rewrite" })).actions;
     const transform = codemod!.flags.find((f) => f.name === "--transform");
     assert.ok(transform && transform.type === "choice", JSON.stringify(transform));
-    assert.deepEqual(transform.choices, ["alpha", "mid", "zeta"]);
+    assert.deepEqual(transform.choices, [
+      { name: "alpha", description: "Runs alpha.", kind: "sweep" },
+      { name: "mid", description: "Runs mid.", kind: "rewrite" },
+      { name: "zeta", description: "Runs zeta.", kind: "rewrite" },
+    ]);
     assert.equal(transform.required, true);
-    assert.equal(transform.description, "Which transform to run; the commit has its kind. sweep: alpha. rewrite: every other one.");
+    assert.equal(transform.description, "Which transform to run.");
   });
 
-  test("--transform's description names every kind but the most common one by its transforms, once each", async () => {
-    const description = async (transforms: Record<string, ActionKind>) =>
-      help(await fakePackage(transforms)).actions[0]!.flags.find((f) => f.name === "--transform")!.description;
-    assert.equal(
-      await description({ d: "rewrite", c: "refactor", b: "sweep", a: "sweep", e: "sweep" }),
-      "Which transform to run; the commit has its kind. refactor: c. rewrite: d. sweep: every other one.",
-    );
-    assert.equal(await description({ a: "rewrite", b: "rewrite" }), "Which transform to run; the commit has its kind. rewrite: all of them.");
-    assert.equal(await description({ a: "sweep", b: "rewrite" }), "Which transform to run; the commit has its kind. sweep: a. rewrite: every other one.");
-  });
-
-  test("--transform's description for the real react-codemod table lists the sweep transforms, the rest rewrite", async () => {
-    const transforms = TRANSFORM_KINDS["react-codemod"]!;
-    const description = help({ ...(await fakePackage(transforms)), name: "react-codemod" }).actions[0]!.flags.find(
-      (f) => f.name === "--transform",
-    )!.description;
-    const sweeps = Object.keys(transforms)
-      .filter((name) => transforms[name] === "sweep")
-      .sort();
-    assert.equal(description, `Which transform to run; the commit has its kind. sweep: ${sweeps.join(", ")}. rewrite: every other one.`);
+  test("each --transform choice of the real table has the kind its run commits", async () => {
+    for (const [name, transforms] of Object.entries(TRANSFORMS)) {
+      const pkg = { ...(await fakePackageOf(transforms)), name };
+      const transform = help(pkg).actions[0]!.flags.find((f) => f.name === "--transform");
+      assert.ok(transform && transform.type === "choice", JSON.stringify(transform));
+      assert.deepEqual(
+        transform.choices.map((choice) => choice.name),
+        Object.keys(transforms).sort(),
+      );
+      for (const choice of transform.choices) {
+        const dir = await workspace({ "a.ts": SRC });
+        const report = (await main(["codemod", "--transform", choice.name, "--files", "a.ts"], dir, pkg)) as OkReport;
+        assert.equal(choice.kind, report.kind, `${name}/${choice.name}`);
+        assert.equal(choice.description, transforms[choice.name]!.description);
+      }
+    }
   });
 
   test("--files is required globs, --parser an optional choice of tsx, ts, babel, flow", async () => {
@@ -275,13 +288,17 @@ describe("codemod help", () => {
     assert.deepEqual([files?.type, files?.required], ["globs", true]);
     const parser = codemod!.flags.find((f) => f.name === "--parser");
     assert.ok(parser && parser.type === "choice", JSON.stringify(parser));
-    assert.deepEqual(parser.choices, ["tsx", "ts", "babel", "flow"]);
+    assert.deepEqual(
+      parser.choices.map((choice) => choice.name),
+      ["tsx", "ts", "babel", "flow"],
+    );
+    assert.ok(parser.choices.every((choice) => choice.description.length > 0 && choice.kind === undefined));
     assert.equal(parser.required, false);
   });
 
   test("every package of the table gives a valid help", async () => {
-    for (const [name, transforms] of Object.entries(TRANSFORM_KINDS)) {
-      const pkg = await fakePackage(transforms);
+    for (const [name, transforms] of Object.entries(TRANSFORMS)) {
+      const pkg = await fakePackageOf(transforms);
       assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help({ ...pkg, name })), [], name);
     }
   });

@@ -31,7 +31,14 @@ export const renameAction: Action<RenameParams, TsEngine> = {
     {
       name: "--kind",
       type: "choice",
-      choices: ["function", "class", "interface", "type", "enum", "variable"],
+      choices: [
+        { name: "function", description: "A function declaration." },
+        { name: "class", description: "A class declaration." },
+        { name: "interface", description: "An interface declaration." },
+        { name: "type", description: "A type alias." },
+        { name: "enum", description: "An enum declaration." },
+        { name: "variable", description: "A variable declared with const, let or var." },
+      ],
       required: false,
       description: "Which declaration to rename, when several in the file have the name.",
     },
@@ -87,7 +94,14 @@ export const extractAction: Action<ExtractParams, TsEngine> = {
     {
       name: "--kind",
       type: "choice",
-      choices: ["function", "class", "interface", "type", "enum", "variable"],
+      choices: [
+        { name: "function", description: "Function declarations." },
+        { name: "class", description: "Class declarations." },
+        { name: "interface", description: "Interface declarations." },
+        { name: "type", description: "Type aliases." },
+        { name: "enum", description: "Enum declarations." },
+        { name: "variable", description: "Variables declared with const, let or var." },
+      ],
       required: false,
       description: "Which declarations to move, when several in the file have a name.",
     },

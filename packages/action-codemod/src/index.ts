@@ -1,3 +1,4 @@
 export { help, main, installedPackage } from "./main.ts";
 export type { CodemodPackage } from "./main.ts";
-export { TRANSFORM_KINDS } from "./catalog.ts";
+export { TRANSFORMS } from "./catalog.ts";
+export type { TransformInfo } from "./catalog.ts";

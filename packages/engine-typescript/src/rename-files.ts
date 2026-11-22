@@ -116,7 +116,12 @@ export const renameFilesAction: Action<RenameFilesParams, TsEngine> = {
     {
       name: "--case",
       type: "choice",
-      choices: ["kebab", "camel", "pascal", "snake"],
+      choices: [
+        { name: "kebab", description: "kebab-case: my-file.ts." },
+        { name: "camel", description: "camelCase: myFile.ts." },
+        { name: "pascal", description: "PascalCase: MyFile.ts." },
+        { name: "snake", description: "snake_case: my_file.ts." },
+      ],
       required: true,
       description: "The case of the new names (the part before the first dot).",
     },
