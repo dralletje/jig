@@ -426,8 +426,8 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
 - jig checks the object strictly: unknown fields (`ok`, `image` and `notes` included: jig adds those),
   wrong types, empty `actions`, two actions or two flags of one action with the same name, `choices`
   missing or misplaced, a choice that is not such an object, or kinds on choices that break the rules
-  above are `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the choice rules too. jig does not check a run's arguments against the help: the
-  image still parses them itself.
+  above are `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the choice rules too. jig does not
+  check a run's arguments against the help: the image still parses them itself.
 
 ## Kinds: refactors, sweeps and rewrites
 
