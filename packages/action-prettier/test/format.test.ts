@@ -107,7 +107,7 @@ describe("prettier help", () => {
       ["format"],
     );
     const [format] = help().actions;
-    assert.deepEqual(format!.kinds, ["sweep"]);
+    assert.equal(format!.kind, "sweep");
     assert.deepEqual(
       format!.flags.map(({ name, type, required }) => ({ name, type, required })),
       [{ name: "--files", type: "globs", required: true }],

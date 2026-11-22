@@ -16,24 +16,37 @@ export type Flag =
   | { name: string; type: "path" | "paths" | "globs" | "text"; required: boolean; description: string }
   | { name: string; type: "choice"; choices: Choice[]; required: boolean; description: string };
 
-/** One action in an image's help: the kinds its commits can have, one line on what it does, its flags. */
-export type ActionHelp = { name: string; kinds: ActionKind[]; summary: string; flags: Flag[] };
+/** One action in an image's help: the one kind its commits have, one line on what it does, its flags. */
+export type ActionHelp = { name: string; kind: ActionKind; summary: string; flags: Flag[] };
 
 /** What an image prints, as one JSON line, when its arguments are exactly `["--help"]`. */
 export type ImageHelp = { schema: typeof HELP_SCHEMA; summary: string; actions: ActionHelp[] };
 
 /**
- * The help object of an image: one line on what it does, and its actions. Throws when a choice flag
- * breaks the rules of `Choice` (jig would refuse the help as broken).
+ * The help object of an image: one line on what it does, and its actions. Throws when an action's
+ * kind is not one kind, or a choice flag breaks the rules of `Choice` (jig would refuse the help as broken).
  */
 export function imageHelp(summary: string, actions: ActionHelp[]): ImageHelp {
-  for (const action of actions) checkChoices(action);
+  for (const action of actions) {
+    checkKind(action);
+    checkChoices(action);
+  }
   return { schema: HELP_SCHEMA, summary, actions };
 }
 
 /** An `Action`'s entry in its image's help. */
 export function actionHelp(action: Action): ActionHelp {
-  return { name: action.id, kinds: [action.kind], summary: action.summary, flags: action.flags };
+  return { name: action.id, kind: action.kind, summary: action.summary, flags: action.flags };
+}
+
+/** Throws when `action` has no single kind of refactor, sweep or rewrite, or still lists `kinds`. */
+function checkKind(action: ActionHelp): void {
+  const at = `help of action ${JSON.stringify(action.name)}`;
+  if ("kinds" in action) throw new Error(`${at} has unknown field(s) kinds (an action has one kind: kind)`);
+  const kind: unknown = action.kind;
+  if (kind !== "refactor" && kind !== "sweep" && kind !== "rewrite") {
+    throw new Error(`${at}: kind must be one of refactor, sweep, rewrite, not ${JSON.stringify(kind)}`);
+  }
 }
 
 /** Throws when the choices of `action`'s choice flags break the rules of `Choice`. */

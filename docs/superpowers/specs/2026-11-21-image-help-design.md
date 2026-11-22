@@ -13,7 +13,7 @@ required ones, path rules applied once for every image). This design only descri
 
 ## Goals
 
-- `jig <image>` and `jig <image> --help`: every action of the image, each with its kinds and one line.
+- `jig <image>` and `jig <image> --help`: every action of the image, each with its kind and one line.
 - `jig <image> <action> --help`: that action's flags (name, type, required, what it does).
 - No repo needed and nothing changes: help never exports, commits or touches git.
 - The image is the only place that knows its actions: it answers a help call with one JSON object, and
@@ -22,6 +22,9 @@ required ones, path rules applied once for every image). This design only descri
 - **One action, one set of flags.** Each flag is required or optional; an action never takes "one of these
   flags". A case that would need it becomes two actions. The only such case today, fs `remove`
   (`--paths` or `--files`), is split.
+- **One action, one kind.** If an action's commits could be of more than one kind, it is split into
+  actions, one per kind, whose behaviours do not overlap. Where it is truly ambiguous which action fits,
+  an agent can run the candidates and see which succeeds.
 - Flags are typed: `path`, `paths`, `globs`, `text`, or `choice` with its options.
 
 ## Non-goals
@@ -56,7 +59,7 @@ The owner picked A.
   "actions": [
     {
       "name": "move",
-      "kinds": ["rewrite"],
+      "kind": "rewrite",
       "summary": "Moves a file or folder to a free destination.",
       "flags": [
         {"name": "--from", "type": "path", "required": true, "description": "The file or folder to move."},
@@ -68,9 +71,8 @@ The owner picked A.
 ```
 
 - `summary` (image and action) is one line of plain text.
-- `kinds` lists the kinds the action's commits can have (`refactor`, `sweep`, `rewrite`): at least one, no
-  repeats. Every action of today's images has one: each react-codemod transform is an action of its own
-  with its transform's kind.
+- `kind` is the one kind the action's commits have (`refactor`, `sweep` or `rewrite`); a list, `kinds`,
+  is an unknown field. Each react-codemod transform is an action of its own with its transform's kind.
 - `flags` may be empty. Each flag has `name` (starting with `--`), `type`, `required` and `description`
   (plain text, may be several lines).
 - `type` is one of:
@@ -84,8 +86,8 @@ The owner picked A.
     never decides the commit's kind).
 - jig checks the object strictly, like a report: unknown fields, a wrong type, an empty `actions`, two
   actions with the same name, two flags with the same name in one action, `choices` missing or misplaced,
-  or a choice breaking the rules above are `IMAGE_FAILED`. core's help builder throws on the
-  choice rules, so an image's own tests catch them.
+  a missing or unknown `kind`, or a choice breaking the rules above are `IMAGE_FAILED`. core's help
+  builder throws on the kind and choice rules, so an image's own tests catch them.
 - A schema file, `schemas/help-1.schema.json`, describes it, with an example in `schemas/examples/`.
 
 ## The protocol: jig side
@@ -129,7 +131,7 @@ Moves a file or folder to a free destination.
 
   Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>`, and a choice as `<choice>` with its
   choices in a table indented under the flag: name and description. Optional flags show in brackets in
-  the usage line. The notes print under the header; several kinds show as `sweep|rewrite`.
+  the usage line. The notes print under the header.
 
 ```
   --parser <choice>    optional  The parser for every file. …
@@ -177,7 +179,7 @@ Moves a file or folder to a free destination.
 - `swift/report` (or wherever the help parser lives): valid help objects parse; each strict-check failure
   above is refused.
 - `swift/cli` unit: which argument lists are help calls; `--message` with help is refused; the text
-  rendering of a sample help object (both views, a choice flag, an optional flag, several kinds).
+  rendering of a sample help object (both views, a choice flag, an optional flag).
 - `swift/cli` end to end, outside any git repo: `jig <fs image> --help` gives JSON with `image` pinned and
   all six actions; `jig <fs image> move --help` gives one action; `jig <fs image> nope --help` is
   `UNKNOWN_ACTION`; an image without help (the test probe image) is `IMAGE_FAILED` with "gives no help";
@@ -188,7 +190,7 @@ Moves a file or folder to a free destination.
 ## Docs
 
 The README's usage block, a short "Help" section (what jig shows, the JSON for agents, the image's
-`urn:jig:help:1` contract and the "one action, one set of flags" rule under "Writing an action"), the fs
+`urn:jig:help:1` contract and the "one action, one set of flags" and "one action, one kind" rules under "Writing an action"), the fs
 section (`remove` and `remove-matching`), and `jig --help`.
 
 ## Left to the builder
@@ -206,8 +208,9 @@ Open to correction:
 - `jig <image>` with no arguments is help and exits 0, the same as `--help`.
 - An image without help is `IMAGE_FAILED`, not a new error code.
 - `--message` with a help call is refused; `--repo` is accepted and ignored.
-- An action lists `kinds` (a list), not one `kind`, so an action whose kind depends on its arguments
-  stays possible; today every action has one.
+- One kind per action: an action has `kind`, one of `refactor`, `sweep` or `rewrite`, not a list. An
+  action whose commits could be of more than one kind is split into actions, one per kind; `kinds` is
+  refused as an unknown field.
 - A choice is an object with a one-line `description`, not a bare string; strings are refused, so there
   is one shape only.
 - Codemod transforms are actions: each react-codemod transform is an action of the codemod-react image,

@@ -475,6 +475,6 @@ struct FsTests {
     let actions = try #require(help["actions"] as? [[String: Any]])
     #expect(
       actions.map { $0["name"] as? String } == ["copy", "move", "remove", "remove-matching", "unwrap", "wrap"])
-    #expect(actions.allSatisfy { $0["kinds"] as? [String] == ["rewrite"] })
+    #expect(actions.allSatisfy { $0["kind"] as? String == "rewrite" })
   }
 }

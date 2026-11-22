@@ -101,7 +101,7 @@ export function help(pkg?: CodemodPackage): ImageHelp {
     `Runs the transforms of ${carried.name} ${carried.version} with jscodeshift, each as an action.`,
     names.map((name) => ({
       name,
-      kinds: [carried.transforms[name]!.kind],
+      kind: carried.transforms[name]!.kind,
       summary: carried.transforms[name]!.description,
       flags: [
         {

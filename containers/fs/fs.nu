@@ -380,7 +380,7 @@ def wrap [args: list<string>] {
   ok $"rewrite\(fs wrap\): ($named) → ($into)" $"Wrapped ($named) into ($into) \(($files)\)."
 }
 
-# Prints the help (help v1, urn:jig:help:1): every command, its kinds and its flags.
+# Prints the help (help v1, urn:jig:help:1): every command, its kind and its flags.
 def print-help [] {
   let help = {
     schema: "urn:jig:help:1"
@@ -388,7 +388,7 @@ def print-help [] {
     actions: [
       {
         name: "copy"
-        kinds: ["rewrite"]
+        kind: "rewrite"
         summary: "Copies a file or folder to a free destination."
         flags: [
           {name: "--from", type: "path", required: true, description: "The file or folder to copy. Symlinks stay links and file modes are kept."}
@@ -397,7 +397,7 @@ def print-help [] {
       }
       {
         name: "move"
-        kinds: ["rewrite"]
+        kind: "rewrite"
         summary: "Moves a file or folder to a free destination."
         flags: [
           {name: "--from", type: "path", required: true, description: "The file or folder to move."}
@@ -406,7 +406,7 @@ def print-help [] {
       }
       {
         name: "remove"
-        kinds: ["rewrite"]
+        kind: "rewrite"
         summary: "Removes files and folders by path."
         flags: [
           {name: "--paths", type: "paths", required: true, description: "The files and folders to remove. Every path must exist."}
@@ -414,7 +414,7 @@ def print-help [] {
       }
       {
         name: "remove-matching"
-        kinds: ["rewrite"]
+        kind: "rewrite"
         summary: "Removes every file a glob matches."
         flags: [
           {name: "--files", type: "globs", required: true, description: "The globs. Every file and symlink they match is removed, dotfiles too, never folders. No match is NO_CHANGES."}
@@ -422,7 +422,7 @@ def print-help [] {
       }
       {
         name: "unwrap"
-        kinds: ["rewrite"]
+        kind: "rewrite"
         summary: "Moves a folder's contents up one level and removes the folder."
         flags: [
           {name: "--folder", type: "path", required: true, description: "The folder to unwrap. A name that collides with one already next to it refuses the whole run."}
@@ -430,7 +430,7 @@ def print-help [] {
       }
       {
         name: "wrap"
-        kinds: ["rewrite"]
+        kind: "rewrite"
         summary: "Moves files and folders into a new folder."
         flags: [
           {name: "--paths", type: "paths", required: true, description: "The files and folders to move. Two with the same base name are refused."}

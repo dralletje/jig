@@ -12,8 +12,8 @@ private func help(actions: String, extra: String = "") -> String {
 }
 
 /// One action with `flags` (JSON, without the brackets).
-private func action(name: String = "move", kinds: String = #"["rewrite"]"#, flags: String = "") -> String {
-  #"{"name":""# + name + #"","kinds":"# + kinds + #","summary":"Moves it.","flags":["# + flags + "]}"
+private func action(name: String = "move", kind: String = #""rewrite""#, flags: String = "") -> String {
+  #"{"name":""# + name + #"","kind":"# + kind + #","summary":"Moves it.","flags":["# + flags + "]}"
 }
 
 private func refused(_ stdout: String, termination: Termination = .exited(0)) -> RefactorError {
@@ -26,7 +26,7 @@ private func refused(_ stdout: String, termination: Termination = .exited(0)) ->
 }
 
 private let move = ActionHelp(
-  name: "move", kinds: [.rewrite], summary: "Moves a file or folder to a free destination.",
+  name: "move", kind: .rewrite, summary: "Moves a file or folder to a free destination.",
   flags: [
     FlagHelp(name: "--from", type: .path, required: true, description: "The file or folder to move.", choices: nil),
     FlagHelp(name: "--to", type: .path, required: true, description: "Where it goes. It must be free.", choices: nil),
@@ -55,7 +55,7 @@ private let move = ActionHelp(
     + #"],"required":true,"description":"Which.\nTwo lines."},"#
     + #"{"name":"--files","type":"globs","required":false,"description":"Where."},"#
     + #"{"name":"--parser","type":"choice","choices":[{"name":"tsx","description":"TypeScript."}],"required":false,"description":"P."}"#
-  let line = help(actions: action(name: "codemod", kinds: #"["rewrite","sweep"]"#, flags: flags))
+  let line = help(actions: action(name: "codemod", kind: #""sweep""#, flags: flags))
   #expect(
     ImageHelpAnswer.parse(stdout: line, stderr: "", termination: .exited(0))
       == .help(
@@ -63,7 +63,7 @@ private let move = ActionHelp(
           summary: "Does things.",
           actions: [
             ActionHelp(
-              name: "codemod", kinds: [.rewrite, .sweep], summary: "Moves it.",
+              name: "codemod", kind: .sweep, summary: "Moves it.",
               flags: [
                 FlagHelp(
                   name: "--transform", type: .choice, required: true, description: "Which.\nTwo lines.",
@@ -111,7 +111,7 @@ func choiceChecksRefuse(problem: String, line: String) {
   ("ok", help(actions: action(), extra: #","ok":true"#)),
   ("image", help(actions: action(), extra: #","image":"x@sha256:00""#)),
   ("notes", help(actions: action(), extra: #","notes":["n"]"#)),
-  ("unknown action field", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"S.","flags":[],"x":1}"#)),
+  ("unknown action field", help(actions: #"{"name":"a","kind":"rewrite","summary":"S.","flags":[],"x":1}"#)),
   (
     "unknown flag field",
     help(actions: action(flags: #"{"name":"--a","type":"text","required":true,"description":"D.","x":1}"#))
@@ -122,7 +122,7 @@ func choiceChecksRefuse(problem: String, line: String) {
   ("missing summary", #"{"schema":"urn:jig:help:1","actions":["# + action() + "]}"),
   ("required not a boolean", help(actions: action(flags: #"{"name":"--a","type":"text","required":"yes","description":"D."}"#))),
   ("missing description", help(actions: action(flags: #"{"name":"--a","type":"text","required":true}"#))),
-  ("flags missing", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"S."}"#)),
+  ("flags missing", help(actions: #"{"name":"a","kind":"rewrite","summary":"S."}"#)),
   // The rules beyond the types.
   ("empty actions", #"{"schema":"urn:jig:help:1","summary":"S.","actions":[]}"#),
   ("duplicate action", help(actions: action() + "," + action())),
@@ -133,9 +133,11 @@ func choiceChecksRefuse(problem: String, line: String) {
         flags: #"{"name":"--a","type":"text","required":true,"description":"D."},"#
           + #"{"name":"--a","type":"path","required":false,"description":"E."}"#))
   ),
-  ("empty kinds", help(actions: action(kinds: "[]"))),
-  ("repeated kind", help(actions: action(kinds: #"["rewrite","rewrite"]"#))),
-  ("unknown kind", help(actions: action(kinds: #"["delete"]"#))),
+  ("missing kind", help(actions: #"{"name":"a","summary":"S.","flags":[]}"#)),
+  ("kind as a list", help(actions: action(kind: #"["rewrite"]"#))),
+  ("kinds instead of kind", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"S.","flags":[]}"#)),
+  ("kinds next to kind", help(actions: #"{"name":"a","kind":"rewrite","kinds":["rewrite"],"summary":"S.","flags":[]}"#)),
+  ("unknown kind", help(actions: action(kind: #""delete""#))),
   ("unknown flag type", help(actions: action(flags: #"{"name":"--a","type":"number","required":true,"description":"D."}"#))),
   ("choice without choices", help(actions: action(flags: #"{"name":"--a","type":"choice","required":true,"description":"D."}"#))),
   (
@@ -152,8 +154,8 @@ func choiceChecksRefuse(problem: String, line: String) {
   ("flag name with a space", help(actions: action(flags: #"{"name":"--a b","type":"text","required":true,"description":"D."}"#))),
   ("empty flag description", help(actions: action(flags: #"{"name":"--a","type":"text","required":true,"description":""}"#))),
   ("multi-line image summary", #"{"schema":"urn:jig:help:1","summary":"One.\nTwo.","actions":["# + action() + "]}"),
-  ("multi-line action summary", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"One.\nTwo.","flags":[]}"#)),
-  ("empty action summary", help(actions: #"{"name":"a","kinds":["rewrite"],"summary":"","flags":[]}"#)),
+  ("multi-line action summary", help(actions: #"{"name":"a","kind":"rewrite","summary":"One.\nTwo.","flags":[]}"#)),
+  ("empty action summary", help(actions: #"{"name":"a","kind":"rewrite","summary":"","flags":[]}"#)),
   ("empty action name", help(actions: action(name: ""))),
   ("action name that is a flag", help(actions: action(name: "--help"))),
   ("action name starting with -", help(actions: action(name: "-x"))),
@@ -214,7 +216,7 @@ func strictChecksRefuse(problem: String, line: String) {
 // MARK: - What jig prints
 
 private let convert = ActionHelp(
-  name: "convert", kinds: [.sweep, .rewrite], summary: "Converts React code.",
+  name: "convert", kind: .sweep, summary: "Converts React code.",
   flags: [
     FlagHelp(
       name: "--to", type: .choice, required: true, description: "What to convert to.\nOne of these.",
@@ -234,9 +236,9 @@ private let convert = ActionHelp(
 private let sample = ImageHelp(
   summary: "Copies, moves and removes files and folders.",
   actions: [
-    ActionHelp(name: "copy", kinds: [.rewrite], summary: "Copies a file or folder to a free destination.", flags: []),
+    ActionHelp(name: "copy", kind: .rewrite, summary: "Copies a file or folder to a free destination.", flags: []),
     move,
-    ActionHelp(name: "remove-matching", kinds: [.rewrite], summary: "Removes every file a glob matches.", flags: []),
+    ActionHelp(name: "remove-matching", kind: .rewrite, summary: "Removes every file a glob matches.", flags: []),
     convert,
   ])
 
@@ -269,7 +271,8 @@ private let sample = ImageHelp(
       #""choices":[{"description":"Converts React.createElement calls to JSX.","name":"jsx"},"#
         + #"{"description":"Converts stateless classes to function components.","name":"function"}]"#))
   #expect(printed.contains(#""choices":[{"description":"TypeScript with JSX.","name":"tsx"},"#))
-  #expect(printed.contains(#""kinds":["sweep","rewrite"]"#))
+  #expect(printed.contains(#""kind":"sweep""#))
+  #expect(!printed.contains("kinds"))
   // Keys sorted, as every other object jig prints.
   #expect(printed.hasPrefix(#"{"actions":[{"flags":[{"choices":"#))
   // A flag that is not a choice has no choices key.
@@ -283,10 +286,10 @@ private let sample = ImageHelp(
       ghcr.io/dralletje/jig/fs-v1@sha256:abc
       Copies, moves and removes files and folders.
 
-        copy             rewrite        Copies a file or folder to a free destination.
-        move             rewrite        Moves a file or folder to a free destination.
-        remove-matching  rewrite        Removes every file a glob matches.
-        convert          sweep|rewrite  Converts React code.
+        copy             rewrite  Copies a file or folder to a free destination.
+        move             rewrite  Moves a file or folder to a free destination.
+        remove-matching  rewrite  Removes every file a glob matches.
+        convert          sweep    Converts React code.
 
       jig <image> <action> --help shows an action's flags.
       """)
@@ -327,7 +330,7 @@ private let sample = ImageHelp(
     image: "i@sha256:abc", notes: ["A note."], help: ImageHelp(summary: "S.", actions: [convert]), action: "convert")
   #expect(
     text == """
-      convert (sweep|rewrite)
+      convert (sweep)
       Converts React code.
       A note.
 
@@ -359,7 +362,7 @@ private let sample = ImageHelp(
 }
 
 @Test func helpTextActionViewWithoutFlagsAndOtherTypes() {
-  let none = ActionHelp(name: "tidy", kinds: [.sweep], summary: "Tidies.", flags: [])
+  let none = ActionHelp(name: "tidy", kind: .sweep, summary: "Tidies.", flags: [])
   #expect(
     helpText(image: "i@sha256:abc", notes: [], help: ImageHelp(summary: "S.", actions: [none]), action: "tidy") == """
       tidy (sweep)
@@ -368,7 +371,7 @@ private let sample = ImageHelp(
         jig <image> tidy
       """)
   let typed = ActionHelp(
-    name: "remove", kinds: [.rewrite], summary: "Removes.",
+    name: "remove", kind: .rewrite, summary: "Removes.",
     flags: [
       FlagHelp(name: "--paths", type: .paths, required: true, description: "What.", choices: nil),
       FlagHelp(name: "--symbol", type: .text, required: false, description: "Which.", choices: nil),

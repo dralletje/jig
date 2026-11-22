@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:jig:help:1",
   "title": "jig image help, version 1",
-  "description": "What an image prints as the last line of stdout when run with exactly one argument, --help (exit 0): its actions, their kinds and their flags. jig prints the same object with ok, image and notes added; an image never sends those.",
+  "description": "What an image prints as the last line of stdout when run with exactly one argument, --help (exit 0): its actions, the kind of each and their flags. jig prints the same object with ok, image and notes added; an image never sends those.",
   "type": "object",
   "required": ["schema", "summary", "actions"],
   "properties": {
@@ -28,19 +28,16 @@
     },
     "action": {
       "type": "object",
-      "required": ["name", "kinds", "summary", "flags"],
+      "required": ["name", "kind", "summary", "flags"],
       "properties": {
         "name": {
           "description": "What the action is called on the command line: not starting with -, without whitespace.",
           "type": "string",
           "pattern": "^[^-\\s][^\\s]*$"
         },
-        "kinds": {
-          "description": "The kinds the action's commits can have.",
-          "type": "array",
-          "items": { "$ref": "urn:jig:report:1#/$defs/kind" },
-          "minItems": 1,
-          "uniqueItems": true
+        "kind": {
+          "description": "The one kind the action's commits have. An action whose commits could be of more than one kind is split into actions, one per kind.",
+          "$ref": "urn:jig:report:1#/$defs/kind"
         },
         "summary": { "$ref": "#/$defs/line" },
         "flags": { "type": "array", "items": { "$ref": "#/$defs/flag" } }

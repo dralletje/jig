@@ -25,7 +25,7 @@ export function help(): ImageHelp {
   return imageHelp(`Formats files with prettier ${prettier.version}.`, [
     {
       name: "format",
-      kinds: ["sweep"],
+      kind: "sweep",
       summary: "Formats the matching files with the repo's own prettier config (prettier's defaults when there is none).",
       flags: [
         {

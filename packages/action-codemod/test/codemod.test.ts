@@ -255,11 +255,11 @@ describe("codemod help", () => {
     const h = help(await fakePackage({ zeta: "rewrite", alpha: "sweep", mid: "refactor" }));
     assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, h), []);
     assert.deepEqual(
-      h.actions.map((a) => [a.name, a.kinds, a.summary]),
+      h.actions.map((a) => [a.name, a.kind, a.summary]),
       [
-        ["alpha", ["sweep"], "Runs alpha."],
-        ["mid", ["refactor"], "Runs mid."],
-        ["zeta", ["rewrite"], "Runs zeta."],
+        ["alpha", "sweep", "Runs alpha."],
+        ["mid", "refactor", "Runs mid."],
+        ["zeta", "rewrite", "Runs zeta."],
       ],
     );
   });
@@ -274,11 +274,11 @@ describe("codemod help", () => {
       );
       if (name === "react-codemod") assert.equal(actions.length, 14);
       for (const action of actions) {
-        assert.deepEqual(action.kinds, [transforms[action.name]!.kind], action.name);
+        assert.equal(action.kind, transforms[action.name]!.kind, action.name);
         assert.equal(action.summary, transforms[action.name]!.description);
         const dir = await workspace({ "a.ts": SRC });
         const report = (await main([action.name, "--files", "a.ts"], dir, pkg)) as OkReport;
-        assert.equal(report.kind, action.kinds[0], `${name}/${action.name}`);
+        assert.equal(report.kind, action.kind, `${name}/${action.name}`);
       }
     }
   });

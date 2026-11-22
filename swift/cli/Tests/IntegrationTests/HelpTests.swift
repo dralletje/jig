@@ -152,16 +152,16 @@ struct HelpTests {
     #expect(actionNames(ran.json).count == 14)
     #expect(actionNames(ran.json).contains("React-DOM-to-react-dom-factories"))
     #expect(!actionNames(ran.json).contains("codemod"))
-    #expect(actions.first { $0["name"] == "create-element-to-jsx" }?["kinds"] == .array(["sweep"]))
-    #expect(actions.first { $0["name"] == "sort-comp" }?["kinds"] == .array(["sweep"]))
-    #expect(actions.first { $0["name"] == "rename-unsafe-lifecycles" }?["kinds"] == .array(["rewrite"]))
+    #expect(actions.first { $0["name"] == "create-element-to-jsx" }?["kind"] == .string("sweep"))
+    #expect(actions.first { $0["name"] == "sort-comp" }?["kind"] == .string("sweep"))
+    #expect(actions.first { $0["name"] == "rename-unsafe-lifecycles" }?["kind"] == .string("rewrite"))
     for action in actions {
-      guard case .string(let summary)? = action["summary"], case .array(let kinds)? = action["kinds"] else {
-        Issue.record("an action without summary or kinds: \(action)")
+      guard case .string(let summary)? = action["summary"], case .string(let kind)? = action["kind"] else {
+        Issue.record("an action without summary or kind: \(action)")
         continue
       }
       #expect(!summary.isEmpty)
-      #expect(kinds.count == 1, "\(action)")
+      #expect(["refactor", "sweep", "rewrite"].contains(kind), "\(action)")
     }
   }
 

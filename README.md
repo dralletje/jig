@@ -251,7 +251,7 @@ When stdout is not a terminal (an agent), jig prints one JSON object, exit 0: th
 output, only when there are some). With `<action> --help`, `actions` holds only that action.
 
 ```json
-{"actions":[{"flags":[{"description":"The file or folder to move.","name":"--from","required":true,"type":"path"},{"description":"Where it goes. …","name":"--to","required":true,"type":"path"}],"kinds":["rewrite"],"name":"move","summary":"Moves a file or folder to a free destination."}],"image":"localhost/jig/fs:local@sha256:<id>","ok":true,"schema":"urn:jig:help:1","summary":"Copies, moves and removes files and folders."}
+{"actions":[{"flags":[{"description":"The file or folder to move.","name":"--from","required":true,"type":"path"},{"description":"Where it goes. …","name":"--to","required":true,"type":"path"}],"kind":"rewrite","name":"move","summary":"Moves a file or folder to a free destination."}],"image":"localhost/jig/fs:local@sha256:<id>","ok":true,"schema":"urn:jig:help:1","summary":"Copies, moves and removes files and folders."}
 ```
 
 In a terminal it prints text instead:
@@ -278,7 +278,7 @@ Moves a file or folder to a free destination.
 ```
 
 Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>` and `<choice>`; optional flags are in
-brackets in the usage line; several kinds show as `sweep|rewrite`. A choice flag's choices are a table
+brackets in the usage line. A choice flag's choices are a table
 indented under it: the name and what it does:
 
 ```
@@ -412,7 +412,7 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
 { "schema": "urn:jig:help:1",
   "summary": "Copies, moves and removes files and folders.",
   "actions": [
-    { "name": "move", "kinds": ["rewrite"], "summary": "Moves a file or folder to a free destination.",
+    { "name": "move", "kind": "rewrite", "summary": "Moves a file or folder to a free destination.",
       "flags": [
         { "name": "--from", "type": "path", "required": true, "description": "The file or folder to move." },
         { "name": "--to", "type": "path", "required": true, "description": "Where it goes. It must be free." } ] } ] }
@@ -420,7 +420,8 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
 
 - `summary` (image and action): one line of plain text.
 - `name` (action): what it is called on the command line; it does not start with `-` and has no whitespace.
-- `kinds`: the kinds the action's commits can have, at least one, no repeats.
+- `kind`: the one kind the action's commits have, `refactor`, `sweep` or `rewrite` (a list, `kinds`, is an
+  unknown field).
 - `flags` may be empty. Each has `name` (`--` and a name), `type`, `required` and `description` (plain
   text, may be several lines). `type` is `path` (one repo-relative path), `paths` (comma-separated
   repo-relative paths), `globs` (comma-separated globs), `text` (anything else) or `choice` (the name of
@@ -430,10 +431,13 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
   per choice (the codemod image's transforms).
 - **One action, one set of flags.** Each flag is required or optional; an action never takes "one of
   these flags". A case that would need it is two actions (fs `remove` and `remove-matching`).
+- **One action, one kind.** If an action's commits could be of more than one kind, it is split into
+  actions, one per kind, whose behaviours do not overlap. Where it is truly ambiguous which action fits,
+  an agent can run the candidates and see which succeeds.
 - jig checks the object strictly: unknown fields (`ok`, `image` and `notes` included: jig adds those),
-  wrong types, empty `actions`, two actions or two flags of one action with the same name, `choices`
+  wrong types, a missing or unknown `kind`, empty `actions`, two actions or two flags of one action with the same name, `choices`
   missing or misplaced, or a choice that is not such an object (one with a `kind` included) are
-  `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the choice rules too. jig does not
+  `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the kind and choice rules too. jig does not
   check a run's arguments against the help: the image still parses them itself.
 
 ## Kinds: refactors, sweeps and rewrites

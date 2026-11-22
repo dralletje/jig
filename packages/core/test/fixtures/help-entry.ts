@@ -9,7 +9,7 @@ await runEntrypoint(
     return imageHelp("Probes the entrypoint.", [
       {
         name: "probe",
-        kinds: ["sweep"],
+        kind: "sweep",
         summary: "Does nothing.",
         flags: [{ name: "--files", type: "globs", required: true, description: "The files." }],
       },

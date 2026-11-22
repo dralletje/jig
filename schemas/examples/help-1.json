@@ -4,7 +4,7 @@
   "actions": [
     {
       "name": "move",
-      "kinds": ["rewrite"],
+      "kind": "rewrite",
       "summary": "Moves a file or folder to a free destination.",
       "flags": [
         { "name": "--from", "type": "path", "required": true, "description": "The file or folder to move." },

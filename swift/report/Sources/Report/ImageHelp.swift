@@ -48,16 +48,16 @@ public struct FlagHelp: Encodable, Equatable, Sendable {
   }
 }
 
-/// One action of an image: the kinds its commits can have, one line on what it does, and its flags.
+/// One action of an image: the one kind its commits have, one line on what it does, and its flags.
 public struct ActionHelp: Encodable, Equatable, Sendable {
   public var name: String
-  public var kinds: [ActionKind]
+  public var kind: ActionKind
   public var summary: String
   public var flags: [FlagHelp]
 
-  public init(name: String, kinds: [ActionKind], summary: String, flags: [FlagHelp]) {
+  public init(name: String, kind: ActionKind, summary: String, flags: [FlagHelp]) {
     self.name = name
-    self.kinds = kinds
+    self.kind = kind
     self.summary = summary
     self.flags = flags
   }
@@ -174,7 +174,7 @@ public enum ImageHelpAnswer: Equatable, Sendable {
   /// One entry of `actions`, checked.
   private static func parseAction(_ raw: JSONValue, at: String) -> Result<ActionHelp, Problem> {
     guard case .object(let fields) = raw else { return .failure(Problem("\(at) is not an object")) }
-    if let extra = unknownFields(fields, allowed: ["name", "kinds", "summary", "flags"]) {
+    if let extra = unknownFields(fields, allowed: ["name", "kind", "summary", "flags"]) {
       return .failure(Problem("\(at): \(extra)"))
     }
     guard case .string(let name) = fields["name"], !name.isEmpty else {
@@ -183,17 +183,8 @@ public enum ImageHelpAnswer: Equatable, Sendable {
     guard !name.hasPrefix("-"), !name.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else {
       return .failure(Problem("\(at).name must not start with - or have spaces: \(javaScriptJSONString(name))"))
     }
-    guard case .array(let rawKinds) = fields["kinds"] else {
-      return .failure(Problem("\(at).kinds is missing or not an array"))
-    }
-    if rawKinds.isEmpty { return .failure(Problem("\(at).kinds is empty")) }
-    var kinds: [ActionKind] = []
-    for rawKind in rawKinds {
-      guard case .string(let text) = rawKind, let kind = ActionKind(rawValue: text) else {
-        return .failure(Problem("\(at).kinds has something that is not refactor, sweep or rewrite"))
-      }
-      if kinds.contains(kind) { return .failure(Problem("\(at).kinds has \(kind.rawValue) twice")) }
-      kinds.append(kind)
+    guard case .string(let rawKind) = fields["kind"], let kind = ActionKind(rawValue: rawKind) else {
+      return .failure(Problem("\(at).kind is missing or not one of refactor, sweep or rewrite"))
     }
     guard let summary = fields["summary"] else { return .failure(Problem("\(at).summary is missing")) }
     if let problem = lineProblem(summary, "\(at).summary") { return .failure(Problem(problem)) }
@@ -212,7 +203,7 @@ public enum ImageHelpAnswer: Equatable, Sendable {
         flags.append(flag)
       }
     }
-    return .success(ActionHelp(name: name, kinds: kinds, summary: actionSummary, flags: flags))
+    return .success(ActionHelp(name: name, kind: kind, summary: actionSummary, flags: flags))
   }
 
   /// One entry of an action's `flags`, checked.
@@ -333,13 +324,13 @@ private func padded(_ text: String, _ width: Int) -> String {
 }
 
 /// The help as text for a person in a terminal. With `action` nil: the image, its summary, the notes and
-/// one line per action. With `action`: that action's kinds, summary, the notes, a usage line (optional
+/// one line per action. With `action`: that action's kind, summary, the notes, a usage line (optional
 /// flags in brackets) and one entry per flag, a choice flag's choices in a table under it. No trailing
 /// newline.
 public func helpText(image: String, notes: [String], help: ImageHelp, action: String?) -> String {
   if let action, let shown = help.actions.first(where: { $0.name == action }) {
     var lines: [String] = []
-    lines.append("\(shown.name) (\(shown.kinds.map(\.rawValue).joined(separator: "|")))")
+    lines.append("\(shown.name) (\(shown.kind.rawValue))")
     lines.append(shown.summary)
     lines += notes
     lines.append("")
@@ -375,10 +366,9 @@ public func helpText(image: String, notes: [String], help: ImageHelp, action: St
   lines += notes
   lines.append("")
   let nameWidth = help.actions.map(\.name.count).max() ?? 0
-  let kindsWidth = help.actions.map { $0.kinds.map(\.rawValue).joined(separator: "|").count }.max() ?? 0
+  let kindWidth = help.actions.map(\.kind.rawValue.count).max() ?? 0
   for shown in help.actions {
-    let kinds = shown.kinds.map(\.rawValue).joined(separator: "|")
-    lines.append("  " + padded(shown.name, nameWidth) + "  " + padded(kinds, kindsWidth) + "  " + shown.summary)
+    lines.append("  " + padded(shown.name, nameWidth) + "  " + padded(shown.kind.rawValue, kindWidth) + "  " + shown.summary)
   }
   lines.append("")
   lines.append("jig <image> <action> --help shows an action's flags.")
