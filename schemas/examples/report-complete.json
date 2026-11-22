@@ -2,6 +2,6 @@
   "schema": "urn:jig:report:1",
   "ok": true,
   "kind": "refactor",
-  "subject": "refactor(rename): foo → bar in src/a.ts",
+  "subject": "refactor(typescript rename): foo → bar in src/a.ts",
   "summary": "Renamed `foo` to `bar` in src/a.ts (3 references in 2 files)."
 }

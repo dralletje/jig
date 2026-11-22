@@ -17,7 +17,7 @@ struct DefaultToNamedTests {
       "src/config.ts", "src/index.ts", "src/lib/format.ts", "src/models/Order.ts",
       "src/services/checkout.ts", "src/services/mailer.ts", "src/services/store.ts",
     ])
-    let subject = "sweep(default-to-named): src/** (keeping src/routes/**)"
+    let subject = "sweep(typescript default-to-named): src/** (keeping src/routes/**)"
     #expect(try git(dir, ["log", "-1", "--format=%s"]) == "\(subject)\n")
     #expect(result.subject == subject)
     let body = try git(dir, ["log", "-1", "--format=%B"])

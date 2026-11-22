@@ -77,7 +77,7 @@ export async function main(argv: string[], root: string): Promise<Report> {
       files.push(file);
     }
   }
-  return okReport("sweep", "format", globs.join(", "), {
+  return okReport("sweep", "prettier", "format", globs.join(", "), {
     summary: `Formatted ${plural(files.length, "file")} with prettier ${prettier.version}:\n${listLines(files)}`,
   });
 }

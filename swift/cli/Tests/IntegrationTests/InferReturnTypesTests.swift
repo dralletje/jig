@@ -14,7 +14,7 @@ struct InferReturnTypesTests {
     #expect(result.kind == "sweep")
     #expect(result.filesChanged == ["src/orders.ts", "src/reports.ts"])
     #expect(result.summary.contains("\n\nNot handled (3):\n"), "\(result.summary)")
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(infer-return-types): src/**\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript infer-return-types): src/**\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))
     #expect(

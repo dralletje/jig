@@ -166,7 +166,7 @@ Moves a file or folder to a free destination.
   - `remove --paths <path,path>` removes files and folders (every path must exist), as `remove --paths`
     does today; `--files` is no longer one of its flags.
   - `remove-matching --files <glob,glob>` removes every file or symlink a glob matches, as
-    `remove --files` does today, with subject `rewrite(remove-matching): <globs>` and the same summary.
+    `remove --files` does today, with subject `rewrite(fs remove-matching): <globs>` and the same summary.
   - Both keep every other rule of today's `remove` (path rules, trimming, zero matches is `NO_CHANGES`).
 
 ## Tests

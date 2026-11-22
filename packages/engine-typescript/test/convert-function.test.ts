@@ -59,7 +59,7 @@ describe("convert-function --to arrow", () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "refactor",
-      subject: "refactor(convert-function): src/math.ts:1 → arrow function",
+      subject: "refactor(typescript convert-function): src/math.ts:1 → arrow function",
       summary: "Converted the function declaration `add` in src/math.ts to a `const` arrow function.",
     });
     assert.deepEqual(await errors(dir, "src/math.ts"), []);

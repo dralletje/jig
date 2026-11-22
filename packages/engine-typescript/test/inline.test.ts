@@ -44,7 +44,7 @@ async function refused(dir: string, ...args: string[]): Promise<string> {
 describe("inline-function: single-expression functions", () => {
   test("definition mode unpacks every call, adds parentheses where needed, and removes the declaration", async () => {
     const { report, text } = await unpack("src/single.ts", "--symbol", "square");
-    assert.equal(report.subject, "refactor(inline-function): unpack square everywhere in src/single.ts and remove it");
+    assert.equal(report.subject, "refactor(typescript inline-function): unpack square everywhere in src/single.ts and remove it");
     assert.equal(report.kind, "refactor");
     assert.equal(
       text,
@@ -89,7 +89,7 @@ describe("inline-function: single-expression functions", () => {
     assert.match(text, /const s = side \* side;/);
     assert.match(text, /s \+ square\(w\)/);
     assert.match(text, /1 \+ square\(v\) \* 2/);
-    assert.equal(report.subject, `refactor(inline-function): unpack square at src/single.ts:${line}`);
+    assert.equal(report.subject, `refactor(typescript inline-function): unpack square at src/single.ts:${line}`);
     assert.equal(report.summary, "Unpacked a call to `square` in src/single.ts#describe. `square` stays declared.");
   });
 });

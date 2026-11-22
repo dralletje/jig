@@ -12,10 +12,10 @@ struct RemoveUnusedVariableTests {
     let args = ["remove-unused-variable", "--at", "src/report.ts:5"]
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.kind == "refactor")
-    #expect(result.subject == "refactor(remove-unused-variable): src/report.ts:5")
+    #expect(result.subject == "refactor(typescript remove-unused-variable): src/report.ts:5")
     #expect(result.filesChanged == ["src/report.ts"])
     #expect(result.summary == "Removed the unused const `unusedLimit` from `src/report.ts#summarize`.")
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(remove-unused-variable): src/report.ts:5\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(typescript remove-unused-variable): src/report.ts:5\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: refactor\nCo-Authored-By: "))
     let tree = try readTree(dir)

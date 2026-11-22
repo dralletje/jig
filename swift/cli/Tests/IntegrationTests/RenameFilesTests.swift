@@ -13,14 +13,14 @@ struct RenameFilesTests {
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.kind == "sweep")
     #expect(result.summary.contains("\n\nNot handled ("), "\(result.summary)")
-    #expect(result.subject == "sweep(rename-files): src/** to kebab case")
+    #expect(result.subject == "sweep(typescript rename-files): src/** to kebab case")
     #expect(result.filesChanged == [
       "src/Footer.ts", "src/UserCard.ts", "src/footer.ts", "src/index.ts", "src/main.ts", "src/order-item.ts",
       "src/order-service.test.ts", "src/order-service.ts", "src/orderService.test.ts", "src/orderService.ts",
       "src/order_item.ts", "src/ui/ButtonGroup.ts", "src/ui/button-group.ts", "src/user-card.ts",
     ])
     #expect(result.summary.hasPrefix("Renamed 6 files to kebab case, updating the imports of "))
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(rename-files): src/** to kebab case\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript rename-files): src/** to kebab case\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains(":\n  src/Helpers.ts:1: "), "\(body)")
     #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))

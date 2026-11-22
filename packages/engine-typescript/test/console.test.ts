@@ -22,7 +22,7 @@ describe("remove-console on examples/remove-console", () => {
     const report = await removeConsole(dir, "src/orders.ts");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "rewrite(remove-console): console.log in src/orders.ts");
+    assert.equal(ok.subject, "rewrite(typescript remove-console): console.log in src/orders.ts");
     assert.equal(ok.kind, "rewrite");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/orders.ts"]);
@@ -76,7 +76,7 @@ export function describe(order: Order): string {
 
   test("--methods log,debug covers both", async () => {
     const { report, tree } = await run({}, "log,debug");
-    assert.equal(report.subject, "rewrite(remove-console): console.log, console.debug in src/**");
+    assert.equal(report.subject, "rewrite(typescript remove-console): console.log, console.debug in src/**");
     const orders = tree["src/orders.ts"] ?? "";
     assert.ok(!orders.includes("console.debug"));
     assert.ok(orders.includes("console.warn"));

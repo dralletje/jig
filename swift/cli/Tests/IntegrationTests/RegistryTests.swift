@@ -69,7 +69,7 @@ struct RegistryScenarios {
     #expect(result.image == "\(reference)@\(pinned)")
     #expect(result.notes == nil)
     #expect(result.commit == (try headCommit(dir)))
-    #expect(result.subject == "refactor(rename): foo → bar in a.ts")
+    #expect(result.subject == "refactor(typescript rename): foo → bar in a.ts")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(parseRefactorCommand(body) == RefactorCommand(image: "\(reference)@\(pinned)", args: RENAME))
     #expect(try readTree(dir)["a.ts"]?.contains("export function bar()") == true)

@@ -47,15 +47,15 @@ private func success(_ stdout: String) -> Report? {
 }
 
 @Test func minimalReportParses() {
-  let line = #"{"schema":"urn:jig:report:1","ok":true,"kind":"sweep","subject":"sweep(format): x","summary":"Formatted."}"#
+  let line = #"{"schema":"urn:jig:report:1","ok":true,"kind":"sweep","subject":"sweep(prettier format): x","summary":"Formatted."}"#
   #expect(
     ImageReport.parse(stdout: line, stderr: "", exitCode: 0)
-      == .ok(Report(kind: .sweep, subject: "sweep(format): x", summary: "Formatted.")))
+      == .ok(Report(kind: .sweep, subject: "sweep(prettier format): x", summary: "Formatted.")))
 }
 
 @Test func statusAndEffectAreUnknownFields() {
   let line =
-    #"{"schema":"urn:jig:report:1","ok":true,"kind":"sweep","subject":"sweep(format): x","summary":"Formatted.","status":"complete","effect":[]}"#
+    #"{"schema":"urn:jig:report:1","ok":true,"kind":"sweep","subject":"sweep(prettier format): x","summary":"Formatted.","status":"complete","effect":[]}"#
   let error = failure(line)
   #expect(error.code == .IMAGE_FAILED)
   #expect(error.instructions.contains("unknown field(s) effect, status"), "\(error.instructions)")
@@ -85,7 +85,7 @@ private func success(_ stdout: String) -> Report? {
   #expect(
     complete
       == Report(
-        kind: .refactor, subject: "refactor(rename): foo → bar in src/a.ts",
+        kind: .refactor, subject: "refactor(typescript rename): foo → bar in src/a.ts",
         summary: "Renamed `foo` to `bar` in src/a.ts (3 references in 2 files)."))
   let failed = failure(try example("report-failure.json"), exitCode: 1)
   #expect(failed.code == .REFACTOR_UNAVAILABLE)

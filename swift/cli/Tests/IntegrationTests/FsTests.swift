@@ -59,7 +59,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "src/old", "--to", "src/new"])
     #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(copy): src/old → src/new")
+    #expect(result.subject == "rewrite(fs copy): src/old → src/new")
     #expect(result.summary == "Copied src/old to src/new (3 files).")
     #expect(result.filesChanged == ["src/new/.hidden", "src/new/a.txt", "src/new/nested/b.txt"])
     #expect(try status(dir) == "")
@@ -70,7 +70,7 @@ struct FsTests {
   func copyNormalizesAndCreatesParents() throws {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "./src/old/", "--to", "src/a/b/new"])
-    #expect(result.subject == "rewrite(copy): src/old → src/a/b/new")
+    #expect(result.subject == "rewrite(fs copy): src/old → src/a/b/new")
     #expect(result.filesChanged == ["src/a/b/new/.hidden", "src/a/b/new/a.txt", "src/a/b/new/nested/b.txt"])
     try expectIdentical(dir)
   }
@@ -79,7 +79,7 @@ struct FsTests {
   func copySpacesAndUnicode() throws {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "my dir", "--to", "été"])
-    #expect(result.subject == "rewrite(copy): my dir → été")
+    #expect(result.subject == "rewrite(fs copy): my dir → été")
     #expect(result.summary == "Copied my dir to été (1 file).")
     #expect(try readText(dir.appendingPathComponent("été/a b.txt")) == "a b.txt\n")
     try expectIdentical(dir)
@@ -110,7 +110,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["move", "--from", "src/old", "--to", "src/moved"])
     #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(move): src/old → src/moved")
+    #expect(result.subject == "rewrite(fs move): src/old → src/moved")
     #expect(result.summary == "Moved src/old to src/moved (3 files).")
     #expect(try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/old"]) == "")
     #expect(
@@ -235,7 +235,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["remove", "--paths", "src/old,keep.txt"])
     #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(remove): src/old, keep.txt")
+    #expect(result.subject == "rewrite(fs remove): src/old, keep.txt")
     #expect(result.summary == "Removed src/old, keep.txt (4 files).")
     #expect(try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/old", "keep.txt"]) == "")
     #expect(try status(dir) == "")
@@ -246,7 +246,7 @@ struct FsTests {
   func removeFiles() throws {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "**/*.bak"])
-    #expect(result.subject == "rewrite(remove-matching): **/*.bak")
+    #expect(result.subject == "rewrite(fs remove-matching): **/*.bak")
     #expect(result.summary == "Removed 2 files matching **/*.bak:\n  src/y.bak\n  x.bak")
     #expect(result.filesChanged == ["src/y.bak", "x.bak"])
     try expectIdentical(dir)
@@ -267,7 +267,7 @@ struct FsTests {
     let result = try runImage(
       repo: dir, image: FS, args: ["remove-matching", "--files", "**/*.bak, src/deep/.DS_Store"])
     #expect(result.filesChanged == ["src/deep/.DS_Store", "src/y.bak", "x.bak"])
-    #expect(result.subject == "rewrite(remove-matching): **/*.bak, src/deep/.DS_Store")
+    #expect(result.subject == "rewrite(fs remove-matching): **/*.bak, src/deep/.DS_Store")
     try expectIdentical(dir)
   }
 
@@ -314,7 +314,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "src/lib"])
     #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(unwrap): src/lib")
+    #expect(result.subject == "rewrite(fs unwrap): src/lib")
     #expect(result.summary == "Unwrapped src/lib into src (3 files).")
     #expect(
       try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/d.txt", "src/.env.example", "src/lib"])
@@ -328,7 +328,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["wrap", "--paths", "keep.txt,my dir", "--into", "box"])
     #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(wrap): keep.txt, my dir → box")
+    #expect(result.subject == "rewrite(fs wrap): keep.txt, my dir → box")
     #expect(result.summary == "Wrapped keep.txt, my dir into box (2 files).")
     #expect(
       try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "box", "keep.txt", "my dir"])

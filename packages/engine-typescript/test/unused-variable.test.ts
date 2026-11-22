@@ -34,7 +34,7 @@ describe(ID, () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "refactor",
-      subject: `refactor(${ID}): src/report.ts:5`,
+      subject: `refactor(typescript ${ID}): src/report.ts:5`,
       summary: "Removed the unused const `unusedLimit` from `src/report.ts#summarize`.",
     });
     assert.equal(

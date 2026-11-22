@@ -37,7 +37,7 @@ struct CodemodTests {
     let result = try runImage(repo: dir, image: CODEMOD, args: ARGS)
     let version = "5.4.4"
     #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(react-codemod@\(version)/rename-unsafe-lifecycles): src/**")
+    #expect(result.subject == "rewrite(codemod-react rename-unsafe-lifecycles): src/**")
     #expect(result.filesChanged == ["src/components/Counter.tsx"])
     #expect(
       result.summary.hasPrefix("Ran rename-unsafe-lifecycles from react-codemod \(version) on 1 file:\n"), "\(result.summary)")

@@ -17,7 +17,7 @@ describe("default-to-named on examples/default-to-named", () => {
     const report = await run(dir, "src/**", "src/routes/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(default-to-named): src/** (keeping src/routes/**)");
+    assert.equal(ok.subject, "sweep(typescript default-to-named): src/** (keeping src/routes/**)");
     assert.equal(ok.kind, "sweep");
     assert.equal(
       ok.summary,

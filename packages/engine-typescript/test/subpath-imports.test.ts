@@ -29,7 +29,7 @@ describe("subpath-imports on examples/subpath-imports", () => {
     const ok = report as OkReport;
     assert.equal(ok.kind, "sweep");
     assert.doesNotMatch(ok.summary, /Not handled/);
-    assert.equal(ok.subject, "sweep(subpath-imports): src/**");
+    assert.equal(ok.subject, "sweep(typescript subpath-imports): src/**");
     assert.match(
       ok.summary,
       /^Rewrote 9 `@\/` imports to subpath imports in 4 files, and added `#\/\*`: `\.\/src\/\*` to "imports" in package\.json:\n  src\/components\/Total\.ts\n/,
@@ -142,7 +142,7 @@ describe("subpath-imports on examples/subpath-imports", () => {
     const before = await readTree(dir);
     const report = await subpath(dir, "src/**", "--alias", "~app/");
     assertReport(report);
-    assert.equal((report as OkReport).subject, "sweep(subpath-imports): src/** (~app/)");
+    assert.equal((report as OkReport).subject, "sweep(typescript subpath-imports): src/** (~app/)");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["package.json", "src/other.ts"]);
     assert.match(after["package.json"] ?? "", /"#app\/\*": "\.\/src\/\*"/);

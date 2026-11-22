@@ -42,7 +42,7 @@ describe("add-import-extensions on examples/webapp", () => {
     const report = await addExtensions(dir, "src/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(add-import-extensions): src/**");
+    assert.equal(ok.subject, "sweep(typescript add-import-extensions): src/**");
     assert.match(ok.summary, /^Added extensions to \d+ relative imports in 8 files, and set allowImportingTsExtensions in tsconfig\.json:\n  src\/lib\/index\.ts\n/);
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), [

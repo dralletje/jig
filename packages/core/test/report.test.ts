@@ -17,20 +17,32 @@ const example = (name: string): Record<string, unknown> =>
   JSON.parse(readFileSync(join(EXAMPLES, name), "utf8")) as Record<string, unknown>;
 
 describe("okReport", () => {
-  test("builds the v1 success shape: kind, subject and the summary without trailing whitespace", () => {
-    const report = okReport("refactor", "rename", "a → b", { summary: "Renamed a.\n\n" });
+  test("builds the v1 success shape: kind, subject naming image and action, and the summary without trailing whitespace", () => {
+    const report = okReport("refactor", "typescript", "rename", "a → b", { summary: "Renamed a.\n\n" });
     assertReport(report);
     assert.deepEqual(report, {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "refactor",
-      subject: "refactor(rename): a → b",
+      subject: "refactor(typescript rename): a → b",
       summary: "Renamed a.",
     });
   });
 
+  test("the subject starts with <kind>(<image> <action>): ", () => {
+    assert.equal(okReport("sweep", "codemod-react", "sort-comp", "src/**", { summary: "s" }).subject, "sweep(codemod-react sort-comp): src/**");
+    assert.equal(okReport("rewrite", "fs", "move", "a → b", { summary: "s" }).subject, "rewrite(fs move): a → b");
+  });
+
+  test("refuses an image name that is empty or has a space or parenthesis, and an empty action (an image bug)", () => {
+    for (const image of ["", "type script", "a(b", "a)b", "a\tb"]) {
+      assert.throws(() => okReport("sweep", image, "format", "x", { summary: "s" }), /image name .* is empty or has a space or parenthesis/, JSON.stringify(image));
+    }
+    assert.throws(() => okReport("sweep", "prettier", "", "x", { summary: "s" }), /the action is empty/);
+  });
+
   test("has exactly the keys schema, ok, kind, subject, summary, in that order", () => {
-    assert.deepEqual(Object.keys(okReport("sweep", "format", "x", { summary: "Formatted." })), [
+    assert.deepEqual(Object.keys(okReport("sweep", "prettier", "format", "x", { summary: "Formatted." })), [
       "schema",
       "ok",
       "kind",
@@ -40,8 +52,8 @@ describe("okReport", () => {
   });
 
   test("refuses a blank summary or a subject with a line break (an action bug)", () => {
-    assert.throws(() => okReport("refactor", "a", "b", { summary: " \n" }), /summary is empty/);
-    assert.throws(() => okReport("refactor", "a", "b\nc", { summary: "s" }), /subject has a line break/);
+    assert.throws(() => okReport("refactor", "i", "a", "b", { summary: " \n" }), /summary is empty/);
+    assert.throws(() => okReport("refactor", "i", "a", "b\nc", { summary: "s" }), /subject has a line break/);
   });
 });
 

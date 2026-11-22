@@ -13,14 +13,18 @@ export type FailedReport = { schema: typeof REPORT_SCHEMA; ok: false; code: stri
 export type Report = OkReport | FailedReport;
 
 /**
- * The v1 success report: subject `<kind>(<label>): <description>`, and the action's summary without
- * trailing whitespace. Throws (an `INTERNAL` failure) on an action bug: a blank summary, or a subject
- * with a line break.
+ * The v1 success report: subject `<kind>(<image> <action>): <description>`, and the action's summary
+ * without trailing whitespace. `image` is the image's own name (`typescript`, `prettier`, ...), `action`
+ * the action jig ran (the first argument). Throws (an `INTERNAL` failure) on an image bug: an image name
+ * that is empty or has a space or parenthesis, an empty action, a blank summary, or a subject with a
+ * line break.
  */
-export function okReport(kind: ActionKind, label: string, description: string, result: ActionResult): OkReport {
-  if (result.summary.trim() === "") throw new Error(`${label}: the summary is empty`);
-  const subject = `${kind}(${label}): ${description}`;
-  if (/[\r\n]/.test(subject)) throw new Error(`${label}: the subject has a line break`);
+export function okReport(kind: ActionKind, image: string, action: string, description: string, result: ActionResult): OkReport {
+  if (!/^[^\s()]+$/.test(image)) throw new Error(`the image name ${JSON.stringify(image)} is empty or has a space or parenthesis`);
+  if (action === "") throw new Error(`${image}: the action is empty`);
+  if (result.summary.trim() === "") throw new Error(`${image} ${action}: the summary is empty`);
+  const subject = `${kind}(${image} ${action}): ${description}`;
+  if (/[\r\n]/.test(subject)) throw new Error(`${image} ${action}: the subject has a line break`);
   return { schema: REPORT_SCHEMA, ok: true, kind, subject, summary: result.summary.replace(/\s+$/, "") };
 }
 

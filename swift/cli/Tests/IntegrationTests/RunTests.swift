@@ -24,7 +24,7 @@ struct RunTests {
     #expect(result.parent == parent)
     #expect(result.commit == (try headCommit(dir)))
     #expect(result.filesChanged.contains("a.ts"))
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(rename): foo → bar in a.ts\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(typescript rename): foo → bar in a.ts\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     let command = parseRefactorCommand(body)
     let pinned = try Regex(#"^localhost/jig/typescript:local@sha256:[0-9a-f]{64}$"#)
@@ -33,9 +33,9 @@ struct RunTests {
     #expect(result.image == command?.image)
     #expect(result.args == RENAME)
     #expect(result.kind == "refactor")
-    #expect(result.subject == "refactor(rename): foo → bar in a.ts")
+    #expect(result.subject == "refactor(typescript rename): foo → bar in a.ts")
     #expect(result.summary.hasPrefix("Renamed `foo` to `bar` in a.ts ("))
-    #expect(body.hasPrefix("refactor(rename): foo → bar in a.ts\n\n\(result.summary)\n\nRefactor-Command: "))
+    #expect(body.hasPrefix("refactor(typescript rename): foo → bar in a.ts\n\n\(result.summary)\n\nRefactor-Command: "))
     // The trailers are exactly these three lines, in this order, ending the message (`%B` adds a newline).
     let lines = body.trimmingCharacters(in: .newlines).split(separator: "\n", omittingEmptySubsequences: false)
     let trailers = lines.suffix(3).map(String.init)
@@ -59,7 +59,7 @@ struct RunTests {
     #expect(result.kind == "sweep")
     #expect(try readTree(dir)["ugly.ts"] == "const x = { a: 1 };\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
-    #expect(body.hasPrefix("sweep(format): ugly.ts\n\n\(result.summary)\n\ntidy\n\nRefactor-Command: "))
+    #expect(body.hasPrefix("sweep(prettier format): ugly.ts\n\n\(result.summary)\n\ntidy\n\nRefactor-Command: "))
     #expect(result.summary.hasPrefix("Formatted 1 file with prettier "))
     #expect(
       body.trimmingCharacters(in: .newlines)
@@ -73,7 +73,7 @@ struct RunTests {
     let args = ["rename", "--file", "src/lib/math.ts", "--symbol", "clamp", "--to", "clampValue"]
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.filesChanged == ["src/lib/math.ts", "src/services/order-service.ts"])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(rename): clamp → clampValue in src/lib/math.ts\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(typescript rename): clamp → clampValue in src/lib/math.ts\n")
     #expect(try readTree(dir)["src/services/order-service.ts"]?.contains("math.clampValue(percent, 0, 100)") == true)
     #expect(try status(dir) == "")
   }
@@ -89,7 +89,7 @@ struct RunTests {
       "src/lib/index.ts", "src/main.ts", "src/models/index.ts", "src/services/index.ts",
       "src/services/order-service.ts", "src/services/userService.ts", "src/utils/index.ts",
     ])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(remove-barrels): src/**\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(typescript remove-barrels): src/**\n")
     #expect(try git(dir, ["log", "-1", "--format=%B"]).contains("\nRefactor-Kind: refactor\n"))
     let tree = try readTree(dir)
     #expect(tree["src/lib/index.ts"] == nil)
@@ -109,7 +109,7 @@ struct RunTests {
       "src/services/index.ts", "src/services/userService.ts", "src/setup/index.ts", "src/widgets/index.ts",
       "tsconfig.json",
     ])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(add-import-extensions): src/**\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript add-import-extensions): src/**\n")
     #expect(try git(dir, ["log", "-1", "--format=%B"]).contains("\nRefactor-Kind: sweep\n"))
     let tree = try readTree(dir)
     #expect(tree["src/lib/index.ts"]?.contains(#"export * from "./strings/index.ts";"#) == true)

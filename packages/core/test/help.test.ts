@@ -42,7 +42,7 @@ describe("runEntrypoint --help", () => {
       assert.equal(status, 0, args.join(" "));
       const report = JSON.parse(lines.at(-1)!) as { schema: string; subject: string };
       assert.equal(report.schema, "urn:jig:report:1");
-      assert.equal(report.subject, `sweep(probe): ${args.join(" ")}`);
+      assert.equal(report.subject, `sweep(help-entry probe): ${args.join(" ")}`);
     }
   });
 

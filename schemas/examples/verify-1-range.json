@@ -38,8 +38,8 @@
       "mismatches": [
         {
           "field": "subject",
-          "recorded": "sweep(format): tidy the sources",
-          "replayed": "sweep(format): src/**"
+          "recorded": "sweep(prettier format): tidy the sources",
+          "replayed": "sweep(prettier format): src/**"
         }
       ]
     },

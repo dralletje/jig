@@ -4,6 +4,14 @@ import type { ActionKind } from "@jig/core";
 export type TransformInfo = { kind: ActionKind; description: string };
 
 /**
+ * The name of the image that carries each published codemod package: the `<image>` in its commit
+ * subjects, `<kind>(<image> <transform>): <globs>`.
+ */
+export const IMAGES: Record<string, string> = {
+  "react-codemod": "codemod-react",
+};
+
+/**
  * The transforms of each published codemod package an image can carry: the kind of each, judged by what
  * it does (`rewrite`: migrates an API or changes behaviour; `sweep`: a behaviour-preserving convention
  * change over many files), and one line on what it does, from the package's README. The image picks its

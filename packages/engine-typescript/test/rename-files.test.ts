@@ -50,7 +50,7 @@ describe("rename-files on examples/rename-files", () => {
     const report = (await rename(dir, "kebab")) as OkReport;
     assertReport(report);
     assert.equal(report.kind, "sweep");
-    assert.equal(report.subject, "sweep(rename-files): src/** to kebab case");
+    assert.equal(report.subject, "sweep(typescript rename-files): src/** to kebab case");
     assert.deepEqual(moves(report), [
       "src/Footer.ts → src/footer.ts",
       "src/UserCard.ts → src/user-card.ts",

@@ -14,7 +14,7 @@ describe("template-string", () => {
     const report = await run(dir, "src/greet.ts:2");
     assertReport(report);
     assert.ok((await readTree(dir))["src/greet.ts"]?.includes("return `Hi ${name}!`;"));
-    assert.equal(report.subject, "refactor(template-string): src/greet.ts:2");
+    assert.equal(report.subject, "refactor(typescript template-string): src/greet.ts:2");
     assert.equal(report.kind, "refactor");
     assert.equal(
       report.summary,

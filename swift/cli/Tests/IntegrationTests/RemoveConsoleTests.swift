@@ -16,7 +16,7 @@ struct RemoveConsoleTests {
     #expect(result.summary.contains("\n\nNot handled (2):\n  src/"), "\(result.summary)")
     #expect(
       try git(dir, ["log", "-1", "--format=%s"])
-        == "rewrite(remove-console): console.log, console.debug in src/**\n")
+        == "rewrite(typescript remove-console): console.log, console.debug in src/**\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\n\nNot handled (2):\n  src/"))
     #expect(body.contains("\nRefactor-Kind: rewrite\nCo-Authored-By: "))

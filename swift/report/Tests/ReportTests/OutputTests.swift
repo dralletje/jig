@@ -61,7 +61,7 @@ private func object(_ text: String) throws -> JSONValue {
 }
 
 @Test func successOutputKeys() throws {
-  let report = Report(kind: .sweep, subject: "sweep(format): x", summary: "Formatted.")
+  let report = Report(kind: .sweep, subject: "sweep(prettier format): x", summary: "Formatted.")
   let text = successJSON(commit: "c", parent: "p", image: "i", args: [], report: report, filesChanged: ["a.ts"])
   guard case .object(let fields) = try object(text) else {
     Issue.record("not an object")

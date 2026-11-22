@@ -8,7 +8,7 @@ def fail [code: string, instructions: string] {
   exit 1
 }
 
-# Prints the success report.
+# Prints the success report. Every subject is `rewrite(fs <command>): ...`: the image names itself.
 def ok [subject: string, summary: string] {
   print ({schema: "urn:jig:report:1", ok: true, kind: "rewrite", subject: $subject, summary: $summary} | to json --raw)
 }
@@ -138,7 +138,7 @@ def copy [args: list<string>] {
     fail "INTERNAL" $"Copying \"($from)\" to \"($to)\" copied ($copied) of ($count) files."
   }
   let files = if $count == 1 { "1 file" } else { $"($count) files" }
-  ok $"rewrite\(copy\): ($from) → ($to)" $"Copied ($from) to ($to) \(($files)\)."
+  ok $"rewrite\(fs copy\): ($from) → ($to)" $"Copied ($from) to ($to) \(($files)\)."
 }
 
 def move [args: list<string>] {
@@ -164,7 +164,7 @@ def move [args: list<string>] {
   }
   mv $from $to
   let files = if $count == 1 { "1 file" } else { $"($count) files" }
-  ok $"rewrite\(move\): ($from) → ($to)" $"Moved ($from) to ($to) \(($files)\)."
+  ok $"rewrite\(fs move\): ($from) → ($to)" $"Moved ($from) to ($to) \(($files)\)."
 }
 
 def remove [args: list<string>] {
@@ -201,7 +201,7 @@ def remove [args: list<string>] {
   }
   let files = if $count == 1 { "1 file" } else { $"($count) files" }
   let named = ($paths | str join ", ")
-  ok $"rewrite\(remove\): ($named)" $"Removed ($named) \(($files)\)."
+  ok $"rewrite\(fs remove\): ($named)" $"Removed ($named) \(($files)\)."
 }
 
 def remove-matching [args: list<string>] {
@@ -259,7 +259,7 @@ def remove-matching [args: list<string>] {
   if $count > 20 {
     $listed = ($listed | append $"  … and ($count - 20) more")
   }
-  ok $"rewrite\(remove-matching\): ($named)" $"Removed ($files) matching ($named):\n($listed | str join "\n")"
+  ok $"rewrite\(fs remove-matching\): ($named)" $"Removed ($files) matching ($named):\n($listed | str join "\n")"
 }
 
 def unwrap [args: list<string>] {
@@ -319,7 +319,7 @@ def unwrap [args: list<string>] {
   rm --recursive --permanent $temporary
   let files = if $count == 1 { "1 file" } else { $"($count) files" }
   let into = if $parent == "" { "the repo root" } else { $parent }
-  ok $"rewrite\(unwrap\): ($folder)" $"Unwrapped ($folder) into ($into) \(($files)\)."
+  ok $"rewrite\(fs unwrap\): ($folder)" $"Unwrapped ($folder) into ($into) \(($files)\)."
 }
 
 def wrap [args: list<string>] {
@@ -377,7 +377,7 @@ def wrap [args: list<string>] {
   }
   let files = if $count == 1 { "1 file" } else { $"($count) files" }
   let named = ($paths | str join ", ")
-  ok $"rewrite\(wrap\): ($named) → ($into)" $"Wrapped ($named) into ($into) \(($files)\)."
+  ok $"rewrite\(fs wrap\): ($named) → ($into)" $"Wrapped ($named) into ($into) \(($files)\)."
 }
 
 # Prints the help (help v1, urn:jig:help:1): every command, its kinds and its flags.

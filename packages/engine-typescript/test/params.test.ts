@@ -20,7 +20,7 @@ describe("params-to-object on examples/params-to-object", () => {
     const report = await paramsToObject(dir, "src/shipping.ts", "shippingCost");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "refactor(params-to-object): shippingCost in src/shipping.ts");
+    assert.equal(ok.subject, "refactor(typescript params-to-object): shippingCost in src/shipping.ts");
     assert.equal(ok.kind, "refactor");
     assert.equal(
       ok.summary,

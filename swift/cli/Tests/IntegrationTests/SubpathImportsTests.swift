@@ -16,7 +16,7 @@ struct SubpathImportsTests {
     #expect(result.filesChanged == [
       "package.json", "src/components/Total.ts", "src/lib/format.ts", "src/lib/index.ts", "src/main.ts",
     ])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(subpath-imports): src/**\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript subpath-imports): src/**\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))
     let tree = try readTree(dir)

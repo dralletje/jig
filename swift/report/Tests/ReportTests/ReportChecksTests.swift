@@ -19,8 +19,8 @@ private func problem(_ fields: String) -> String? {
 
 @Test(arguments: [
   ("refactor", "refactor(x): y", true),
-  ("sweep", "sweep(format): src/**", true),
-  ("rewrite", "rewrite(remove-console): a.ts", true),
+  ("sweep", "sweep(prettier format): src/**", true),
+  ("rewrite", "rewrite(typescript remove-console): a.ts", true),
   ("refactor", "probe: x", false),
   ("refactor", "sweep(x): y", false),
   ("refactor", "refactor: y", false),

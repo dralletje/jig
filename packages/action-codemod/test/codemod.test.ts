@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import type { ActionKind, OkReport, RefactorError } from "@jig/core";
 import { HELP_SCHEMA_ID, assertReport, readTree, schemaErrors } from "@jig/test-utils";
-import { PARSERS, TRANSFORMS, help, installedPackage, main } from "../src/index.ts";
+import { IMAGES, PARSERS, TRANSFORMS, help, installedPackage, main } from "../src/index.ts";
 import type { CodemodPackage, TransformInfo } from "../src/index.ts";
 
 async function rejects(p: Promise<unknown>): Promise<RefactorError> {
@@ -36,7 +36,7 @@ async function fakePackageOf(transforms: Record<string, TransformInfo>, sources:
   const dir = await mkdtemp(join(tmpdir(), "fake-codemods-"));
   await mkdir(join(dir, "transforms"));
   for (const name of Object.keys(transforms)) await writeFile(join(dir, "transforms", `${name}.js`), sources[name] ?? RENAME);
-  return { name: "fake-codemods", version: "1.2.3", dir, transforms };
+  return { image: "codemod-fake", name: "fake-codemods", version: "1.2.3", dir, transforms };
 }
 
 async function workspace(files: Record<string, string>): Promise<string> {
@@ -62,7 +62,7 @@ describe("codemod", () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "rewrite",
-      subject: "rewrite(fake-codemods@1.2.3/rename): *.ts, *.tsx, *.md",
+      subject: "rewrite(codemod-fake rename): *.ts, *.tsx, *.md",
       summary: "Ran rename from fake-codemods 1.2.3 on 2 files:\n  a.ts\n  b.tsx",
     });
     const tree = await readTree(dir);
@@ -79,20 +79,33 @@ describe("codemod", () => {
     assert.equal((await readTree(dir))["b.ts"], "export const keep = 2;\n");
     const none = (await main(["nothing", "--files", "*.ts"], dir, pkg)) as OkReport;
     assert.equal(none.kind, "sweep");
-    assert.equal(none.subject, "sweep(fake-codemods@1.2.3/nothing): *.ts");
+    assert.equal(none.subject, "sweep(codemod-fake nothing): *.ts");
     assert.equal(none.summary, "Ran nothing from fake-codemods 1.2.3; it changed no files.");
   });
 
-  test("every transform of the table, run as its action, reports the kind the table gives it", async () => {
+  test("every transform of the table, run as its action, commits the table's kind and names image and transform", async () => {
     for (const [name, transforms] of Object.entries(TRANSFORMS)) {
       for (const [transform, info] of Object.entries(transforms)) {
         const pkg = await fakePackage({ [transform]: info.kind });
         const dir = await workspace({ "a.ts": SRC });
-        const report = (await main([transform, "--files", "a.ts"], dir, { ...pkg, name })) as OkReport;
+        const report = (await main([transform, "--files", "a.ts"], dir, { ...pkg, name, image: IMAGES[name]! })) as OkReport;
         assert.equal(report.kind, info.kind, `${name}/${transform}`);
-        assert.ok(report.subject.startsWith(`${info.kind}(${name}@1.2.3/${transform}): `), report.subject);
+        assert.equal(report.subject, `${info.kind}(${IMAGES[name]} ${transform}): a.ts`);
       }
     }
+  });
+
+  test("react-codemod is carried by the image named codemod-react, and every package of the table has an image", () => {
+    assert.equal(IMAGES["react-codemod"], "codemod-react");
+    assert.deepEqual(Object.keys(IMAGES).sort(), Object.keys(TRANSFORMS).sort());
+    for (const image of Object.values(IMAGES)) assert.match(image, /^[^\s()]+$/);
+  });
+
+  test("sort-comp of react-codemod commits sweep(codemod-react sort-comp)", async () => {
+    const info = TRANSFORMS["react-codemod"]!["sort-comp"]!;
+    const pkg = { ...(await fakePackage({ "sort-comp": info.kind })), name: "react-codemod", image: "codemod-react" };
+    const report = (await main(["sort-comp", "--files", "src/**"], await workspace({ "src/a.ts": SRC }), pkg)) as OkReport;
+    assert.equal(report.subject, "sweep(codemod-react sort-comp): src/**");
   });
 
   test("the table holds only valid kinds and one-line descriptions", () => {

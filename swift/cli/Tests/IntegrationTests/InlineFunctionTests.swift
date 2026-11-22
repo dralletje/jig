@@ -14,7 +14,7 @@ struct InlineFunctionTests {
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.kind == "refactor")
     #expect(result.filesChanged == ["src/single.ts"])
-    #expect(result.subject == "refactor(inline-function): unpack square at src/single.ts:11")
+    #expect(result.subject == "refactor(typescript inline-function): unpack square at src/single.ts:11")
     #expect(try git(dir, ["log", "-1", "--format=%s"]) == "\(result.subject)\n")
     #expect(result.summary == "Unpacked a call to `square` in src/single.ts#describe. `square` stays declared.")
     let body = try git(dir, ["log", "-1", "--format=%B"])
@@ -35,7 +35,7 @@ struct InlineFunctionTests {
     #expect(result.filesChanged == ["src/multi.ts"])
     #expect(
       try git(dir, ["log", "-1", "--format=%s"])
-        == "refactor(inline-function): unpack summarize everywhere in src/multi.ts and remove it\n")
+        == "refactor(typescript inline-function): unpack summarize everywhere in src/multi.ts and remove it\n")
     #expect(result.summary.hasPrefix("Unpacked 2 calls to `summarize` and removed its declaration:\n"))
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: refactor\nCo-Authored-By: "))

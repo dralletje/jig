@@ -7,11 +7,15 @@ import { parseArgs } from "node:util";
 import { RefactorError, imageHelp, listFiles, listLines, matchesAnyGlob, okReport, plural } from "@jig/core";
 import type { ImageHelp, Report } from "@jig/core";
 import jscodeshift from "jscodeshift";
-import { TRANSFORMS } from "./catalog.ts";
+import { IMAGES, TRANSFORMS } from "./catalog.ts";
 import type { TransformInfo } from "./catalog.ts";
 
-/** The published codemod package an image carries: where it is, its version, and its transforms. */
+/**
+ * The published codemod package an image carries: the image's name (for the commit subject), where the
+ * package is, its version, and its transforms.
+ */
 export type CodemodPackage = {
+  image: string;
   name: string;
   version: string;
   /** Folder of the package; transform `<t>` is `<dir>/transforms/<t>.js`. */
@@ -30,12 +34,13 @@ const DECLARATION_FILE = /\.d\.[cm]?ts$/;
 export function installedPackage(env: NodeJS.ProcessEnv = process.env): CodemodPackage {
   const name = env.CODEMOD_PACKAGE ?? "";
   const transforms = Object.hasOwn(TRANSFORMS, name) ? TRANSFORMS[name] : undefined;
-  if (!transforms) {
+  const image = Object.hasOwn(IMAGES, name) ? IMAGES[name] : undefined;
+  if (!transforms || !image) {
     throw new Error(`CODEMOD_PACKAGE ${JSON.stringify(name)} is not a known codemod package (${Object.keys(TRANSFORMS).join(", ")})`);
   }
   const manifest = createRequire(import.meta.url).resolve(`${name}/package.json`);
   const version = (JSON.parse(readFileSync(manifest, "utf8")) as { version: string }).version;
-  return { name, version, dir: dirname(manifest), transforms };
+  return { image, name, version, dir: dirname(manifest), transforms };
 }
 
 type Flags = { globs: string[]; parser: Parser | undefined };
@@ -166,7 +171,7 @@ export async function main(argv: string[], root: string, pkg?: CodemodPackage): 
     files.length === 0
       ? `Ran ${name} from ${carried.name} ${carried.version}; it changed no files.`
       : `Ran ${name} from ${carried.name} ${carried.version} on ${plural(files.length, "file")}:\n${listLines(files)}`;
-  return okReport(kind, `${carried.name}@${carried.version}/${name}`, globs.join(", "), {
+  return okReport(kind, carried.image, name, globs.join(", "), {
     summary: notHandled.length === 0 ? ran : `${ran}\n\nNot handled (${notHandled.length}):\n${notHandled.map((n) => `  ${n}`).join("\n")}`,
   });
 }

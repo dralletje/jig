@@ -56,7 +56,7 @@ describe("rename", () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "refactor",
-      subject: "refactor(rename): foo → bar in a.ts",
+      subject: "refactor(typescript rename): foo → bar in a.ts",
       summary: "Renamed `foo` to `bar` in a.ts (9 places in 4 files).",
     });
   });
@@ -111,7 +111,7 @@ describe("extract", () => {
     const dir = await workspace("simple");
     const report = (await main(["extract", "--file", "a.ts", "--symbols", "helper,keep", "--to", "lib.ts"], dir)) as OkReport;
     assertReport(report);
-    assert.equal(report.subject, "refactor(extract): helper, keep → lib.ts from a.ts");
+    assert.equal(report.subject, "refactor(typescript extract): helper, keep → lib.ts from a.ts");
     assert.match(report.summary, /^Moved `helper` and `keep` from a\.ts to lib\.ts \(a new file\), updating the imports of \d+ other files?\.$/);
   });
 
@@ -235,7 +235,7 @@ describe("lift-out", () => {
     const dir = await workspace("simple");
     const report = (await lift(dir, ["--symbol", "double", "--to", "math.ts"])) as OkReport;
     assertReport(report);
-    assert.equal(report.subject, "refactor(lift-out): outer › double → math.ts in nested.ts");
+    assert.equal(report.subject, "refactor(typescript lift-out): outer › double → math.ts in nested.ts");
     assert.equal(report.summary, "Lifted `double` out of `outer` in nested.ts and moved it to math.ts.");
     const files = await readTree(dir);
     contains(files["math.ts"], "export function double(x: number)");
@@ -262,7 +262,7 @@ describe("move-file", () => {
     const dir = await workspace("simple");
     const report = (await main(["move-file", "--file", "b.ts", "--to", "sub/b.ts"], dir)) as OkReport;
     assertReport(report);
-    assert.equal(report.subject, "refactor(move-file): b.ts → sub/b.ts");
+    assert.equal(report.subject, "refactor(typescript move-file): b.ts → sub/b.ts");
     assert.match(report.summary, /^Moved b\.ts to sub\/b\.ts(, updating the imports of \d+ other files?)?\.$/);
     const files = await readTree(dir);
     assert.equal(files["b.ts"], undefined);
@@ -306,7 +306,7 @@ describe("organize-imports", () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "sweep",
-      subject: "sweep(organize-imports): messy.ts",
+      subject: "sweep(typescript organize-imports): messy.ts",
       summary: "Organized the imports of 1 file:\n  messy.ts",
     });
     assert.equal((await readTree(dir))["messy.ts"], 'import { foo, keep } from "./a";\n\nexport const m = foo() + keep;\n');
@@ -397,7 +397,7 @@ describe("bin", () => {
     const { code, last } = await bin(dir, ["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]);
     assert.equal(code, 0);
     assertReport(last);
-    assert.equal((last as OkReport).subject, "refactor(rename): foo → bar in a.ts");
+    assert.equal((last as OkReport).subject, "refactor(typescript rename): foo → bar in a.ts");
     contains((await readTree(dir))["a.ts"], "export function bar()");
   });
 

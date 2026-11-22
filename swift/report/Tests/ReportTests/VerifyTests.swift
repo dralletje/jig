@@ -140,13 +140,13 @@ private func exampleRange() -> [CommitVerification] {
   let prettier = "localhost/jig/prettier:local@sha256:" + String(repeating: "5", count: 64)
   let rename = RecordedCommand(
     image: ts, args: ["rename", "--file", "src/orders.ts", "--symbol", "sendEmail", "--to", "sendMail"],
-    kind: "refactor", subject: "refactor(rename): sendEmail → sendMail in src/orders.ts")
-  let format = RecordedCommand(image: prettier, args: ["prettier"], kind: "sweep", subject: "sweep(format): src/**")
+    kind: "refactor", subject: "refactor(typescript rename): sendEmail → sendMail in src/orders.ts")
+  let format = RecordedCommand(image: prettier, args: ["prettier"], kind: "sweep", subject: "sweep(prettier format): src/**")
   let reworded = RecordedCommand(
-    image: prettier, args: ["prettier"], kind: "sweep", subject: "sweep(format): tidy the sources")
+    image: prettier, args: ["prettier"], kind: "sweep", subject: "sweep(prettier format): tidy the sources")
   let gone = RecordedCommand(
     image: ts, args: ["rename", "--file", "src/gone.ts", "--symbol", "x", "--to", "y"], kind: "refactor",
-    subject: "refactor(rename): x → y in src/gone.ts")
+    subject: "refactor(typescript rename): x → y in src/gone.ts")
   var invalid: RefactorError?
   do { _ = try parseRecordedCommand(json: "{", kind: "", subject: "") } catch let e as RefactorError {
     invalid = e
@@ -158,7 +158,7 @@ private func exampleRange() -> [CommitVerification] {
       commit: String(repeating: "4", count: 40), verdict: .different, command: format, filesDiffering: ["src/jobs.ts"]),
     CommitVerification(
       commit: String(repeating: "7", count: 40), verdict: .different, command: reworded,
-      mismatches: [Mismatch(field: "subject", recorded: reworded.subject, replayed: "sweep(format): src/**")]),
+      mismatches: [Mismatch(field: "subject", recorded: reworded.subject, replayed: "sweep(prettier format): src/**")]),
     CommitVerification(
       commit: String(repeating: "9", count: 40), verdict: .failed, command: gone, code: .SYMBOL_NOT_FOUND,
       instructions: "No top-level x in src/gone.ts."),

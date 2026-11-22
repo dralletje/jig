@@ -163,7 +163,7 @@ config. Nothing is written to the work tree, index or refs before the final fast
 ## What a commit looks like
 
 ```
-refactor(rename): foo → bar in a.ts
+refactor(typescript rename): foo → bar in a.ts
 
 Renamed `foo` to `bar` in a.ts (9 places in 4 files).
 
@@ -304,7 +304,7 @@ Success (exit 0):
 ```json
 { "schema": "urn:jig:report:1", "ok": true,
   "kind": "refactor",
-  "subject": "refactor(rename): foo → bar in src/a.ts",
+  "subject": "refactor(typescript rename): foo → bar in src/a.ts",
   "summary": "Renamed `foo` to `bar` in src/a.ts (3 references in 2 files)." }
 ```
 
@@ -337,7 +337,7 @@ The binary prints one JSON object on stdout and exits 0 on success, 1 on failure
  "image":"localhost/jig/typescript:local@sha256:<id>",
  "args":["rename","--file","a.ts","--symbol","foo","--to","bar"],
  "kind":"refactor",
- "subject":"refactor(rename): foo → bar in a.ts",
+ "subject":"refactor(typescript rename): foo → bar in a.ts",
  "summary":"Renamed `foo` to `bar` in a.ts (9 places in 4 files).",
  "filesChanged":["a.ts","b.ts","c.tsx","scripts/tool.ts"]}
 ```
@@ -440,7 +440,7 @@ commits:
 | `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
-The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(format): src/**`),
+The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(prettier format): src/**`),
 the commit carries it in the `Refactor-Kind` trailer, and the binary's success JSON has it as `kind`.
 Any other value is `IMAGE_FAILED`. To list the commits of one kind:
 

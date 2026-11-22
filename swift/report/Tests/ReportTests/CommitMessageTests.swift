@@ -34,21 +34,21 @@ import Testing
 }
 
 @Test func commitMessageIsSubjectSummaryAndTrailers() {
-  let report = Report(kind: .sweep, subject: "sweep(format): x", summary: "Formatted.")
+  let report = Report(kind: .sweep, subject: "sweep(prettier format): x", summary: "Formatted.")
   let coAuthor = "codemodder <codemodder@users.noreply.github.com>"
   let text = commitMessage(report: report, message: nil, image: "i@sha256:…", args: [], coAuthor: coAuthor)
   #expect(
     text
-      == "sweep(format): x\n\nFormatted.\n\nRefactor-Command: {\"args\":[],\"image\":\"i@sha256:…\"}\nRefactor-Kind: sweep\n"
+      == "sweep(prettier format): x\n\nFormatted.\n\nRefactor-Command: {\"args\":[],\"image\":\"i@sha256:…\"}\nRefactor-Kind: sweep\n"
       + "Co-Authored-By: \(coAuthor)\n")
 }
 
 @Test func commitMessageWithMessageAndMultiLineSummary() {
-  let report = Report(kind: .sweep, subject: "sweep(format): *.ts", summary: "Formatted 2 files:\n  a.ts  \n  b.ts")
+  let report = Report(kind: .sweep, subject: "sweep(prettier format): *.ts", summary: "Formatted 2 files:\n  a.ts  \n  b.ts")
   let text = commitMessage(report: report, message: "  why\nbecause  \n", image: "img@sha256:1", args: [], coAuthor: "bot <b@x>")
   #expect(
     text == """
-      sweep(format): *.ts
+      sweep(prettier format): *.ts
 
       Formatted 2 files:
         a.ts

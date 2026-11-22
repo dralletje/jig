@@ -26,7 +26,7 @@ describe("infer-return-types on examples/infer-return-types", () => {
     const report = await infer(dir, "src/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(infer-return-types): src/**");
+    assert.equal(ok.subject, "sweep(typescript infer-return-types): src/**");
     assert.equal(ok.kind, "sweep");
     assert.deepEqual(types(ok), {
       "src/orders.ts#OrderService.add": "number",
@@ -81,7 +81,7 @@ describe("infer-return-types on examples/infer-return-types", () => {
     const dir = await workspace("examples/infer-return-types");
     const ok = (await infer(dir, "src/orders.ts", "--exported-only", "false")) as OkReport;
     assertReport(ok);
-    assert.equal(ok.subject, "sweep(infer-return-types): src/orders.ts (including functions that are not exported)");
+    assert.equal(ok.subject, "sweep(typescript infer-return-types): src/orders.ts (including functions that are not exported)");
     const found = types(ok);
     assert.equal(found["src/orders.ts#normalize"], "string");
     assert.equal(found["src/orders.ts#double"], "number");

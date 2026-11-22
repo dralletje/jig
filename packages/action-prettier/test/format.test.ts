@@ -27,7 +27,7 @@ describe("prettier format", () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "sweep",
-      subject: "sweep(format): ugly.ts",
+      subject: "sweep(prettier format): ugly.ts",
       summary: "Formatted 1 file with prettier 3.9.10:\n  ugly.ts",
     });
     assert.equal((await readTree(dir))["ugly.ts"], 'export const x = { a: 1, b: "two" };\n');
@@ -38,7 +38,7 @@ describe("prettier format", () => {
     const report = await main(["format", "--files", "*.ts,*.tsx"], dir);
     assertReport(report);
     assert.deepEqual(Object.keys(report), ["schema", "ok", "kind", "subject", "summary"]);
-    assert.equal((report as OkReport).subject, "sweep(format): *.ts, *.tsx");
+    assert.equal((report as OkReport).subject, "sweep(prettier format): *.ts, *.tsx");
   });
 
   test("no prettier config: prettier defaults", async () => {

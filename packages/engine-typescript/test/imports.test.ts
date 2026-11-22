@@ -16,7 +16,7 @@ describe("namespace-to-named on examples/import-shapes", () => {
     assertReport(report);
     const ok = report as OkReport;
     assert.equal(ok.kind, "sweep");
-    assert.equal(ok.subject, "sweep(namespace-to-named): src/**");
+    assert.equal(ok.subject, "sweep(typescript namespace-to-named): src/**");
     assert.equal(
       ok.summary,
       "Converted 2 namespace imports to named imports in 2 files:\n  src/clash.ts\n  src/sums.ts\n" +
@@ -152,7 +152,7 @@ describe("import-type on examples/import-shapes", () => {
     assertReport(report);
     const ok = report as OkReport;
     assert.equal(ok.kind, "sweep");
-    assert.equal(ok.subject, "sweep(import-type): src/**");
+    assert.equal(ok.subject, "sweep(typescript import-type): src/**");
     assert.equal(ok.summary, "Made 2 imports type-only in 2 files:\n  src/mixed.ts\n  src/types-only.ts");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/mixed.ts", "src/types-only.ts"]);

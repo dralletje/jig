@@ -76,7 +76,7 @@ function flags(args: string[]): Record<string, string | undefined> {
 
 /**
  * The typescript image's entrypoint: `<action> --flags...` on the files under `root`. Writes the
- * action's changes into `root` and returns the v1 report: the commit subject `<kind>(<id>): <description>`
+ * action's changes into `root` and returns the v1 report: the commit subject `<kind>(typescript <id>): <description>`
  * and what the action's `run` said it did.
  */
 export async function main(argv: string[], root: string): Promise<Report> {
@@ -92,5 +92,5 @@ export async function main(argv: string[], root: string): Promise<Report> {
   const engine = await TsEngine.load(root);
   const result = await action.run(engine, params);
   await writeChanges(root, engine.changes());
-  return okReport(action.kind, action.id, action.describe(params), result);
+  return okReport(action.kind, "typescript", action.id, action.describe(params), result);
 }
