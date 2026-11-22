@@ -123,6 +123,8 @@ describe("imageHelp checks the choices", () => {
     ["a choice with an empty description", withFlags(["rewrite"], [choiceFlag([{ name: "a", description: "" }])]), /description must be a non-empty string/],
     ["a multi-line choice description", withFlags(["rewrite"], [choiceFlag([{ name: "a", description: "A.\nB." }])]), /description must be one line/],
     ["a choice without name", withFlags(["rewrite"], [choiceFlag([{ description: "D." }])]), /name must be a non-empty string/],
+    ["a choice with an empty name", withFlags(["rewrite"], [choiceFlag([{ name: "", description: "D." }])]), /name must be a non-empty string/],
+    ["a choice with a null kind", withFlags(["rewrite"], [choiceFlag([{ name: "a", description: "D.", kind: null }])]), /kind must be refactor, sweep or rewrite, not null/],
     ["a choice with an unknown field", withFlags(["rewrite"], [choiceFlag([{ name: "a", description: "D.", default: true }])]), /unknown field\(s\) default/],
     ["a choice with an unknown kind", withFlags(["rewrite"], [choiceFlag([{ name: "a", description: "D.", kind: "delete" }])]), /kind must be refactor, sweep or rewrite/],
     ["two choices with one name", withFlags(["rewrite"], [choiceFlag([{ name: "a", description: "D." }, { name: "a", description: "E." }])]), /two choices are named "a"/],
@@ -163,16 +165,33 @@ describe("help schema", () => {
     return help;
   };
 
+  const choiceFlag = (choices: unknown[]) => withFlag({ name: "--case", type: "choice", choices, required: true, description: "d" });
+
   test("a choice flag with its choices is valid, with or without kinds", () => {
-    const choices = [
-      { name: "kebab", description: "kebab-case." },
-      { name: "camel", description: "camelCase.", kind: "rewrite" },
-    ];
-    const flag = { name: "--case", type: "choice", choices, required: false, description: "d" };
-    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, withFlag(flag)), []);
+    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, choiceFlag([{ name: "kebab", description: "kebab-case." }, { name: "camel", description: "camelCase." }])), []);
+    assert.deepEqual(
+      schemaErrors(HELP_SCHEMA_ID, choiceFlag([{ name: "kebab", description: "kebab-case.", kind: "rewrite" }, { name: "camel", description: "camelCase.", kind: "rewrite" }])),
+      [],
+    );
   });
 
-  const choiceFlag = (choices: unknown[]) => withFlag({ name: "--case", type: "choice", choices, required: true, description: "d" });
+  test("one flag with kinded choices next to choice flags without kinds is valid", () => {
+    const help = example();
+    help.actions[0].flags = [
+      { name: "--transform", type: "choice", choices: [{ name: "a", description: "A.", kind: "rewrite" }], required: true, description: "d" },
+      { name: "--parser", type: "choice", choices: [{ name: "tsx", description: "T." }], required: false, description: "d" },
+    ];
+    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help), []);
+  });
+
+  const twoKindedFlags = (): unknown => {
+    const help = example();
+    help.actions[0].flags = [
+      { name: "--a", type: "choice", choices: [{ name: "x", description: "X.", kind: "rewrite" }], required: true, description: "d" },
+      { name: "--b", type: "choice", choices: [{ name: "y", description: "Y.", kind: "rewrite" }], required: true, description: "d" },
+    ];
+    return help;
+  };
 
   test("jig's own additions are allowed: ok, image, notes", () => {
     const help = { ...example(), ok: true, image: "localhost/jig/fs:local@sha256:00", notes: ["A cached image was used."] };
@@ -190,6 +209,9 @@ describe("help schema", () => {
     ["a choice with an empty name", () => choiceFlag([{ name: "", description: "A." }])],
     ["a choice with an unknown field", () => choiceFlag([{ name: "a", description: "A.", default: true }])],
     ["a choice with an unknown kind", () => choiceFlag([{ name: "a", description: "A.", kind: "codemod" }])],
+    ["a choice with a null kind", () => choiceFlag([{ name: "a", description: "A.", kind: null }])],
+    ["a kind on some choices but not all", () => choiceFlag([{ name: "a", description: "A.", kind: "rewrite" }, { name: "b", description: "B." }])],
+    ["kinds on the choices of two flags", twoKindedFlags],
     ["an unknown flag type", () => withFlag({ name: "--to", type: "string", required: true, description: "d" })],
     ["a flag name without --", () => withFlag({ name: "to", type: "path", required: true, description: "d" })],
     ["a flag without required", () => withFlag({ name: "--to", type: "path", description: "d" })],

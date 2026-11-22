@@ -43,7 +43,20 @@
           "uniqueItems": true
         },
         "summary": { "$ref": "#/$defs/line" },
-        "flags": { "type": "array", "items": { "$ref": "#/$defs/flag" } }
+        "flags": {
+          "description": "At most one flag has choices with kinds.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/flag" },
+          "contains": {
+            "type": "object",
+            "required": ["choices"],
+            "properties": {
+              "choices": { "type": "array", "contains": { "type": "object", "properties": { "kind": true }, "required": ["kind"] } }
+            }
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
       },
       "additionalProperties": false
     },
@@ -81,10 +94,14 @@
             "name": { "$ref": "#/$defs/flagName" },
             "type": { "const": "choice" },
             "choices": {
-              "description": "Names are unique within the flag. When one choice has a kind, all of them do; at most one flag of an action has choices with kinds, and the action's kinds are exactly the kinds they use (jig checks these rules; the schema cannot).",
+              "description": "When one choice has a kind, all of them do (checked here; at most one flag of an action has choices with kinds is checked on the action's flags). Names are unique within the flag, and the action's kinds are exactly the kinds the choices use: jig checks these two alone, the schema cannot express them.",
               "type": "array",
               "items": { "$ref": "#/$defs/choice" },
-              "minItems": 1
+              "minItems": 1,
+              "anyOf": [
+                { "items": { "type": "object", "properties": { "kind": true }, "required": ["kind"] } },
+                { "items": { "not": { "type": "object", "properties": { "kind": true }, "required": ["kind"] } } }
+              ]
             },
             "required": { "type": "boolean" },
             "description": { "$ref": "#/$defs/flagDescription" }
