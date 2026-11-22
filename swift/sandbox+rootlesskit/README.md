@@ -149,7 +149,7 @@ remounting (all `EROFS`/`EPERM`).
 let sandbox = RootlesskitSandbox(options: .init())        // Options: rootlesskit, docker, cacheRoot, ociRoot, registry, …
 let image = try sandbox.resolve("localhost/jig/typescript:local")  // PinnedImage(id:, reference:, note:)
 let pulled = try sandbox.resolve("ghcr.io/acme/tool:1.0")  // from jig's image store, downloaded when needed
-let result = try sandbox.run(image, arguments: ["typescript-rename", …], workspace: dir)   // SandboxRun
+let result = try sandbox.run(image, arguments: ["rename", …], workspace: dir)   // SandboxRun
 // result.termination: .exited(Int32) | .signaled(Int32); result.stdout / result.stderr: Data
 sandbox.cleanup()                                          // idempotent; afterwards runs are refused
 RootlesskitSandbox.unavailableReason()                     // nil when /usr/bin/rootlesskit is usable

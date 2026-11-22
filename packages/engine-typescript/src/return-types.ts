@@ -6,7 +6,7 @@ import { diagnostics, list as globList, introduced, matchFiles, notHandled, unav
 import type { NotHandled } from "./shared.ts";
 
 /**
- * typescript-infer-return-types: functions and methods without a return type annotation get the type
+ * infer-return-types: functions and methods without a return type annotation get the type
  * TypeScript infers, using its "Infer function return type" refactor. A function whose inferred type
  * holds an `any` nobody wrote, or an `import("…")` type (a type that is not in scope where it is
  * written), is left alone and listed in the summary as not handled.
@@ -159,7 +159,7 @@ function accessorEdits(engine: TsEngine, file: string, candidate: Candidate): ts
 export type InferReturnTypesParams = { files: string[]; exportedOnly: boolean };
 
 export const inferReturnTypesAction: Action<InferReturnTypesParams, TsEngine> = {
-  id: "typescript-infer-return-types",
+  id: "infer-return-types",
   kind: "sweep",
   summary: "Adds the inferred return type to functions that have none.",
   flags: [

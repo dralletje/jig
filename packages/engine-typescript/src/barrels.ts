@@ -6,7 +6,7 @@ import type { TsEngine } from "./engine.ts";
 import { TS_FILE, byString, diagnostics, list as globList, introduced, matchFiles, unavailable } from "./shared.ts";
 
 /**
- * typescript-remove-barrels: imports through a barrel (an `index.ts`/`index.tsx` that only re-exports)
+ * remove-barrels: imports through a barrel (an `index.ts`/`index.tsx` that only re-exports)
  * import each name from the module that defines it; barrels nothing imports any more are deleted.
  */
 
@@ -432,7 +432,7 @@ function isEntryPoint(entries: Set<string>, file: string): boolean {
 export type RemoveBarrelsParams = { files: string[] };
 
 export const removeBarrelsAction: Action<RemoveBarrelsParams, TsEngine> = {
-  id: "typescript-remove-barrels",
+  id: "remove-barrels",
   kind: "refactor",
   summary: "Imports through barrel files from the defining modules, and deletes barrels nothing imports any more.",
   flags: [

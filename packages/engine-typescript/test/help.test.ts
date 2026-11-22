@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 import { RefactorError } from "@jig/core";
 import type { Flag } from "@jig/core";
 import { HELP_SCHEMA_ID, schemaErrors } from "@jig/test-utils";
-import { ACTIONS, help } from "../src/main.ts";
+import { ACTIONS, help, main } from "../src/main.ts";
 
 // A value each declared flag accepts, by its type. Two text flags check their format and get a valid one.
 function fakeValue(flag: Flag): string {
@@ -55,6 +55,42 @@ describe("typescript help", () => {
       ACTIONS.map((a) => a.id),
     );
     assert.equal(help().actions.length, 19);
+  });
+
+  test("the actions are named without a typescript- prefix", () => {
+    assert.deepEqual(
+      help().actions.map((a) => a.name),
+      [
+        "rename",
+        "extract",
+        "lift-out",
+        "move-file",
+        "organize-imports",
+        "remove-barrels",
+        "add-import-extensions",
+        "subpath-imports",
+        "params-to-object",
+        "infer-return-types",
+        "namespace-to-named",
+        "import-type",
+        "remove-console",
+        "template-string",
+        "rename-files",
+        "remove-unused-variable",
+        "convert-function",
+        "default-to-named",
+        "inline-function",
+      ],
+    );
+  });
+
+  test("an old prefixed name is an unknown action", async () => {
+    await assert.rejects(main(["typescript-rename", "--file", "a.ts", "--symbol", "a", "--to", "b"], "/nonexistent"), (e: unknown) => {
+      assert.ok(e instanceof RefactorError, String(e));
+      assert.equal(e.code, "UNKNOWN_ACTION");
+      assert.match(e.message, /^Unknown action "typescript-rename"\. This image has: rename, extract, /);
+      return true;
+    });
   });
 
   test("every action's summary is one real line", () => {

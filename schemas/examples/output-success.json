@@ -5,7 +5,7 @@
   "parent": "2222222222222222222222222222222222222222",
   "image": "localhost/jig/typescript:local@sha256:3333333333333333333333333333333333333333333333333333333333333333",
   "args": [
-    "typescript-rename",
+    "rename",
     "--file",
     "src/a.ts",
     "--symbol",
@@ -14,7 +14,7 @@
     "bar"
   ],
   "kind": "refactor",
-  "subject": "refactor(typescript-rename): foo → bar in src/a.ts",
+  "subject": "refactor(rename): foo → bar in src/a.ts",
   "summary": "Renamed `foo` to `bar` in src/a.ts (3 references in 2 files).",
   "filesChanged": [
     "src/a.ts",

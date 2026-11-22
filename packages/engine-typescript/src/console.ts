@@ -6,7 +6,7 @@ import { diagnostics, introduced, matchFiles, notHandled, unavailable, list as g
 import type { NotHandled } from "./shared.ts";
 
 /**
- * typescript-remove-console: `console.<method>(…)` calls that are whole expression statements are
+ * remove-console: `console.<method>(…)` calls that are whole expression statements are
  * removed (default method: `log`). A call whose result is used (`const x = console.log(…)`, an arrow
  * body, a comma operand) is left and listed in the summary as not handled.
  *
@@ -249,7 +249,7 @@ function planEdits(engine: TsEngine, text: string, statements: Node[]): Edit[] {
 export type RemoveConsoleParams = { files: string[]; methods: string[] };
 
 export const removeConsoleAction: Action<RemoveConsoleParams, TsEngine> = {
-  id: "typescript-remove-console",
+  id: "remove-console",
   kind: "rewrite",
   summary: "Removes console.<method>(...) statements.",
   flags: [

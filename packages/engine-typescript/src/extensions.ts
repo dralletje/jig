@@ -6,7 +6,7 @@ import type { Project, TsEngine } from "./engine.ts";
 import { byString, diagnostics, list as globList, introduced, matchFiles, unavailable } from "./shared.ts";
 
 /**
- * typescript-add-import-extensions: relative imports, re-exports and dynamic `import()`s with a string
+ * add-import-extensions: relative imports, re-exports and dynamic `import()`s with a string
  * literal get the real file's extension (`./a` → `./a.ts`, `./dir` → `./dir/index.ts`). The project's
  * tsconfig gets `allowImportingTsExtensions` when it needs it.
  */
@@ -148,7 +148,7 @@ function flagChange(engine: TsEngine, project: Project, file: string): { tsconfi
 export type AddImportExtensionsParams = { files: string[] };
 
 export const addImportExtensionsAction: Action<AddImportExtensionsParams, TsEngine> = {
-  id: "typescript-add-import-extensions",
+  id: "add-import-extensions",
   kind: "sweep",
   summary: "Gives relative imports and re-exports the real file extension (./a to ./a.ts).",
   flags: [

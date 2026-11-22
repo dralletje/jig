@@ -5,16 +5,16 @@ import { assertReport, readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
 
-const removeBarrels =(dir: string, files: string) => main(["typescript-remove-barrels", "--files", files], dir);
+const removeBarrels =(dir: string, files: string) => main(["remove-barrels", "--files", files], dir);
 
-describe("typescript-remove-barrels on examples/webapp", () => {
+describe("remove-barrels on examples/webapp", () => {
   test("rewrites every import through a barrel and deletes the barrels nothing imports any more", async () => {
     const dir = await workspace("examples/webapp");
     const before = await readTree(dir);
     const report = await removeBarrels(dir, "src/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "refactor(typescript-remove-barrels): src/**");
+    assert.equal(ok.subject, "refactor(remove-barrels): src/**");
     assert.match(ok.summary, /^Imported \d+ names from the modules that define them instead of through barrels, in 6 files:\n  src\/components\/RoleBadge\.ts\n/);
     assert.match(ok.summary, /\n\nDeleted 4 barrels nothing uses any more:\n  src\/lib\/index\.ts\n  src\/models\/index\.ts\n  src\/services\/index\.ts\n  src\/utils\/index\.ts$/);
     const after = await readTree(dir);
@@ -208,7 +208,7 @@ describe("typescript-remove-barrels on examples/webapp", () => {
   });
 });
 
-describe("typescript-remove-barrels on examples/monorepo", () => {
+describe("remove-barrels on examples/monorepo", () => {
   test("barrels across a package boundary and re-exports from another package are left as is", async () => {
     const dir = await workspace("examples/monorepo");
     const before = await readTree(dir);

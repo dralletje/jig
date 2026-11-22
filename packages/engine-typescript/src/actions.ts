@@ -21,7 +21,7 @@ function kindParam(raw: Record<string, string | undefined>): { kind?: DeclKind }
 export type RenameParams = { file: string; symbol: string; to: string; kind?: DeclKind };
 
 export const renameAction: Action<RenameParams, TsEngine> = {
-  id: "typescript-rename",
+  id: "rename",
   kind: "refactor",
   summary: "Renames a top-level declaration and all its references in the project.",
   flags: [
@@ -84,7 +84,7 @@ function usesImportMeta(typescript: typeof ts, node: ts.Node): boolean {
 export type ExtractParams = { file: string; symbols: string[]; to: string; kind?: DeclKind };
 
 export const extractAction: Action<ExtractParams, TsEngine> = {
-  id: "typescript-extract",
+  id: "extract",
   kind: "refactor",
   summary: "Moves top-level declarations to another file; their imports follow.",
   flags: [

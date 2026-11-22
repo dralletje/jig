@@ -5,10 +5,10 @@ import { assertReport, readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
 
-const toNamed = (dir: string, files: string) => main(["typescript-namespace-to-named", "--files", files], dir);
-const importType = (dir: string, files: string) => main(["typescript-import-type", "--files", files], dir);
+const toNamed = (dir: string, files: string) => main(["namespace-to-named", "--files", files], dir);
+const importType = (dir: string, files: string) => main(["import-type", "--files", files], dir);
 
-describe("typescript-namespace-to-named on examples/import-shapes", () => {
+describe("namespace-to-named on examples/import-shapes", () => {
   test("converts `x.name` uses, renames clashes, skips a namespace used as a value", async () => {
     const dir = await workspace("examples/import-shapes");
     const before = await readTree(dir);
@@ -16,7 +16,7 @@ describe("typescript-namespace-to-named on examples/import-shapes", () => {
     assertReport(report);
     const ok = report as OkReport;
     assert.equal(ok.kind, "sweep");
-    assert.equal(ok.subject, "sweep(typescript-namespace-to-named): src/**");
+    assert.equal(ok.subject, "sweep(namespace-to-named): src/**");
     assert.equal(
       ok.summary,
       "Converted 2 namespace imports to named imports in 2 files:\n  src/clash.ts\n  src/sums.ts\n" +
@@ -144,7 +144,7 @@ describe("typescript-namespace-to-named on examples/import-shapes", () => {
   });
 });
 
-describe("typescript-import-type on examples/import-shapes", () => {
+describe("import-type on examples/import-shapes", () => {
   test("whole imports and individual specifiers become type-only; value names and side-effect imports stay", async () => {
     const dir = await workspace("examples/import-shapes");
     const before = await readTree(dir);
@@ -152,7 +152,7 @@ describe("typescript-import-type on examples/import-shapes", () => {
     assertReport(report);
     const ok = report as OkReport;
     assert.equal(ok.kind, "sweep");
-    assert.equal(ok.subject, "sweep(typescript-import-type): src/**");
+    assert.equal(ok.subject, "sweep(import-type): src/**");
     assert.equal(ok.summary, "Made 2 imports type-only in 2 files:\n  src/mixed.ts\n  src/types-only.ts");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/mixed.ts", "src/types-only.ts"]);

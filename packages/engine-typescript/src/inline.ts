@@ -6,7 +6,7 @@ import { atText, diagnostics, findAt, introduced, parseAt, required, unavailable
 import type { At } from "./shared.ts";
 
 /**
- * typescript-inline-function: a call of a top-level function is replaced by the function's code
+ * inline-function: a call of a top-level function is replaced by the function's code
  * ("unpack"). All or nothing, in two modes:
  * - one call (`--at <path>:<line>[:<column>]`): that call is unpacked, the declaration stays;
  * - definition (no `--at`): every call is unpacked and the declaration is removed.
@@ -1020,7 +1020,7 @@ function findFunction(engine: TsEngine, file: string, name: string): ReturnType<
 }
 
 export const inlineFunctionAction: Action<InlineParams, TsEngine> = {
-  id: "typescript-inline-function",
+  id: "inline-function",
   kind: "refactor",
   summary: "Inlines one call, or every call, of a top-level function.",
   flags: [

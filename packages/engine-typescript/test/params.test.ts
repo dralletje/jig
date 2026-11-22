@@ -6,9 +6,9 @@ import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
 
 const paramsToObject = (dir: string, file: string, symbol: string) =>
-  main(["typescript-params-to-object", "--file", file, "--symbol", symbol], dir);
+  main(["params-to-object", "--file", file, "--symbol", symbol], dir);
 
-describe("typescript-params-to-object on examples/params-to-object", () => {
+describe("params-to-object on examples/params-to-object", () => {
   test("the example type-checks to begin with", async () => {
     const dir = await workspace("examples/params-to-object");
     assert.deepEqual(await errors(dir, "src/shipping.ts"), []);
@@ -20,7 +20,7 @@ describe("typescript-params-to-object on examples/params-to-object", () => {
     const report = await paramsToObject(dir, "src/shipping.ts", "shippingCost");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "refactor(typescript-params-to-object): shippingCost in src/shipping.ts");
+    assert.equal(ok.subject, "refactor(params-to-object): shippingCost in src/shipping.ts");
     assert.equal(ok.kind, "refactor");
     assert.equal(
       ok.summary,

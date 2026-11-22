@@ -8,7 +8,7 @@ import { changed, errors as allErrors, rejects, workspace } from "./helpers.ts";
 
 const EXAMPLE = "examples/rename-files";
 const rename = (dir: string, nameCase: string, files = "src/**") =>
-  main(["typescript-rename-files", "--files", files, "--case", nameCase], dir);
+  main(["rename-files", "--files", files, "--case", nameCase], dir);
 
 // The example holds Helpers.ts next to helpers.ts on purpose; TypeScript complains about that pair.
 const errors = async (dir: string, file: string) =>
@@ -43,14 +43,14 @@ describe("convertStem", () => {
   });
 });
 
-describe("typescript-rename-files on examples/rename-files", () => {
+describe("rename-files on examples/rename-files", () => {
   test("kebab: renames, rewrites importers, lists what it left alone", async () => {
     const dir = await workspace(EXAMPLE);
     const before = await readTree(dir);
     const report = (await rename(dir, "kebab")) as OkReport;
     assertReport(report);
     assert.equal(report.kind, "sweep");
-    assert.equal(report.subject, "sweep(typescript-rename-files): src/** to kebab case");
+    assert.equal(report.subject, "sweep(rename-files): src/** to kebab case");
     assert.deepEqual(moves(report), [
       "src/Footer.ts → src/footer.ts",
       "src/UserCard.ts → src/user-card.ts",
@@ -189,12 +189,12 @@ describe("typescript-rename-files on examples/rename-files", () => {
   });
 });
 
-describe("typescript-rename-files arguments", () => {
+describe("rename-files arguments", () => {
   test("refuses an unknown case and a missing one", async () => {
     const dir = await workspace(EXAMPLE);
     const err = await rejects(rename(dir, "title"));
     assert.equal(err.code, "INVALID_ARGS");
     assert.match(err.message, /--case kebab\|camel\|pascal\|snake/);
-    assert.equal((await rejects(main(["typescript-rename-files", "--files", "src/**"], dir))).code, "INVALID_ARGS");
+    assert.equal((await rejects(main(["rename-files", "--files", "src/**"], dir))).code, "INVALID_ARGS");
   });
 });

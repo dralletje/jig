@@ -6,7 +6,7 @@ import { TS_FILE, byString, diagnostics, list as globList, introduced, matchFile
 import type { NotHandled } from "./shared.ts";
 
 /**
- * typescript-default-to-named: `export default` of a named function, class, interface or local value
+ * default-to-named: `export default` of a named function, class, interface or local value
  * becomes a named export of the same name, and every importer switches to a named import (`import { Name
  * as local }` when its local name differs). Anonymous default exports, and modules whose default is
  * loaded with `import()` or through a namespace, are refused per file and listed in the summary as not handled.
@@ -402,7 +402,7 @@ type MissKind =
   | { kind: "errors"; errors: string[] };
 
 export const defaultToNamedAction: Action<DefaultToNamedParams, TsEngine> = {
-  id: "typescript-default-to-named",
+  id: "default-to-named",
   kind: "sweep",
   summary: "Turns default exports into named exports, and switches their importers.",
   flags: [

@@ -7,7 +7,7 @@ import { byString, list as globList, matchFiles, notHandled, required, unavailab
 import type { NotHandled } from "./shared.ts";
 
 /**
- * typescript-rename-files: the TypeScript files matching `--files` whose base name is not in the
+ * rename-files: the TypeScript files matching `--files` whose base name is not in the
  * `--case` get renamed (the part before the first dot: `orderService.test.ts` → `order-service.test.ts`),
  * with move-file's rewriting of the imports. Files it will not rename are listed in the summary as not handled.
  */
@@ -108,7 +108,7 @@ function plan(files: string[], all: string[], nameCase: NameCase): { renames: Re
 }
 
 export const renameFilesAction: Action<RenameFilesParams, TsEngine> = {
-  id: "typescript-rename-files",
+  id: "rename-files",
   kind: "sweep",
   summary: "Renames files to a case (kebab, camel, pascal or snake), rewriting their imports.",
   flags: [

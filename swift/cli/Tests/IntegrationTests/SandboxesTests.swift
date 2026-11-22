@@ -82,7 +82,7 @@ struct RootlesskitTests {
   func typescriptRename() throws {
     let result = try sameAsDocker(image: TS, args: RENAME)
     #expect(result.kind == "refactor")
-    #expect(result.subject == "refactor(typescript-rename): foo → bar in a.ts")
+    #expect(result.subject == "refactor(rename): foo → bar in a.ts")
   }
 
   @Test("prettier format: the same tree, commit message and report as docker", .timeLimit(.minutes(3)))

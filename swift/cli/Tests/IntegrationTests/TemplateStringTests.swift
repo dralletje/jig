@@ -1,19 +1,19 @@
-// typescript-template-string through the real typescript image, on examples/template-string.
+// template-string through the real typescript image, on examples/template-string.
 import Foundation
 import Testing
 
-@Suite("typescript-template-string (docker)", .serialized, .enabled(if: dockerAvailable, dockerMissing), .builtOnce)
+@Suite("template-string (docker)", .serialized, .enabled(if: dockerAvailable, dockerMissing), .builtOnce)
 struct TemplateStringTests {
   let temp = TempDirs()
 
   @Test("a concatenation becomes a template literal and is committed as a refactor", .timeLimit(.minutes(2)))
   func convert() throws {
     let dir = try temp.fixture("examples/template-string")
-    let result = try runImage(repo: dir, image: TS, args: ["typescript-template-string", "--at", "src/greet.ts:2"])
+    let result = try runImage(repo: dir, image: TS, args: ["template-string", "--at", "src/greet.ts:2"])
     #expect(result.filesChanged == ["src/greet.ts"])
     #expect(result.kind == "refactor")
-    #expect(result.subject == "refactor(typescript-template-string): src/greet.ts:2")
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(typescript-template-string): src/greet.ts:2\n")
+    #expect(result.subject == "refactor(template-string): src/greet.ts:2")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(template-string): src/greet.ts:2\n")
     #expect(result.summary.hasPrefix("Converted a string concatenation in "), "\(result.summary)")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: refactor\nCo-Authored-By: "))
@@ -24,10 +24,10 @@ struct TemplateStringTests {
   @Test("two concatenations on a line need a column", .timeLimit(.minutes(2)))
   func needsColumn() throws {
     let dir = try temp.fixture("examples/template-string")
-    let failure = try failImage(repo: dir, image: TS, args: ["typescript-template-string", "--at", "src/greet.ts:10"])
+    let failure = try failImage(repo: dir, image: TS, args: ["template-string", "--at", "src/greet.ts:10"])
     #expect(failure.code == "INVALID_ARGS")
     #expect(failure.instructions.contains("Pass a column"))
-    let result = try runImage(repo: dir, image: TS, args: ["typescript-template-string", "--at", "src/greet.ts:10:20"])
+    let result = try runImage(repo: dir, image: TS, args: ["template-string", "--at", "src/greet.ts:10:20"])
     #expect(result.kind == "refactor")
     #expect(try readTree(dir)["src/greet.ts"]?.contains("[\"x\" + a, `y${b}`]") == true)
   }

@@ -20,7 +20,7 @@ struct ParityTests {
   @Test func typescriptRenameMatchesDocker() throws {
     let viaDocker = try temp.fixture("simple")
     let viaSandbox = try temp.fixture("simple")
-    let args = ["typescript-rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]
+    let args = ["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]
     let image = try shared.resolve(TS)
     #expect(image.reference == "\(TS)@\(image.id)")
     let docker = try dockerRun(image.id, args, workspace: viaDocker)
@@ -54,7 +54,7 @@ struct ParityTests {
     let ws = try temp.fixture("simple")
     let image = try shared.resolve(TS)
     let result = try shared.run(
-      image, arguments: ["typescript-rename-files", "--files", "**", "--case", "kebab"], workspace: ws)
+      image, arguments: ["rename-files", "--files", "**", "--case", "kebab"], workspace: ws)
     _ = result
     let answers = try probe(["create:/workspace/made-inside", "create:/workspace/sub-made"], workspace: ws)
     #expect(answers["create:/workspace/made-inside"] == "OK")

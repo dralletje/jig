@@ -37,10 +37,10 @@ function lacks(text: string | undefined, part: string): void {
   assert.ok(!text?.includes(part), `expected not to contain ${JSON.stringify(part)}:\n${text}`);
 }
 
-describe("typescript-rename", () => {
+describe("rename", () => {
   test("renames across .ts/.tsx, keeping shorthand properties and re-exports", async () => {
     const dir = await workspace("simple");
-    await main(["typescript-rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"], dir);
+    await main(["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"], dir);
     const files = await readTree(dir);
     contains(files["a.ts"], "export function bar()");
     contains(files["b.ts"], "{ foo: bar }"); // shorthand keeps its property name
@@ -50,13 +50,13 @@ describe("typescript-rename", () => {
 
   test("report: subject and summary", async () => {
     const dir = await workspace("simple");
-    const report = await main(["typescript-rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"], dir);
+    const report = await main(["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"], dir);
     assertReport(report);
     assert.deepEqual(report, {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "refactor",
-      subject: "refactor(typescript-rename): foo → bar in a.ts",
+      subject: "refactor(rename): foo → bar in a.ts",
       summary: "Renamed `foo` to `bar` in a.ts (9 places in 4 files).",
     });
   });
@@ -65,7 +65,7 @@ describe("typescript-rename", () => {
     const plain = await workspace("simple");
     const moved = await workspace("simple");
     await writeFile(join(moved, "a.ts"), `export const unrelated = 1;\n\n${(await readTree(moved))["a.ts"]}`);
-    const args = ["typescript-rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"];
+    const args = ["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"];
     const first = (await main(args, plain)) as OkReport;
     const second = (await main(args, moved)) as OkReport;
     assert.equal(second.summary, first.summary);
@@ -75,7 +75,7 @@ describe("typescript-rename", () => {
     const dir = await workspace("monorepo");
     const before = await readTree(dir);
     await main(
-      ["typescript-rename", "--file", "packages/core/src/util.ts", "--symbol", "formatName", "--to", "formatFullName"],
+      ["rename", "--file", "packages/core/src/util.ts", "--symbol", "formatName", "--to", "formatFullName"],
       dir,
     );
     const files = await readTree(dir);
@@ -85,51 +85,51 @@ describe("typescript-rename", () => {
 
   test("a missing symbol is SYMBOL_NOT_FOUND", async () => {
     const dir = await workspace("simple");
-    const err = await rejects(main(["typescript-rename", "--file", "a.ts", "--symbol", "nope", "--to", "bar"], dir));
+    const err = await rejects(main(["rename", "--file", "a.ts", "--symbol", "nope", "--to", "bar"], dir));
     assert.equal(err.code, "SYMBOL_NOT_FOUND");
   });
 
   test("--kind picks one of a variable and an interface of the same name", async () => {
     for (const kind of ["variable", "interface"]) {
-      const report = (await main(["typescript-rename", "--file", "a.ts", "--symbol", "shared", "--kind", kind, "--to", "x"], await workspace("simple"))) as OkReport;
+      const report = (await main(["rename", "--file", "a.ts", "--symbol", "shared", "--kind", kind, "--to", "x"], await workspace("simple"))) as OkReport;
       assert.match(report.summary, /^Renamed `shared` to `x` in a\.ts /);
     }
     // --kind interface looks at interfaces only: `keep` is only a const, so there is none to pick.
-    const err = await rejects(main(["typescript-rename", "--file", "a.ts", "--symbol", "keep", "--kind", "interface", "--to", "x"], await workspace("simple")));
+    const err = await rejects(main(["rename", "--file", "a.ts", "--symbol", "keep", "--kind", "interface", "--to", "x"], await workspace("simple")));
     assert.equal(err.code, "SYMBOL_NOT_FOUND");
   });
 
   test("a name with several declarations is AMBIGUOUS_SYMBOL", async () => {
     const dir = await workspace("simple");
-    const err = await rejects(main(["typescript-rename", "--file", "a.ts", "--symbol", "shared", "--to", "x"], dir));
+    const err = await rejects(main(["rename", "--file", "a.ts", "--symbol", "shared", "--to", "x"], dir));
     assert.equal(err.code, "AMBIGUOUS_SYMBOL");
   });
 });
 
-describe("typescript-extract", () => {
+describe("extract", () => {
   test("report", async () => {
     const dir = await workspace("simple");
-    const report = (await main(["typescript-extract", "--file", "a.ts", "--symbols", "helper,keep", "--to", "lib.ts"], dir)) as OkReport;
+    const report = (await main(["extract", "--file", "a.ts", "--symbols", "helper,keep", "--to", "lib.ts"], dir)) as OkReport;
     assertReport(report);
-    assert.equal(report.subject, "refactor(typescript-extract): helper, keep → lib.ts from a.ts");
+    assert.equal(report.subject, "refactor(extract): helper, keep → lib.ts from a.ts");
     assert.match(report.summary, /^Moved `helper` and `keep` from a\.ts to lib\.ts \(a new file\), updating the imports of \d+ other files?\.$/);
   });
 
   test("an ambiguous or missing later symbol refuses before anything moves, with the lines on disk", async () => {
     const dir = await workspace("simple");
     const before = await readTree(dir);
-    const ambiguous = await rejects(main(["typescript-extract", "--file", "a.ts", "--symbols", "helper,shared", "--to", "lib.ts"], dir));
+    const ambiguous = await rejects(main(["extract", "--file", "a.ts", "--symbols", "helper,shared", "--to", "lib.ts"], dir));
     assert.equal(ambiguous.code, "AMBIGUOUS_SYMBOL");
     assert.match(ambiguous.message, /a\.ts:15\b/);
     assert.match(ambiguous.message, /a\.ts:17\b/);
-    const missing = await rejects(main(["typescript-extract", "--file", "a.ts", "--symbols", "helper,nope", "--to", "lib.ts"], dir));
+    const missing = await rejects(main(["extract", "--file", "a.ts", "--symbols", "helper,nope", "--to", "lib.ts"], dir));
     assert.equal(missing.code, "SYMBOL_NOT_FOUND");
     assert.deepEqual(await readTree(dir), before);
   });
 
   test("moves two symbols to a new file and rewires importers", async () => {
     const dir = await workspace("simple");
-    await main(["typescript-extract", "--file", "a.ts", "--symbols", "helper,keep", "--to", "lib.ts"], dir);
+    await main(["extract", "--file", "a.ts", "--symbols", "helper,keep", "--to", "lib.ts"], dir);
     const files = await readTree(dir);
     lacks(files["a.ts"], "function helper");
     lacks(files["a.ts"], "const keep");
@@ -140,9 +140,9 @@ describe("typescript-extract", () => {
   });
 });
 
-describe("typescript-lift-out", () => {
+describe("lift-out", () => {
   const lift = (dir: string, args: string[]) =>
-    main(["typescript-lift-out", "--file", "nested.ts", "--in", "outer", ...args], dir);
+    main(["lift-out", "--file", "nested.ts", "--in", "outer", ...args], dir);
 
   test("lifts a nested function to module level, dedented, above its parent", async () => {
     const dir = await workspace("simple");
@@ -174,7 +174,7 @@ describe("typescript-lift-out", () => {
         "",
       ].join("\n"),
     });
-    await main(["typescript-lift-out", "--file", "documented.ts", "--in", "outer", "--symbol", "helper"], dir);
+    await main(["lift-out", "--file", "documented.ts", "--in", "outer", "--symbol", "helper"], dir);
     assert.equal(
       (await readTree(dir))["documented.ts"],
       [
@@ -235,7 +235,7 @@ describe("typescript-lift-out", () => {
     const dir = await workspace("simple");
     const report = (await lift(dir, ["--symbol", "double", "--to", "math.ts"])) as OkReport;
     assertReport(report);
-    assert.equal(report.subject, "refactor(typescript-lift-out): outer › double → math.ts in nested.ts");
+    assert.equal(report.subject, "refactor(lift-out): outer › double → math.ts in nested.ts");
     assert.equal(report.summary, "Lifted `double` out of `outer` in nested.ts and moved it to math.ts.");
     const files = await readTree(dir);
     contains(files["math.ts"], "export function double(x: number)");
@@ -257,12 +257,12 @@ describe("typescript-lift-out", () => {
   });
 });
 
-describe("typescript-move-file", () => {
+describe("move-file", () => {
   test("moves a file, rewriting its own relative imports", async () => {
     const dir = await workspace("simple");
-    const report = (await main(["typescript-move-file", "--file", "b.ts", "--to", "sub/b.ts"], dir)) as OkReport;
+    const report = (await main(["move-file", "--file", "b.ts", "--to", "sub/b.ts"], dir)) as OkReport;
     assertReport(report);
-    assert.equal(report.subject, "refactor(typescript-move-file): b.ts → sub/b.ts");
+    assert.equal(report.subject, "refactor(move-file): b.ts → sub/b.ts");
     assert.match(report.summary, /^Moved b\.ts to sub\/b\.ts(, updating the imports of \d+ other files?)?\.$/);
     const files = await readTree(dir);
     assert.equal(files["b.ts"], undefined);
@@ -271,7 +271,7 @@ describe("typescript-move-file", () => {
 
   test("importers follow a moved module", async () => {
     const dir = await workspace("simple");
-    await main(["typescript-move-file", "--file", "a.ts", "--to", "lib/a.ts"], dir);
+    await main(["move-file", "--file", "a.ts", "--to", "lib/a.ts"], dir);
     const files = await readTree(dir);
     assert.equal(files["a.ts"], undefined);
     contains(files["b.ts"], 'from "./lib/a"');
@@ -282,7 +282,7 @@ describe("typescript-move-file", () => {
 
   test("paths aliases inside the project are rewritten", async () => {
     const dir = await workspace("paths");
-    await main(["typescript-move-file", "--file", "src/util.ts", "--to", "src/lib/util.ts"], dir);
+    await main(["move-file", "--file", "src/util.ts", "--to", "src/lib/util.ts"], dir);
     const files = await readTree(dir);
     assert.equal(files["src/lib/util.ts"], "export function util() {}\n");
     contains(files["src/main.ts"], 'from "@/lib/util"');
@@ -290,23 +290,23 @@ describe("typescript-move-file", () => {
 
   test("refuses an existing target", async () => {
     const dir = await workspace("simple");
-    const err = await rejects(main(["typescript-move-file", "--file", "b.ts", "--to", "a.ts"], dir));
+    const err = await rejects(main(["move-file", "--file", "b.ts", "--to", "a.ts"], dir));
     assert.equal(err.code, "REFACTOR_UNAVAILABLE");
   });
 });
 
-describe("typescript-organize-imports", () => {
+describe("organize-imports", () => {
   test("merges, sorts and drops unused imports in matching files", async () => {
     const dir = await workspace("simple", {
       "messy.ts": 'import { keep, foo } from "./a";\nimport { helper } from "./a";\n\nexport const m = foo() + keep;\n',
     });
-    const report = await main(["typescript-organize-imports", "--files", "messy.ts"], dir);
+    const report = await main(["organize-imports", "--files", "messy.ts"], dir);
     assertReport(report);
     assert.deepEqual(report, {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "sweep",
-      subject: "sweep(typescript-organize-imports): messy.ts",
+      subject: "sweep(organize-imports): messy.ts",
       summary: "Organized the imports of 1 file:\n  messy.ts",
     });
     assert.equal((await readTree(dir))["messy.ts"], 'import { foo, keep } from "./a";\n\nexport const m = foo() + keep;\n');
@@ -315,17 +315,17 @@ describe("typescript-organize-imports", () => {
   test("a file with nothing to organize is left as is", async () => {
     const dir = await workspace("simple");
     const before = await readTree(dir);
-    await main(["typescript-organize-imports", "--files", "*.tsx"], dir);
+    await main(["organize-imports", "--files", "*.tsx"], dir);
     assert.deepEqual(await readTree(dir), before);
   });
 
   test("globs that match no file are NO_CHANGES", async () => {
     const dir = await workspace("simple");
-    assert.equal((await rejects(main(["typescript-organize-imports", "--files", "nope/**"], dir))).code, "NO_CHANGES");
+    assert.equal((await rejects(main(["organize-imports", "--files", "nope/**"], dir))).code, "NO_CHANGES");
   });
 });
 
-describe("typescript-organize-imports --files matching", () => {
+describe("organize-imports --files matching", () => {
   // Unsorted everywhere, so a file changes exactly when it was selected.
   const MESSY = 'import { b, a } from "x";\nexport const v = a + b;\n';
   const FILES = ["a.ts", "b.ts", "c.tsx", "lib/w.ts", "src/x.ts", "src/deep/y.tsx", "src/.hidden.ts", ".dot/z.ts", "node_modules/m.ts"];
@@ -337,7 +337,7 @@ describe("typescript-organize-imports --files matching", () => {
         await mkdir(dirname(join(dir, file)), { recursive: true });
         await writeFile(join(dir, file), MESSY);
       }
-      await main(["typescript-organize-imports", "--files", globs], dir);
+      await main(["organize-imports", "--files", globs], dir);
       const after = await readTree(dir);
       return Object.keys(after)
         .filter((file) => after[file] !== MESSY)
@@ -369,7 +369,7 @@ describe("main", () => {
 
   test("an unknown flag is INVALID_ARGS", async () => {
     const dir = await workspace("simple");
-    assert.equal((await rejects(main(["typescript-rename", "--nope", "x"], dir))).code, "INVALID_ARGS");
+    assert.equal((await rejects(main(["rename", "--nope", "x"], dir))).code, "INVALID_ARGS");
   });
 });
 
@@ -394,16 +394,16 @@ describe("bin", () => {
 
   test("runs in the working directory and prints the report as the last line", async () => {
     const dir = await workspace("simple");
-    const { code, last } = await bin(dir, ["typescript-rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]);
+    const { code, last } = await bin(dir, ["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]);
     assert.equal(code, 0);
     assertReport(last);
-    assert.equal((last as OkReport).subject, "refactor(typescript-rename): foo → bar in a.ts");
+    assert.equal((last as OkReport).subject, "refactor(rename): foo → bar in a.ts");
     contains((await readTree(dir))["a.ts"], "export function bar()");
   });
 
   test("a failure exits 1 with the error report", async () => {
     const dir = await workspace("simple");
-    const { code, last } = await bin(dir, ["typescript-rename", "--file", "a.ts", "--symbol", "nope", "--to", "bar"]);
+    const { code, last } = await bin(dir, ["rename", "--file", "a.ts", "--symbol", "nope", "--to", "bar"]);
     assert.equal(code, 1);
     assertReport(last);
     assert.deepEqual(last, {

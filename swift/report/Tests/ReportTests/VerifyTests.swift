@@ -139,14 +139,14 @@ private func exampleRange() -> [CommitVerification] {
   let ts = "localhost/jig/typescript:local@sha256:" + String(repeating: "3", count: 64)
   let prettier = "localhost/jig/prettier:local@sha256:" + String(repeating: "5", count: 64)
   let rename = RecordedCommand(
-    image: ts, args: ["typescript-rename", "--file", "src/orders.ts", "--symbol", "sendEmail", "--to", "sendMail"],
-    kind: "refactor", subject: "refactor(typescript-rename): sendEmail → sendMail in src/orders.ts")
+    image: ts, args: ["rename", "--file", "src/orders.ts", "--symbol", "sendEmail", "--to", "sendMail"],
+    kind: "refactor", subject: "refactor(rename): sendEmail → sendMail in src/orders.ts")
   let format = RecordedCommand(image: prettier, args: ["prettier"], kind: "sweep", subject: "sweep(format): src/**")
   let reworded = RecordedCommand(
     image: prettier, args: ["prettier"], kind: "sweep", subject: "sweep(format): tidy the sources")
   let gone = RecordedCommand(
-    image: ts, args: ["typescript-rename", "--file", "src/gone.ts", "--symbol", "x", "--to", "y"], kind: "refactor",
-    subject: "refactor(typescript-rename): x → y in src/gone.ts")
+    image: ts, args: ["rename", "--file", "src/gone.ts", "--symbol", "x", "--to", "y"], kind: "refactor",
+    subject: "refactor(rename): x → y in src/gone.ts")
   var invalid: RefactorError?
   do { _ = try parseRecordedCommand(json: "{", kind: "", subject: "") } catch let e as RefactorError {
     invalid = e

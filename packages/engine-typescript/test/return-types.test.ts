@@ -6,7 +6,7 @@ import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
 
 const infer = (dir: string, files: string, ...extra: string[]) =>
-  main(["typescript-infer-return-types", "--files", files, ...extra], dir);
+  main(["infer-return-types", "--files", files, ...extra], dir);
 
 /** The `function: type` lines the summary lists under its first line, by function. */
 function types(ok: OkReport): Record<string, string> {
@@ -19,14 +19,14 @@ function types(ok: OkReport): Record<string, string> {
   return out;
 }
 
-describe("typescript-infer-return-types on examples/infer-return-types", () => {
+describe("infer-return-types on examples/infer-return-types", () => {
   test("exported functions and methods gain the inferred types; the rest is skipped or listed", async () => {
     const dir = await workspace("examples/infer-return-types");
     const before = await readTree(dir);
     const report = await infer(dir, "src/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(typescript-infer-return-types): src/**");
+    assert.equal(ok.subject, "sweep(infer-return-types): src/**");
     assert.equal(ok.kind, "sweep");
     assert.deepEqual(types(ok), {
       "src/orders.ts#OrderService.add": "number",
@@ -81,7 +81,7 @@ describe("typescript-infer-return-types on examples/infer-return-types", () => {
     const dir = await workspace("examples/infer-return-types");
     const ok = (await infer(dir, "src/orders.ts", "--exported-only", "false")) as OkReport;
     assertReport(ok);
-    assert.equal(ok.subject, "sweep(typescript-infer-return-types): src/orders.ts (including functions that are not exported)");
+    assert.equal(ok.subject, "sweep(infer-return-types): src/orders.ts (including functions that are not exported)");
     const found = types(ok);
     assert.equal(found["src/orders.ts#normalize"], "string");
     assert.equal(found["src/orders.ts#double"], "number");

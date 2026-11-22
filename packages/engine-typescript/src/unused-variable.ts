@@ -129,7 +129,7 @@ function listItemSpan(sf: ts.SourceFile, items: readonly ts.Node[], index: numbe
 type Plan = { span: Span; newText: string; whole: boolean };
 
 export const removeUnusedVariableAction: Action<RemoveUnusedVariableParams, TsEngine> = {
-  id: "typescript-remove-unused-variable",
+  id: "remove-unused-variable",
   kind: "refactor",
   summary: "Removes the unused variable or destructured element at a position.",
   flags: [

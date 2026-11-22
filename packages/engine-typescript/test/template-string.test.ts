@@ -6,15 +6,15 @@ import { main } from "../src/index.ts";
 import { rejects, workspace } from "./helpers.ts";
 
 const FIXTURE = "examples/template-string";
-const run = async (dir: string, at: string) => (await main(["typescript-template-string", "--at", at], dir)) as OkReport;
+const run = async (dir: string, at: string) => (await main(["template-string", "--at", at], dir)) as OkReport;
 
-describe("typescript-template-string", () => {
+describe("template-string", () => {
   test("`\"Hi \" + name + \"!\"` becomes a template literal; report has a summary", async () => {
     const dir = await workspace(FIXTURE);
     const report = await run(dir, "src/greet.ts:2");
     assertReport(report);
     assert.ok((await readTree(dir))["src/greet.ts"]?.includes("return `Hi ${name}!`;"));
-    assert.equal(report.subject, "refactor(typescript-template-string): src/greet.ts:2");
+    assert.equal(report.subject, "refactor(template-string): src/greet.ts:2");
     assert.equal(report.kind, "refactor");
     assert.equal(
       report.summary,
@@ -73,7 +73,7 @@ describe("typescript-template-string", () => {
     for (const at of ["src/greet.ts", "src/greet.ts:x", "src/greet.ts:0", "src/greet.ts:2:0", "src/greet.ts:2:200","src/greet.ts:99"]) {
       assert.equal((await rejects(run(dir, at))).code, "INVALID_ARGS", at);
     }
-    await rejects(main(["typescript-template-string"], dir));
+    await rejects(main(["template-string"], dir));
   });
 
   const OBJ = [

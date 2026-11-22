@@ -85,7 +85,7 @@ private func success(_ stdout: String) -> Report? {
   #expect(
     complete
       == Report(
-        kind: .refactor, subject: "refactor(typescript-rename): foo → bar in src/a.ts",
+        kind: .refactor, subject: "refactor(rename): foo → bar in src/a.ts",
         summary: "Renamed `foo` to `bar` in src/a.ts (3 references in 2 files)."))
   let failed = failure(try example("report-failure.json"), exitCode: 1)
   #expect(failed.code == .REFACTOR_UNAVAILABLE)

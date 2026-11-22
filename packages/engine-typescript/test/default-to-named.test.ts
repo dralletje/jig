@@ -8,16 +8,16 @@ import { changed, errors, rejects, workspace } from "./helpers.ts";
 const EXAMPLE = "examples/default-to-named";
 
 const run = (dir: string, files: string, keep?: string) =>
-  main(["typescript-default-to-named", "--files", files, ...(keep ? ["--keep", keep] : [])], dir);
+  main(["default-to-named", "--files", files, ...(keep ? ["--keep", keep] : [])], dir);
 
-describe("typescript-default-to-named on examples/default-to-named", () => {
+describe("default-to-named on examples/default-to-named", () => {
   test("function, class, const and specifier defaults become named; importers and re-exports follow; skipped files listed as not handled", async () => {
     const dir = await workspace(EXAMPLE);
     const before = await readTree(dir);
     const report = await run(dir, "src/**", "src/routes/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(typescript-default-to-named): src/** (keeping src/routes/**)");
+    assert.equal(ok.subject, "sweep(default-to-named): src/** (keeping src/routes/**)");
     assert.equal(ok.kind, "sweep");
     assert.equal(
       ok.summary,
@@ -131,7 +131,7 @@ describe("typescript-default-to-named on examples/default-to-named", () => {
   });
 });
 
-describe("typescript-default-to-named import forms", () => {
+describe("default-to-named import forms", () => {
   const EXTRA = {
     "src/x/widget.ts": "export default function widget(): number {\n  return 1;\n}\n",
     "src/x/user-a.ts": 'import w from "./widget";\n\nexport const a = w();\n',
@@ -205,7 +205,7 @@ describe("typescript-default-to-named import forms", () => {
   });
 });
 
-describe("typescript-default-to-named anonymous defaults", () => {
+describe("default-to-named anonymous defaults", () => {
   test("an anonymous default is listed as not handled when other files were converted", async () => {
     const dir = await workspace(EXAMPLE);
     const report = (await run(dir, "src/pages/home.ts,src/lib/format.ts")) as OkReport;
@@ -228,7 +228,7 @@ describe("typescript-default-to-named anonymous defaults", () => {
   });
 });
 
-describe("typescript-default-to-named JavaScript and mock users", () => {
+describe("default-to-named JavaScript and mock users", () => {
   const TS_MODULES = {
     "src/j/widget.ts": "export default function widget(): number {\n  return 1;\n}\n",
     "src/j/ok.ts": "export default function ok(): number {\n  return 2;\n}\n",

@@ -13,7 +13,7 @@ import { errors, rejects, workspace } from "./helpers.ts";
 
 const EXAMPLE = "examples/inline-function";
 
-const inline = (dir: string, ...args: string[]) => main(["typescript-inline-function", ...args], dir);
+const inline = (dir: string, ...args: string[]) => main(["inline-function", ...args], dir);
 
 /** The (1-based) line of the first line of `file` that contains `needle`. */
 function lineOf(text: string | undefined, needle: string): number {
@@ -41,10 +41,10 @@ async function refused(dir: string, ...args: string[]): Promise<string> {
   return err.message;
 }
 
-describe("typescript-inline-function: single-expression functions", () => {
+describe("inline-function: single-expression functions", () => {
   test("definition mode unpacks every call, adds parentheses where needed, and removes the declaration", async () => {
     const { report, text } = await unpack("src/single.ts", "--symbol", "square");
-    assert.equal(report.subject, "refactor(typescript-inline-function): unpack square everywhere in src/single.ts and remove it");
+    assert.equal(report.subject, "refactor(inline-function): unpack square everywhere in src/single.ts and remove it");
     assert.equal(report.kind, "refactor");
     assert.equal(
       text,
@@ -89,12 +89,12 @@ describe("typescript-inline-function: single-expression functions", () => {
     assert.match(text, /const s = side \* side;/);
     assert.match(text, /s \+ square\(w\)/);
     assert.match(text, /1 \+ square\(v\) \* 2/);
-    assert.equal(report.subject, `refactor(typescript-inline-function): unpack square at src/single.ts:${line}`);
+    assert.equal(report.subject, `refactor(inline-function): unpack square at src/single.ts:${line}`);
     assert.equal(report.summary, "Unpacked a call to `square` in src/single.ts#describe. `square` stays declared.");
   });
 });
 
-describe("typescript-inline-function: multi-statement functions", () => {
+describe("inline-function: multi-statement functions", () => {
   test("unpacked at const x = f(...), an expression statement and return f(...); every local clash is renamed", async () => {
     const { text, report } = await unpack("src/multi.ts", "--symbol", "summarize");
     assert.equal(
@@ -147,7 +147,7 @@ describe("typescript-inline-function: multi-statement functions", () => {
   });
 });
 
-describe("typescript-inline-function: argument evaluation", () => {
+describe("inline-function: argument evaluation", () => {
   test("a side-effecting argument used twice is hoisted into one const", async () => {
     const { text } = await unpack("src/hoist.ts", "--symbol", "twice");
     assert.match(text, /export function ids\(\): number \{\n  const n: number = next\(\);\n  return n \+ n;\n\}/);
@@ -171,7 +171,7 @@ describe("typescript-inline-function: argument evaluation", () => {
   });
 });
 
-describe("typescript-inline-function: free variables", () => {
+describe("inline-function: free variables", () => {
   test("a call where a free variable is shadowed is refused; the other call can be unpacked on its own", async () => {
     const dir = await workspace(EXAMPLE);
     const blocked = await refused(dir, "--file", "src/shadow.ts", "--symbol", "withTax");
@@ -185,7 +185,7 @@ describe("typescript-inline-function: free variables", () => {
   });
 });
 
-describe("typescript-inline-function: refusals", () => {
+describe("inline-function: refusals", () => {
   const cases: [string, string, RegExp][] = [
     ["fact", "const f = fact(5)", /is recursive/],
     ["whoAmI", "const w = whoAmI()", /uses `this`/],
@@ -260,7 +260,7 @@ async function edgeText(source: string, ...args: string[]): Promise<string> {
   return (await readTree(dir))["src/edge.ts"] as string;
 }
 
-describe("typescript-inline-function: precedence and meaning at the call site", () => {
+describe("inline-function: precedence and meaning at the call site", () => {
   test("optional chains are wrapped so the chain does not swallow the rest", async () => {
     const text = await edgeText(
       "const pick = (o: { a?: { b: number } }) => o.a?.b;\nexport const f = (o: { a?: { b: number } }) => pick(o)?.toFixed();\n",
@@ -509,7 +509,7 @@ describe("typescript-inline-function: precedence and meaning at the call site", 
   });
 });
 
-describe("typescript-inline-function: report", () => {
+describe("inline-function: report", () => {
   test("the summary is the same when unrelated code moves above the call", async () => {
     const original = await workspace(EXAMPLE);
     const moved = await workspace(EXAMPLE, {
@@ -554,7 +554,7 @@ async function sameBehaviour(source: string, expected: unknown, ...args: string[
   return (await readTree(dir))["src/edge.ts"] as string;
 }
 
-describe("typescript-inline-function: a call that starts a statement (ASI)", () => {
+describe("inline-function: a call that starts a statement (ASI)", () => {
   test("a replacement starting with ( does not join the previous line", async () => {
     const text = await sameBehaviour(
       [
@@ -702,7 +702,7 @@ describe("typescript-inline-function: a call that starts a statement (ASI)", () 
   });
 });
 
-describe("typescript-inline-function: stability of identifier arguments", () => {
+describe("inline-function: stability of identifier arguments", () => {
   test("a global declared with `declare var` is not treated as unchangeable", async () => {
     const text = await sameBehaviour(
       [
@@ -758,7 +758,7 @@ describe("typescript-inline-function: stability of identifier arguments", () => 
   });
 });
 
-describe("typescript-inline-function: syntax and grammar at the call", () => {
+describe("inline-function: syntax and grammar at the call", () => {
   test("`in` in a for initializer is parenthesized", async () => {
     const text = await sameBehaviour(
       [
@@ -814,7 +814,7 @@ describe("typescript-inline-function: syntax and grammar at the call", () => {
   });
 });
 
-describe("typescript-inline-function: comments and directives", () => {
+describe("inline-function: comments and directives", () => {
   test("a @ts-ignore above the final return is not dropped silently", async () => {
     const { dir } = await edge(
       [

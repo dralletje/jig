@@ -1,22 +1,22 @@
-// typescript-subpath-imports end to end, on its own example repo.
+// subpath-imports end to end, on its own example repo.
 import Foundation
 import Testing
 
-@Suite("typescript-subpath-imports (docker)", .serialized, .enabled(if: dockerAvailable, dockerMissing), .builtOnce)
+@Suite("subpath-imports (docker)", .serialized, .enabled(if: dockerAvailable, dockerMissing), .builtOnce)
 struct SubpathImportsTests {
   let temp = TempDirs()
 
   @Test("subpath-imports in examples/subpath-imports is a sweep; a second run is NO_CHANGES", .timeLimit(.minutes(2)))
   func exampleSubpathImports() throws {
     let dir = try temp.fixture("examples/subpath-imports")
-    let args = ["typescript-subpath-imports", "--files", "src/**"]
+    let args = ["subpath-imports", "--files", "src/**"]
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.kind == "sweep")
     #expect(!result.summary.contains("Not handled"), "\(result.summary)")
     #expect(result.filesChanged == [
       "package.json", "src/components/Total.ts", "src/lib/format.ts", "src/lib/index.ts", "src/main.ts",
     ])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript-subpath-imports): src/**\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(subpath-imports): src/**\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))
     let tree = try readTree(dir)

@@ -176,14 +176,14 @@ function dedent(block: string, indent: string): string {
 }
 
 export const liftOutAction: Action<LiftParams, TsEngine> = {
-  id: "typescript-lift-out",
+  id: "lift-out",
   kind: "refactor",
   summary: "Lifts a nested function or const to module level, with the locals it uses.",
   flags: [
     { name: "--file", type: "path", required: true, description: "The file the nested declaration is in." },
     { name: "--in", type: "text", required: true, description: "The top-level function it is nested in." },
     { name: "--symbol", type: "text", required: true, description: "The nested function or const to lift out." },
-    { name: "--to", type: "path", required: false, description: "Another file to move it to, the way typescript-extract does. Without it, it stays in --file at module level." },
+    { name: "--to", type: "path", required: false, description: "Another file to move it to, the way extract does. Without it, it stays in --file at module level." },
   ],
   parseParams(raw) {
     return {
@@ -230,7 +230,7 @@ export const liftOutAction: Action<LiftParams, TsEngine> = {
     if (clashes.length > 0) {
       throw unavailable(
         `${clashes.join(", ")} already exist(s) at module level (or as a global) in ${p.file}. Rename the nested ` +
-          `declaration first (typescript-rename only renames top-level ones, so by hand), then run again.`,
+          `declaration first (rename only renames top-level ones, so by hand), then run again.`,
       );
     }
     const file = engine.relPath(p.file);

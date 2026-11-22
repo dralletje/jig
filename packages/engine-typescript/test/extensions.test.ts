@@ -5,7 +5,7 @@ import { assertReport, readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
 
-const addExtensions = (dir: string, files: string) => main(["typescript-add-import-extensions", "--files", files], dir);
+const addExtensions = (dir: string, files: string) => main(["add-import-extensions", "--files", files], dir);
 
 /** `before` with each `[old, new]` replaced once (and asserted to be there). */
 function edited(before: string | undefined, ...replacements: [string, string][]): string {
@@ -35,14 +35,14 @@ const WEBAPP_TSCONFIG_AFTER = `{
 }
 `;
 
-describe("typescript-add-import-extensions on examples/webapp", () => {
+describe("add-import-extensions on examples/webapp", () => {
   test("relative imports, re-exports and dynamic imports get the file's extension; the tsconfig allows it", async () => {
     const dir = await workspace("examples/webapp");
     const before = await readTree(dir);
     const report = await addExtensions(dir, "src/**");
     assertReport(report);
     const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(typescript-add-import-extensions): src/**");
+    assert.equal(ok.subject, "sweep(add-import-extensions): src/**");
     assert.match(ok.summary, /^Added extensions to \d+ relative imports in 8 files, and set allowImportingTsExtensions in tsconfig\.json:\n  src\/lib\/index\.ts\n/);
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), [
@@ -200,7 +200,7 @@ describe("typescript-add-import-extensions on examples/webapp", () => {
   });
 });
 
-describe("typescript-add-import-extensions on other examples", () => {
+describe("add-import-extensions on other examples", () => {
   test("examples/react-app: .tsx targets", async () => {
     const dir = await workspace("examples/react-app");
     const before = await readTree(dir);

@@ -26,7 +26,7 @@ let repoRoot: URL = URL(fileURLWithPath: #filePath)
 let TS = "localhost/jig/typescript:local"
 let PRETTIER = "localhost/jig/prettier:local"
 let PROBE = "localhost/jig/probe:local"
-let RENAME = ["typescript-rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]
+let RENAME = ["rename", "--file", "a.ts", "--symbol", "foo", "--to", "bar"]
 
 // MARK: - Processes
 

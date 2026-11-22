@@ -24,7 +24,7 @@ export function applyFileMove(engine: TsEngine, from: string, to: string): void 
 export type MoveFileParams = { file: string; to: string };
 
 export const moveFileAction: Action<MoveFileParams, TsEngine> = {
-  id: "typescript-move-file",
+  id: "move-file",
   kind: "refactor",
   summary: "Moves or renames a file, rewriting the imports of and in it.",
   flags: [
@@ -58,7 +58,7 @@ export const moveFileAction: Action<MoveFileParams, TsEngine> = {
 export type OrganizeImportsParams = { files: string[] };
 
 export const organizeImportsAction: Action<OrganizeImportsParams, TsEngine> = {
-  id: "typescript-organize-imports",
+  id: "organize-imports",
   kind: "sweep",
   summary: "Merges, sorts and drops unused imports.",
   flags: [

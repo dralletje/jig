@@ -6,7 +6,7 @@ import { main } from "../src/index.ts";
 import { rejects, workspace } from "./helpers.ts";
 
 const EXAMPLE = "examples/remove-unused-variable";
-const ID = "typescript-remove-unused-variable";
+const ID = "remove-unused-variable";
 
 /** Writes `source` as src/t.ts into the example, removes the variable at `at`, returns the new text and report. */
 async function remove(source: string, at: string): Promise<{ text: string; report: OkReport }> {

@@ -7,7 +7,7 @@
       "verdict": "identical",
       "command": {
         "image": "localhost/jig/typescript:local@sha256:3333333333333333333333333333333333333333333333333333333333333333",
-        "args": ["typescript-rename", "--file", "src/orders.ts", "--symbol", "sendEmail", "--to", "sendMail"]
+        "args": ["rename", "--file", "src/orders.ts", "--symbol", "sendEmail", "--to", "sendMail"]
       },
       "filesDiffering": [],
       "mismatches": []
@@ -48,7 +48,7 @@
       "verdict": "failed",
       "command": {
         "image": "localhost/jig/typescript:local@sha256:3333333333333333333333333333333333333333333333333333333333333333",
-        "args": ["typescript-rename", "--file", "src/gone.ts", "--symbol", "x", "--to", "y"]
+        "args": ["rename", "--file", "src/gone.ts", "--symbol", "x", "--to", "y"]
       },
       "code": "SYMBOL_NOT_FOUND",
       "instructions": "No top-level x in src/gone.ts."

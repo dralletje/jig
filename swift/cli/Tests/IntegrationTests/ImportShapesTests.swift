@@ -1,4 +1,4 @@
-// typescript-namespace-to-named and typescript-import-type through the real typescript image.
+// namespace-to-named and import-type through the real typescript image.
 import Foundation
 import Testing
 
@@ -9,12 +9,12 @@ struct ImportShapesTests {
   @Test("namespace-to-named is a partial sweep (a namespace used as a value is left alone); a second run is NO_CHANGES", .timeLimit(.minutes(2)))
   func namespaceToNamed() throws {
     let dir = try temp.fixture("examples/import-shapes")
-    let args = ["typescript-namespace-to-named", "--files", "src/**"]
+    let args = ["namespace-to-named", "--files", "src/**"]
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.kind == "sweep")
     #expect(result.filesChanged == ["src/clash.ts", "src/sums.ts"])
-    #expect(result.subject == "sweep(typescript-namespace-to-named): src/**")
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript-namespace-to-named): src/**\n")
+    #expect(result.subject == "sweep(namespace-to-named): src/**")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(namespace-to-named): src/**\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))
     #expect(
@@ -34,11 +34,11 @@ struct ImportShapesTests {
   @Test("import-type splits mixed imports and leaves side-effect imports; a second run is NO_CHANGES", .timeLimit(.minutes(2)))
   func importType() throws {
     let dir = try temp.fixture("examples/import-shapes")
-    let args = ["typescript-import-type", "--files", "src/**"]
+    let args = ["import-type", "--files", "src/**"]
     let result = try runImage(repo: dir, image: TS, args: args)
     #expect(result.kind == "sweep")
     #expect(result.filesChanged == ["src/mixed.ts", "src/types-only.ts"])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(typescript-import-type): src/**\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "sweep(import-type): src/**\n")
     let body = try git(dir, ["log", "-1", "--format=%B"])
     #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))
     #expect(!result.summary.contains("Not handled"))

@@ -7,8 +7,8 @@ import { PREFERENCES, byString, diagnostics, list as globList, introduced, match
 import type { NotHandled } from "./shared.ts";
 
 /**
- * Two sweeps over the shape of imports: typescript-namespace-to-named (`import * as x` → `import { a, b }`,
- * TypeScript's "Convert namespace import to named imports") and typescript-import-type (imports and
+ * Two sweeps over the shape of imports: namespace-to-named (`import * as x` → `import { a, b }`,
+ * TypeScript's "Convert namespace import to named imports") and import-type (imports and
  * specifiers that are only types become `import type` / `type` specifiers, TypeScript's fix-all for
  * type-only imports).
  */
@@ -26,7 +26,7 @@ function namespaceOf(t: Ts, node: ts.Node): ts.NamespaceImport | undefined {
   return bindings && t.isNamespaceImport(bindings) ? bindings : undefined;
 }
 
-// ---- typescript-namespace-to-named ----
+// ---- namespace-to-named ----
 
 type Analysis = { skip: string | null };
 
@@ -92,7 +92,7 @@ type Converted = { index: number; module: string; namespace: string };
 type Skipped = { index: number; name: string; reason: string; instructions?: string };
 
 export const namespaceToNamedAction: Action<NamespaceToNamedParams, TsEngine> = {
-  id: "typescript-namespace-to-named",
+  id: "namespace-to-named",
   kind: "sweep",
   summary: "Turns import * as x into named imports where every use is x.name.",
   flags: [
@@ -204,7 +204,7 @@ export const namespaceToNamedAction: Action<NamespaceToNamedParams, TsEngine> = 
   },
 };
 
-// ---- typescript-import-type ----
+// ---- import-type ----
 
 const FIX_ID = "convertToTypeOnlyImport";
 /** "'X' is a type and must be imported using a type-only import when 'verbatimModuleSyntax' is enabled", and the same for a type-only declaration. */
@@ -330,7 +330,7 @@ function typeOnlyFixes(
 export type ImportTypeParams = { files: string[] };
 
 export const importTypeAction: Action<ImportTypeParams, TsEngine> = {
-  id: "typescript-import-type",
+  id: "import-type",
   kind: "sweep",
   summary: "Turns imports used only as types into import type.",
   flags: [

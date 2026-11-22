@@ -16,11 +16,11 @@ dist/jig [--sandbox docker|rootlesskit] <image> <action> --help    # one action'
 dist/jig --help                                                    # this usage
 
 dist/jig localhost/jig/fs:local --help
-dist/jig --repo <repo> localhost/jig/typescript:local typescript-rename --file src/a.ts --symbol foo --to bar
-dist/jig --repo <repo> localhost/jig/typescript:local typescript-extract --file src/a.ts --symbols foo,keep --to src/foo.ts
-dist/jig --repo <repo> localhost/jig/typescript:local typescript-lift-out --file src/a.ts --in outer --symbol inner [--to src/inner.ts]
-dist/jig --repo <repo> localhost/jig/typescript:local typescript-move-file --file src/a.ts --to src/lib/a.ts
-dist/jig --repo <repo> localhost/jig/typescript:local typescript-organize-imports --files "src/**/*.ts,src/**/*.tsx"
+dist/jig --repo <repo> localhost/jig/typescript:local rename --file src/a.ts --symbol foo --to bar
+dist/jig --repo <repo> localhost/jig/typescript:local extract --file src/a.ts --symbols foo,keep --to src/foo.ts
+dist/jig --repo <repo> localhost/jig/typescript:local lift-out --file src/a.ts --in outer --symbol inner [--to src/inner.ts]
+dist/jig --repo <repo> localhost/jig/typescript:local move-file --file src/a.ts --to src/lib/a.ts
+dist/jig --repo <repo> localhost/jig/typescript:local organize-imports --files "src/**/*.ts,src/**/*.tsx"
 dist/jig --repo <repo> localhost/jig/prettier:local format --files "src/**"
 dist/jig --repo <repo> localhost/jig/codemod-react:local codemod --transform rename-unsafe-lifecycles --files "src/**"
 dist/jig --repo <repo> localhost/jig/fs:local move --from src/old --to src/new
@@ -98,7 +98,7 @@ The pinned reference recorded in `Refactor-Command` is what the sandbox resolved
 a `localhost/` image's local ID), so a commit made with one replays with the other:
 
 ```sh
-dist/jig --repo <repo> --sandbox rootlesskit localhost/jig/typescript:local typescript-rename --file src/a.ts --symbol foo --to bar
+dist/jig --repo <repo> --sandbox rootlesskit localhost/jig/typescript:local rename --file src/a.ts --symbol foo --to bar
 ```
 
 A sandbox this machine cannot run fails with `INTERNAL` and instructions saying what to install
@@ -163,11 +163,11 @@ config. Nothing is written to the work tree, index or refs before the final fast
 ## What a commit looks like
 
 ```
-refactor(typescript-rename): foo → bar in a.ts
+refactor(rename): foo → bar in a.ts
 
 Renamed `foo` to `bar` in a.ts (9 places in 4 files).
 
-Refactor-Command: {"args":["typescript-rename","--file","a.ts","--symbol","foo","--to","bar"],"image":"localhost/jig/typescript:local@sha256:<id>"}
+Refactor-Command: {"args":["rename","--file","a.ts","--symbol","foo","--to","bar"],"image":"localhost/jig/typescript:local@sha256:<id>"}
 Refactor-Kind: refactor
 Co-Authored-By: codemodder <codemodder@users.noreply.github.com>
 ```
@@ -304,7 +304,7 @@ Success (exit 0):
 ```json
 { "schema": "urn:jig:report:1", "ok": true,
   "kind": "refactor",
-  "subject": "refactor(typescript-rename): foo → bar in src/a.ts",
+  "subject": "refactor(rename): foo → bar in src/a.ts",
   "summary": "Renamed `foo` to `bar` in src/a.ts (3 references in 2 files)." }
 ```
 
@@ -335,9 +335,9 @@ The binary prints one JSON object on stdout and exits 0 on success, 1 on failure
 {"schema":"urn:jig:output:1","ok":true,
  "commit":"<sha>","parent":"<sha>",
  "image":"localhost/jig/typescript:local@sha256:<id>",
- "args":["typescript-rename","--file","a.ts","--symbol","foo","--to","bar"],
+ "args":["rename","--file","a.ts","--symbol","foo","--to","bar"],
  "kind":"refactor",
- "subject":"refactor(typescript-rename): foo → bar in a.ts",
+ "subject":"refactor(rename): foo → bar in a.ts",
  "summary":"Renamed `foo` to `bar` in a.ts (9 places in 4 files).",
  "filesChanged":["a.ts","b.ts","c.tsx","scripts/tool.ts"]}
 ```
@@ -436,9 +436,9 @@ commits:
 
 | Kind | Meaning | Actions |
 |---|---|---|
-| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `typescript-rename`, `typescript-extract`, `typescript-lift-out`, `typescript-move-file`, `typescript-remove-barrels`, `typescript-params-to-object`, `typescript-inline-function` (one call or the definition), `typescript-template-string`, `typescript-remove-unused-variable`, `typescript-convert-function` |
-| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `typescript-organize-imports`, `typescript-add-import-extensions`, `typescript-subpath-imports`, `typescript-default-to-named`, `typescript-infer-return-types`, `typescript-namespace-to-named`, `typescript-import-type`, `typescript-rename-files` |
-| `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `typescript-remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
+| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
+| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
+| `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
 The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(format): src/**`),
 the commit carries it in the `Refactor-Kind` trailer, and the binary's success JSON has it as `kind`.
@@ -520,21 +520,21 @@ catches what was missed.
   `extends` that cannot be resolved (an npm package, absent without `node_modules`) is ignored.
 - No workspace links, no `node_modules`, no other tsconfigs: in a monorepo, a rename in `packages/core`
   does not rewrite `packages/app`'s `@x/core` imports.
-- For the sweeps (`typescript-organize-imports` and the others that take `--files`), each matched file uses
+- For the sweeps (`organize-imports` and the others that take `--files`), each matched file uses
   its own nearest tsconfig the same way.
 
-## typescript-lift-out
+## lift-out
 
 Moves a function or `const` nested (at any depth) inside the top-level declaration `--in` up to module
 level, placing it right above that declaration and removing one level of indentation. **Every local it uses
 moves with it**, transitively and in source order. With `--to`, all of them then move into that file the
-way `typescript-extract` does, and the imports they use go with them. It all happens in one commit. It
+way `extract` does, and the imports they use go with them. It all happens in one commit. It
 refuses (`REFACTOR_UNAVAILABLE`) when:
 
 - it uses a local that cannot move: a parameter, a type parameter, `let`/`var`, or a `const` with side
   effects (named in the instructions). `this`/`arguments` used from an arrow function also count. Pass
   them as parameters first;
-- `--to` is given (or `typescript-extract` is used) and the moved code uses `import.meta`, whose meaning
+- `--to` is given (or `extract` is used) and the moved code uses `import.meta`, whose meaning
   depends on the file;
 - it is a `const` whose initializer is not a function or a literal (it could have side effects that
   would run at a different time);
@@ -554,43 +554,43 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 
 | Action | Flags | What it does; limits |
 |---|---|---|
-| `typescript-rename` | `--file --symbol --to [--kind]` | renames a top-level declaration and all its references in the project; top-level only, no references across packages |
-| `typescript-extract` | `--file --symbols a,b --to [--kind]` | moves top-level declarations to another file (TS "Move to file"), imports follow; refuses `import.meta`, re-exports not rewritten |
-| `typescript-lift-out` | `--file --in --symbol [--to]` | lifts a nested function or `const` to module level, with the locals it uses ([details](#typescript-lift-out)); refuses parameters, `let`/`var`, side effects, name clashes |
-| `typescript-move-file` | `--file --to` | moves or renames a file, rewriting imports, its own relative imports and tsconfig `include`/`files` (TS `getEditsForFileRename`); `--to` must be free |
-| `typescript-remove-barrels` | `--files` | imports through a barrel (an `index.ts` that only re-exports) come from the defining module, barrels nothing imports any more are deleted; a barrel imported by non-TypeScript files stays, other packages' barrels are left, re-export cycles are refused |
-| `typescript-params-to-object` | `--file --symbol` | a top-level function's positional parameters become one destructured object, every call passes an object (TS "Convert parameters to destructured object"); refuses overloads, no/rest/destructured parameters and uses that are not calls |
-| `typescript-inline-function` | `--file --symbol [--at]` | unpacks calls of a top-level function or arrow `const`. With `--at`, only that call (the declaration stays); without, every call, and the declaration goes. All or nothing; same module only, no generics, async, generators, recursion, `this`, early returns, optional/rest/default parameters; comments inside the body are not carried over |
-| `typescript-template-string` | `--at` | a `+` chain with a string literal becomes a template literal (TS "Convert to template string"); refuses operands that are not primitives (`valueOf` vs `toString`) and comments inside the chain |
-| `typescript-remove-unused-variable` | `--at` | removes the unused `const`/`let`/`var` or destructured element at the name; refuses parameters, catch/loop variables, exports, side-effecting initializers, and destructuring that could run code |
-| `typescript-convert-function` | `--at --to arrow\|function` | converts a function declaration or expression to a `const` arrow function, or the reverse; refuses `this`/`arguments`/generators/`new`/default exports, and uses before the `const` (only the same file is checked for hoisting) |
+| `rename` | `--file --symbol --to [--kind]` | renames a top-level declaration and all its references in the project; top-level only, no references across packages |
+| `extract` | `--file --symbols a,b --to [--kind]` | moves top-level declarations to another file (TS "Move to file"), imports follow; refuses `import.meta`, re-exports not rewritten |
+| `lift-out` | `--file --in --symbol [--to]` | lifts a nested function or `const` to module level, with the locals it uses ([details](#lift-out)); refuses parameters, `let`/`var`, side effects, name clashes |
+| `move-file` | `--file --to` | moves or renames a file, rewriting imports, its own relative imports and tsconfig `include`/`files` (TS `getEditsForFileRename`); `--to` must be free |
+| `remove-barrels` | `--files` | imports through a barrel (an `index.ts` that only re-exports) come from the defining module, barrels nothing imports any more are deleted; a barrel imported by non-TypeScript files stays, other packages' barrels are left, re-export cycles are refused |
+| `params-to-object` | `--file --symbol` | a top-level function's positional parameters become one destructured object, every call passes an object (TS "Convert parameters to destructured object"); refuses overloads, no/rest/destructured parameters and uses that are not calls |
+| `inline-function` | `--file --symbol [--at]` | unpacks calls of a top-level function or arrow `const`. With `--at`, only that call (the declaration stays); without, every call, and the declaration goes. All or nothing; same module only, no generics, async, generators, recursion, `this`, early returns, optional/rest/default parameters; comments inside the body are not carried over |
+| `template-string` | `--at` | a `+` chain with a string literal becomes a template literal (TS "Convert to template string"); refuses operands that are not primitives (`valueOf` vs `toString`) and comments inside the chain |
+| `remove-unused-variable` | `--at` | removes the unused `const`/`let`/`var` or destructured element at the name; refuses parameters, catch/loop variables, exports, side-effecting initializers, and destructuring that could run code |
+| `convert-function` | `--at --to arrow\|function` | converts a function declaration or expression to a `const` arrow function, or the reverse; refuses `this`/`arguments`/generators/`new`/default exports, and uses before the `const` (only the same file is checked for hoisting) |
 
 ### sweep
 
 | Action | Flags | What it does; limits |
 |---|---|---|
 | `format` (prettier image) | `--files` | formats the matching files with the repo's own prettier config, or prettier's defaults when there is none or it fails to load; config plugins are ignored |
-| `typescript-organize-imports` | `--files` | merges, sorts and drops unused imports (TS `organizeImports`) |
-| `typescript-add-import-extensions` | `--files` | relative imports, re-exports and `import("...")` get the real extension (`./a` to `./a.ts`, `./dir` to `./dir/index.ts`), and the tsconfig gets `allowImportingTsExtensions` when needed (it must have `noEmit` or `emitDeclarationOnly`); refuses a file that would gain errors |
-| `typescript-subpath-imports` | `--files [--alias @/]` | imports through a tsconfig `paths` alias become Node subpath imports (`#/x`) and the package.json gets `imports`; unresolved or outside-folder specifiers are left alone (named in the summary); `require()`, `import x = require()` and `.js` importers are not handled |
-| `typescript-default-to-named` | `--files [--keep globs]` | `export default` of a named function, class, interface or value becomes a named export and importers switch; anonymous defaults, `import()`/namespace/`require`/mock users and name clashes are left alone (named in the summary); JavaScript importers are only scanned syntactically |
-| `typescript-infer-return-types` | `--files [--exported-only true\|false]` | adds the inferred return type to functions without one (TS "Infer function return type"), exported ones only unless `false`; types holding an unwritten `any` or `import("...")`, or not in scope, are left alone (named in the summary) |
-| `typescript-namespace-to-named` | `--files` | `import * as x` becomes `import { a, b }` (TS "Convert namespace import to named imports"); only when every use is `x.name`, else left alone (named in the summary) |
-| `typescript-import-type` | `--files` | imports and specifiers used only as types become `import type` (TS type-only fix-all); a default import sharing its statement with named imports, or a file that would gain errors, is left alone (named in the summary) |
-| `typescript-rename-files` | `--files --case kebab\|camel\|pascal\|snake` | renames files to the case (the part before the first dot) with move-file's import rewriting; collisions, `index.*` and odd names are left alone (named in the summary), path strings outside imports (`vi.mock("./x")`) are not rewritten |
+| `organize-imports` | `--files` | merges, sorts and drops unused imports (TS `organizeImports`) |
+| `add-import-extensions` | `--files` | relative imports, re-exports and `import("...")` get the real extension (`./a` to `./a.ts`, `./dir` to `./dir/index.ts`), and the tsconfig gets `allowImportingTsExtensions` when needed (it must have `noEmit` or `emitDeclarationOnly`); refuses a file that would gain errors |
+| `subpath-imports` | `--files [--alias @/]` | imports through a tsconfig `paths` alias become Node subpath imports (`#/x`) and the package.json gets `imports`; unresolved or outside-folder specifiers are left alone (named in the summary); `require()`, `import x = require()` and `.js` importers are not handled |
+| `default-to-named` | `--files [--keep globs]` | `export default` of a named function, class, interface or value becomes a named export and importers switch; anonymous defaults, `import()`/namespace/`require`/mock users and name clashes are left alone (named in the summary); JavaScript importers are only scanned syntactically |
+| `infer-return-types` | `--files [--exported-only true\|false]` | adds the inferred return type to functions without one (TS "Infer function return type"), exported ones only unless `false`; types holding an unwritten `any` or `import("...")`, or not in scope, are left alone (named in the summary) |
+| `namespace-to-named` | `--files` | `import * as x` becomes `import { a, b }` (TS "Convert namespace import to named imports"); only when every use is `x.name`, else left alone (named in the summary) |
+| `import-type` | `--files` | imports and specifiers used only as types become `import type` (TS type-only fix-all); a default import sharing its statement with named imports, or a file that would gain errors, is left alone (named in the summary) |
+| `rename-files` | `--files --case kebab\|camel\|pascal\|snake` | renames files to the case (the part before the first dot) with move-file's import rewriting; collisions, `index.*` and odd names are left alone (named in the summary), path strings outside imports (`vi.mock("./x")`) are not rewritten |
 
 ### rewrite
 
 | Action | Flags | What it does; limits |
 |---|---|---|
-| `typescript-remove-console` | `--files [--methods log,debug]` | removes `console.<method>(...)` statements (default `log`), with a same-line comment; a call whose value is used is left alone (named in the summary), and as the body of an `if` or loop it leaves `{}` (or drops an `if` with a pure condition) |
+| `remove-console` | `--files [--methods log,debug]` | removes `console.<method>(...)` statements (default `log`), with a same-line comment; a call whose value is used is left alone (named in the summary), and as the body of an `if` or loop it leaves `{}` (or drops an `if` with a pure condition) |
 | `codemod` (codemod image) | `--transform --files [--parser]` | runs a published codemod; kinds, parsers and limits in [Published codemods](#published-codemods) |
 
 ### fs
 
 The fs image (`localhost/jig/fs:local`) changes the shape of the folder tree. Every command is a
 `rewrite`: jig cannot promise that moving or removing files keeps a project working. It moves bytes
-only; imports and paths in config are not updated (that is `typescript-move-file`).
+only; imports and paths in config are not updated (that is `move-file`).
 
 | Command | Flags | What it does; limits |
 |---|---|---|

@@ -24,11 +24,11 @@ describe("case-only renames on a case-insensitive file system", () => {
     return dir;
   };
 
-  test("typescript-rename-files keeps the content under the new name and points the imports at it", async () => {
+  test("rename-files keeps the content under the new name and points the imports at it", async () => {
     const dir = await insensitive();
     const original = (await readTree(dir))["src/Footer.ts"];
     assert.ok(original);
-    const report = (await main(["typescript-rename-files", "--files", "src/Footer.ts", "--case", "kebab"], dir)) as OkReport;
+    const report = (await main(["rename-files", "--files", "src/Footer.ts", "--case", "kebab"], dir)) as OkReport;
     assertReport(report);
     restore();
     const names = readdirSync(`${dir}/src`);

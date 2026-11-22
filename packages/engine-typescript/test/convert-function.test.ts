@@ -10,7 +10,7 @@ import { errors, rejects, workspace } from "./helpers.ts";
 const EXAMPLE = "examples/convert-function";
 
 async function convert(dir: string, at: string, to: "arrow" | "function") {
-  return main(["typescript-convert-function", "--at", at, "--to", to], dir);
+  return main(["convert-function", "--at", at, "--to", to], dir);
 }
 
 async function read(dir: string, file: string): Promise<string> {
@@ -37,7 +37,7 @@ function run(dir: string, file: string): string {
   }
 }
 
-describe("typescript-convert-function --to arrow", () => {
+describe("convert-function --to arrow", () => {
   test("a declaration becomes a const arrow, keeping export, types and body", async () => {
     const dir = await workspace(EXAMPLE);
     const report = await convert(dir, "src/math.ts:1", "arrow");
@@ -59,7 +59,7 @@ describe("typescript-convert-function --to arrow", () => {
       schema: "urn:jig:report:1",
       ok: true,
       kind: "refactor",
-      subject: "refactor(typescript-convert-function): src/math.ts:1 → arrow function",
+      subject: "refactor(convert-function): src/math.ts:1 → arrow function",
       summary: "Converted the function declaration `add` in src/math.ts to a `const` arrow function.",
     });
     assert.deepEqual(await errors(dir, "src/math.ts"), []);
@@ -193,7 +193,7 @@ describe("typescript-convert-function --to arrow", () => {
   });
 });
 
-describe("typescript-convert-function runtime behaviour", () => {
+describe("convert-function runtime behaviour", () => {
   test("refuses a use inside a hoisted function declaration that runs before the const (TDZ)", async () => {
     const dir = await workspace(EXAMPLE, {
       "src/t.ts":
@@ -244,7 +244,7 @@ describe("typescript-convert-function runtime behaviour", () => {
   });
 });
 
-describe("typescript-convert-function --to function", () => {
+describe("convert-function --to function", () => {
   test("a const arrow becomes a declaration, keeping generics, parameter and return types", async () => {
     const dir = await workspace(EXAMPLE);
     const report = await convert(dir, "src/math.ts:7", "function");
@@ -317,7 +317,7 @@ describe("typescript-convert-function --to function", () => {
   });
 });
 
-describe("typescript-convert-function round trip and --at", () => {
+describe("convert-function round trip and --at", () => {
   test("--to arrow then --to function restores the original text", async () => {
     const dir = await workspace(EXAMPLE);
     const original = await read(dir, "src/math.ts");
@@ -345,9 +345,9 @@ describe("typescript-convert-function round trip and --at", () => {
     }
     assert.equal((await rejects(convert(dir, "src/math.ts:2", "arrow"))).code, "REFACTOR_UNAVAILABLE");
     assert.equal((await rejects(convert(dir, "src/math.ts:99", "arrow"))).code, "INVALID_ARGS");
-    const to = await rejects(main(["typescript-convert-function", "--at", "src/math.ts:1", "--to", "class"], dir));
+    const to = await rejects(main(["convert-function", "--at", "src/math.ts:1", "--to", "class"], dir));
     assert.equal(to.code, "INVALID_ARGS");
-    const missing = await rejects(main(["typescript-convert-function", "--to", "arrow"], dir));
+    const missing = await rejects(main(["convert-function", "--to", "arrow"], dir));
     assert.equal(missing.code, "INVALID_ARGS");
   });
 });

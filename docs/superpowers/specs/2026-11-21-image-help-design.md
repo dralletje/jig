@@ -157,7 +157,7 @@ Moves a file or folder to a free destination.
   and actions. `runEntrypoint` takes the image's help as well as `main`, and answers exactly `["--help"]`
   by printing it and exiting 0. Parsing does not change.
 - **typescript image.** Each of its 19 actions gets a summary and its flags, typed per action (`--to` is a
-  `path` for `typescript-move-file` and `text` for `typescript-rename`). `main` and `parseParams` stay as
+  `path` for `move-file` and `text` for `rename`). `main` and `parseParams` stay as
   they are. The README's usage lines are the source for the wording.
 - **prettier and codemod-react images.** Not built from `Action`s: each declares its help object directly
   and passes it to `runEntrypoint`. Codemod's `--transform` is a `choice` of the pinned react-codemod's

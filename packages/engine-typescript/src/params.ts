@@ -5,7 +5,7 @@ import type { TsEngine } from "./engine.ts";
 import { byString, diagnostics, introduced, required, unavailable } from "./shared.ts";
 
 /**
- * typescript-params-to-object: a top-level function's positional parameters become one destructured
+ * params-to-object: a top-level function's positional parameters become one destructured
  * object parameter, and every call passes an object. TypeScript's "Convert parameters to destructured
  * object" does the edits; this action refuses what that refactor cannot rewrite safely.
  */
@@ -77,7 +77,7 @@ function describeUse(engine: TsEngine, id: ts.Identifier): string {
 }
 
 export const paramsToObjectAction: Action<ParamsToObjectParams, TsEngine> = {
-  id: "typescript-params-to-object",
+  id: "params-to-object",
   kind: "refactor",
   summary: "Turns a top-level function's positional parameters into one destructured object, at every call too.",
   flags: [

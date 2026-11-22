@@ -7,7 +7,7 @@ import { byString, diagnostics, list as globList, introduced, matchFiles, notHan
 import type { NotHandled } from "./shared.ts";
 
 /**
- * typescript-subpath-imports: imports through a tsconfig `paths` alias (`@/x` with `"@/*": ["./src/*"]`)
+ * subpath-imports: imports through a tsconfig `paths` alias (`@/x` with `"@/*": ["./src/*"]`)
  * become Node subpath imports (`#/x`), and the package.json next to the tsconfig gets
  * `"imports": { "#/*": "./src/*" }` (merged with the `imports` it has). The `paths` entry stays.
  *
@@ -270,7 +270,7 @@ function planFile(
 export type SubpathImportsParams = { files: string[]; alias: string };
 
 export const subpathImportsAction: Action<SubpathImportsParams, TsEngine> = {
-  id: "typescript-subpath-imports",
+  id: "subpath-imports",
   kind: "sweep",
   summary: "Turns imports through a tsconfig paths alias into Node subpath imports (#/x).",
   flags: [

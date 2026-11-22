@@ -25,7 +25,7 @@ Let some sweeps work on a range instead of whole files: `--range <path>:<startLi
 (1-based, inclusive), alongside or instead of `--files`. Only nodes that lie entirely inside the range
 are touched. Fits:
 - `format`: prettier's own `rangeStart`/`rangeEnd`.
-- `typescript-infer-return-types`, `typescript-remove-console`, `let` → `const`, `==` → `===`,
+- `infer-return-types`, `remove-console`, `let` → `const`, `==` → `===`,
   optional chaining, `includes`, `forEach` → `for…of`, template strings: per node, so a range is
   natural.
 - Import sweeps (`add-import-extensions`, `subpath-imports`, `namespace-to-named`, `import-type`):
@@ -45,9 +45,9 @@ Not a fit: `organize-imports` (one import block), `remove-barrels`, `rename-file
 - `let` → `const` where never reassigned.
 - `var` → `let`/`const` where hoisting and scope cannot make a difference.
 - String concatenation → template literals where one operand is a string literal (the many-file
-  version of `typescript-template-string`).
+  version of `template-string`).
 - Remove unused local variables and parameters where side-effect free (the many-file version of
-  `typescript-remove-unused-variable`).
+  `remove-unused-variable`).
 
 ### rewrite
 - Remove `debugger` statements.
@@ -65,9 +65,9 @@ Not a fit: `organize-imports` (one import block), `remove-barrels`, `rename-file
 
 What the actions leave alone today (from the code and the README), each worth doing when it comes up:
 
-- `typescript-subpath-imports`: `require("@/x")` and `import x = require("@/x")` are not rewritten, and
+- `subpath-imports`: `require("@/x")` and `import x = require("@/x")` are not rewritten, and
   `.js` files importing through the alias are not looked at.
-- `typescript-default-to-named`: JavaScript importers are only scanned syntactically (no resolution through
+- `default-to-named`: JavaScript importers are only scanned syntactically (no resolution through
   tsconfig `paths`), and `require()`, `import()`, namespace imports and `vi.mock`/`jest.mock` factories of
   the default are left alone (named in the summary) instead of being rewritten.
 - Moving files: on a case-insensitive file system a move that only changes the case of a folder
@@ -76,17 +76,17 @@ What the actions leave alone today (from the code and the README), each worth do
 - Case-insensitive file systems with Unicode normalization (HFS+ stores names decomposed): the exact-case
   existence checks of moves and renames compare names as written, so composed and decomposed spellings of
   the same name are not told apart.
-- `typescript-inline-function`: comments inside the function body are dropped (only comments attached to its
+- `inline-function`: comments inside the function body are dropped (only comments attached to its
   statements are kept); generics, async functions, early returns, optional/rest/default parameters and
   calls from other modules are refused rather than handled.
-- `typescript-convert-function`: hoisting is only checked for uses in the same file (a circular import that
+- `convert-function`: hoisting is only checked for uses in the same file (a circular import that
   calls the function while modules evaluate is not seen).
-- `typescript-remove-unused-variable`: parameters are refused (needs the callers updated); dropping the
+- `remove-unused-variable`: parameters are refused (needs the callers updated); dropping the
   only element of an object pattern also drops a getter call and the `TypeError` for a `null` source, which is
   accepted and not checked.
-- `typescript-move-file`/`typescript-extract`: TypeScript's "Move to file" does not rewrite re-exports
+- `move-file`/`extract`: TypeScript's "Move to file" does not rewrite re-exports
   (`export { foo } from "./a"`).
-- `typescript-rename-files`: path strings outside imports (`vi.mock("./x")`) are not rewritten.
+- `rename-files`: path strings outside imports (`vi.mock("./x")`) are not rewritten.
 - References across package boundaries (workspace links, an `extends` from npm) are not followed by any
   TypeScript action.
 
