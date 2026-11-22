@@ -141,6 +141,30 @@ struct HelpTests {
     #expect(actionNames(ran.json).count == actions)
   }
 
+  @Test("<codemod> codemod --help: each --transform choice has a description and its kind", .timeLimit(.minutes(2)))
+  func codemodChoices() throws {
+    let ran = try jig([CODEMOD, "codemod", "--help"], cwd: try temp.make("jig-hcwd-"))
+    expectHelp(ran, image: CODEMOD)
+    guard case .array(let flags)? = ran.json["actions"]?[0]?["flags"],
+      let transform = flags.first(where: { $0["name"] == "--transform" }),
+      case .array(let choices)? = transform["choices"]
+    else {
+      Issue.record("no --transform choices in \(ran.stdout)")
+      return
+    }
+    #expect(choices.count == 14)
+    #expect(choices.first { $0["name"] == "create-element-to-jsx" }?["kind"] == "sweep")
+    #expect(choices.first { $0["name"] == "rename-unsafe-lifecycles" }?["kind"] == "rewrite")
+    for choice in choices {
+      guard case .string(let description)? = choice["description"] else {
+        Issue.record("a choice without description: \(choice)")
+        continue
+      }
+      #expect(!description.isEmpty)
+    }
+    #expect(ran.json["actions"]?[0]?["kinds"] == .array(["sweep", "rewrite"]))
+  }
+
   @Test("jig --help prints the usage", .timeLimit(.minutes(1)))
   func usage() throws {
     let finished = try runCommand([try setup(), "--help"], cwd: try temp.make("jig-hcwd-"))
