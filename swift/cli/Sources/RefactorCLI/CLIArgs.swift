@@ -105,6 +105,13 @@ public func parseCommand(_ argv: [String]) throws -> Command {
   } else if cli.args.count == 2, cli.args[1] == "--help" {
     action = cli.args[0]
   } else {
+    // A run's first image argument is the action its commit subject names, `<kind>(<image> <action>): `.
+    if let problem = actionProblem(cli.args[0]) {
+      throw RefactorError(
+        code: .INVALID_ARGS,
+        instructions: "The first argument after the image must be an action name, without whitespace: \(problem). "
+          + "jig <image> lists the image's actions. \(usage)")
+    }
     return .run(cli)
   }
   if cli.message != nil {

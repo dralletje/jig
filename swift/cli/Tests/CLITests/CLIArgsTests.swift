@@ -92,6 +92,17 @@ func verifyHasNoOn(argv: [String]) {
       == .run(CLIArgs(repo: "r", message: nil, sandbox: .docker, image: "img", args: ["--x"])))
 }
 
+@Test(arguments: [["img", "", "--x"], ["img", "a b"], ["img", "a\tb", "--to", "x"], ["--repo", "r", "img", " "]])
+func aRunWhoseFirstArgumentIsNotAnActionIsRefused(argv: [String]) {
+  #expect {
+    try parseCommand(argv)
+  } throws: { error in
+    guard let error = error as? RefactorError else { return false }
+    return error.code == .INVALID_ARGS
+      && error.instructions.hasPrefix("The first argument after the image must be an action name, without whitespace: ")
+  }
+}
+
 @Test func helpCalls() throws {
   #expect(try parseCommand(["img"]) == .help(HelpArgs(sandbox: .docker, image: "img", action: nil)))
   #expect(try parseCommand(["img", "--help"]) == .help(HelpArgs(sandbox: .docker, image: "img", action: nil)))

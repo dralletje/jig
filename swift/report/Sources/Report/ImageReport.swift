@@ -148,6 +148,16 @@ public enum ImageReport: Equatable, Sendable {
   }
 }
 
+/// Why `action`, the first argument jig passes to an image, cannot name an action in a commit subject
+/// (`<kind>(<image> <action>): `), or nil when it can: it must not be empty or hold whitespace.
+public func actionProblem(_ action: String) -> String? {
+  if action.isEmpty { return "the action is empty" }
+  if action.unicodeScalars.contains(where: { $0.properties.isWhitespace }) {
+    return "the action \(javaScriptJSONString(action)) has whitespace"
+  }
+  return nil
+}
+
 private func unknownKeys(_ fields: [String: JSONValue], allowed: Set<String>) -> String? {
   let extra = fields.keys.filter { !allowed.contains($0) }.sorted()
   return extra.isEmpty ? nil : "unknown field(s) \(extra.joined(separator: ", "))"

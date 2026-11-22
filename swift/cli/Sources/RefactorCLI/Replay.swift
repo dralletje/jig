@@ -14,6 +14,14 @@ public struct Replayed: Sendable {
 /// runs checkLeftovers/checkCapture against `base`'s tree and returns the captured tree. Registers and
 /// removes its temp folder exactly as runImage did (Lifecycle cleanup + unlessInterrupted defer).
 public func replay(git: Git, base: String, pinned: PinnedImage, args: [String], sandbox: any Sandbox) throws -> Replayed {
+  // The report's subject must name the action, so there has to be one. The command line and verify
+  // refuse a missing or odd one before this; this keeps it from reaching the subject check either way.
+  guard let action = args.first else {
+    throw RefactorError(code: .INVALID_ARGS, instructions: "No action given: the first argument after the image is the action.")
+  }
+  if let problem = actionProblem(action) {
+    throw RefactorError(code: .INVALID_ARGS, instructions: "The first argument after the image must be an action: \(problem).")
+  }
   // 1. Export `base` through a temporary index.
   let head: [GitPath: TreeEntry]
   do {
@@ -40,7 +48,7 @@ public func replay(git: Git, base: String, pinned: PinnedImage, args: [String], 
   let report: Report
   switch ImageReport.parse(
     stdout: String(decoding: ran.stdout, as: UTF8.self), stderr: String(decoding: ran.stderr, as: UTF8.self),
-    termination: ran.termination, action: args.first ?? "")
+    termination: ran.termination, action: action)
   {
   case .ok(let reported): report = reported
   case .failed(let error): throw error
