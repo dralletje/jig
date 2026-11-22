@@ -97,8 +97,8 @@ describe("help builders", () => {
 
 describe("imageHelp checks the choices", () => {
   /** An action with `kinds` and `flags`, as the builder gets it; choices are `unknown` to also pass wrong ones. */
-  const withFlags = (kinds: ActionKind[], flags: unknown[]): ActionHelp => ({ name: "codemod", kinds, summary: "Runs it.", flags: flags as Flag[] });
-  const choiceFlag = (choices: unknown[], name = "--transform") => ({ name, type: "choice", choices, required: true, description: "Which." });
+  const withFlags = (kinds: ActionKind[], flags: unknown[]): ActionHelp => ({ name: "convert", kinds, summary: "Runs it.", flags: flags as Flag[] });
+  const choiceFlag = (choices: unknown[], name = "--to") => ({ name, type: "choice", choices, required: true, description: "Which." });
 
   test("object choices are accepted and carried through", () => {
     const action = withFlags(

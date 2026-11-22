@@ -24,10 +24,10 @@
       ]
     },
     "subject": {
-      "description": "<kind>(<label>): <description>, one line.",
+      "description": "<kind>(<image> <action>): <description>, one line. <image> is the image's own name (not empty, without whitespace, ( or )), <action> the first argument jig passed. jig also checks that <kind> is the report's kind and <action> exactly that argument; the schema cannot express those.",
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\\r\\n]+$"
+      "pattern": "^(refactor|sweep|rewrite)\\([^\\s()]+ [^\\s]+\\): [^\\r\\n]*$"
     },
     "summary": {
       "description": "Plain text for people, may be several lines; not only whitespace. A partial result says here what it left alone.",
