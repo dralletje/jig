@@ -9,7 +9,7 @@ Public API:
   `RefactorError` it is: `CommandFailed`, `ExecutableNotFound`, `NonUTF8Path`).
 - `JSONValue`; `Termination` (`.exited(code)` / `.signaled(n)`, described as "exit code N" / "killed by
   signal N").
-- Image report v1: `reportSchema`, `ImageReport.parse(stdout:stderr:termination:)` → `.ok(Report)` or
+- Image report v1: `reportSchema`, `ImageReport.parse(stdout:stderr:termination:action:)` → `.ok(Report)` or
   `.failed(RefactorError)`; `Report` (`kind`, `subject`, `summary`), `ActionKind`.
 - `canonicalCommand(image:args:)` (the `Refactor-Command` JSON), `commitMessage(report:message:image:args:coAuthor:)`.
 - Output v1: `outputSchema`, `errorJSON(_:)`, `successJSON(...)`.

@@ -49,7 +49,9 @@ tests of every package and the end-to-end tests (see [Tests](#tests)).
 Only `--repo`, `--message` and `--sandbox` before the image are the binary's own options. `--sandbox`
 picks where the image runs (see [Sandboxes](#sandboxes)): `docker` (the default) or `rootlesskit`.
 Everything after the image goes to the image verbatim, even values starting with `--`. The first
-of them is the action name. `verify` as the first argument selects [Verify](#verify) instead.
+of them is the action name, which the commit subject names: an empty one, or one with whitespace, is
+`INVALID_ARGS` before anything runs (and `verify` refuses a recorded command like that as unreadable).
+`verify` as the first argument selects [Verify](#verify) instead.
 
 ### Images
 
@@ -479,8 +481,8 @@ N", not as an exit code. An interrupted run is `INTERNAL` with exit code 130, 14
 Each tool is one image, `localhost/jig/<tool>:local`, for `typescript` (the typescript actions,
 `rename`, `extract`, …, with TypeScript 6.0.3 bundled), `prettier` (`format`, with one pinned
 prettier 3) and `codemod-react` (one action per react-codemod transform, see
-[Published codemods](#published-codemods)). Each image's name, the `<image>` in its commit subjects, is
-the tool's: `typescript`, `prettier`, `codemod-react`, `fs`. The base is `node:26.13.1-slim`, which runs the TypeScript source directly. The entrypoint is
+[Published codemods](#published-codemods)). Each image states its own name, the `<image>` in its commit
+subjects: `typescript`, `prettier`, `codemod-react`, `fs`. The base is `node:26.13.1-slim`, which runs the TypeScript source directly. The entrypoint is
 `node /app/packages/<pkg>/src/bin.ts`.
 
 The `fs` image ([fs](#fs)) is the exception: no Node. It is `busybox:1.38.0` plus the static (musl)
