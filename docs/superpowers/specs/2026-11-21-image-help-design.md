@@ -70,7 +70,7 @@ The owner picked A.
 - `summary` (image and action) is one line of plain text.
 - `kinds` lists the kinds the action's commits can have (`refactor`, `sweep`, `rewrite`): at least one, no
   repeats. Most actions have one; the codemod action has the kinds of its transforms (some `sweep`, some
-  `rewrite`), and its `--transform` description names each transform's kind.
+  `rewrite`), and each `--transform` choice carries its transform's kind.
 - `flags` may be empty. Each flag has `name` (starting with `--`), `type`, `required` and `description`
   (plain text, may be several lines).
 - `type` is one of:
@@ -78,11 +78,16 @@ The owner picked A.
   - `paths`: comma-separated repo-relative paths;
   - `globs`: comma-separated globs;
   - `text`: anything else (a symbol name, `src/a.ts:12:20`, a comma-separated list of names);
-  - `choice`: one of `choices`, a list of strings (required for `choice`, at least one, no repeats, and
-    not allowed on any other type).
+  - `choice`: the name of one of `choices` (required for `choice`, at least one, and not allowed on any
+    other type). A choice is an object `{name, description, kind?}`: `name` and `description` (one line)
+    are non-empty strings, names are unique within the flag, and there are no other fields.
+  - `kind` on a choice means picking it decides the commit's kind (codemod's `--transform`). When one
+    choice of a flag has a kind, all of them do; at most one flag of an action has choices with kinds; and
+    the action's `kinds` are exactly the kinds those choices use.
 - jig checks the object strictly, like a report: unknown fields, a wrong type, an empty `actions`, two
-  actions with the same name, two flags with the same name in one action, or `choices` missing or misplaced
-  are `IMAGE_FAILED`.
+  actions with the same name, two flags with the same name in one action, `choices` missing or misplaced,
+  or a choice or its kind breaking the rules above are `IMAGE_FAILED`. core's help builder throws on the
+  choice rules, so an image's own tests catch them.
 - A schema file, `schemas/help-1.schema.json`, describes it, with an example in `schemas/examples/`.
 
 ## The protocol: jig side
@@ -125,8 +130,15 @@ Moves a file or folder to a free destination.
 ```
 
   Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>`, and a choice as `<choice>` with its
-  options listed under the flag. Optional flags show in brackets in the usage line. The notes print under
-  the header; several kinds show as `sweep|rewrite`.
+  choices in a table indented under the flag: name, kind (only when the flag's choices have kinds), and
+  description. Optional flags show in brackets in the usage line. The notes print under the header;
+  several kinds show as `sweep|rewrite`.
+
+```
+  --transform <choice>  required  Which transform to run.
+      create-element-to-jsx  sweep    Converts React.createElement calls to JSX.
+      pure-component         rewrite  Converts classes that only render, without state or refs, to function components.
+```
 
 - **When it fails** (exit 1, the usual one-line error JSON on stdout in both cases):
   - `<action>` is not one of the image's: `UNKNOWN_ACTION`, listing the actions.
@@ -149,7 +161,7 @@ Moves a file or folder to a free destination.
   they are. The README's usage lines are the source for the wording.
 - **prettier and codemod-react images.** Not built from `Action`s: each declares its help object directly
   and passes it to `runEntrypoint`. Codemod's `--transform` is a `choice` of the pinned react-codemod's
-  transforms.
+  transforms, each with a one-line description and its kind (from the image's catalog).
 - **fs image.** `fs.nu` answers `--help` with the help object, written out in the script. `remove` splits:
   - `remove --paths <path,path>` removes files and folders (every path must exist), as `remove --paths`
     does today; `--files` is no longer one of its flags.
@@ -198,6 +210,8 @@ Open to correction:
 - `--message` with a help call is refused; `--repo` is accepted and ignored.
 - An action lists `kinds` (a list), not one `kind`, because the codemod action's kind depends on its
   transform.
+- A choice is an object with a one-line `description` and an optional `kind` (the commit's kind when it
+  is picked), not a bare string; strings are refused, so there is one shape only.
 - jig adds the resolve `notes` to help, as it does to a run's output, and `ok: true`.
 - The split fs action is named `remove-matching`.
 - After this, the images are published again as new versions (`…-0.2`); that is a separate step.

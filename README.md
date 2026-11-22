@@ -273,8 +273,17 @@ Moves a file or folder to a free destination.
   --to <path>    required  Where it goes. …
 ```
 
-Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>` and `<choice>` (its options listed under
-the flag); optional flags are in brackets in the usage line; several kinds show as `sweep|rewrite`.
+Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>` and `<choice>`; optional flags are in
+brackets in the usage line; several kinds show as `sweep|rewrite`. A choice flag's choices are a table
+indented under it: the name, the kind when picking the choice decides the commit's kind, and what it
+does:
+
+```
+  --transform <choice>  required  Which transform to run.
+      create-element-to-jsx  sweep    Converts React.createElement calls to JSX.
+      pure-component         rewrite  Converts classes that only render, without state or refs, to function components.
+      …
+```
 
 Failures use the output v1 failure shape and exit 1: an action the image does not have is
 `UNKNOWN_ACTION`, listing the image's actions; an image that answers `--help` with a failed report (an
@@ -406,13 +415,18 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
 - `kinds`: the kinds the action's commits can have, at least one, no repeats.
 - `flags` may be empty. Each has `name` (`--` and a name), `type`, `required` and `description` (plain
   text, may be several lines). `type` is `path` (one repo-relative path), `paths` (comma-separated
-  repo-relative paths), `globs` (comma-separated globs), `text` (anything else) or `choice` (one of
-  `choices`, a non-empty list without repeats, present only on a `choice`).
+  repo-relative paths), `globs` (comma-separated globs), `text` (anything else) or `choice` (the name of
+  one of `choices`, a non-empty list present only on a `choice`).
+- A choice is `{"name": "<value>", "description": "<one line>", "kind"?: "refactor"|"sweep"|"rewrite"}`,
+  names unique within the flag. `kind` means picking the choice decides the commit's kind (codemod's
+  `--transform`): when one choice of a flag has a kind, all of them do; at most one flag of an action has
+  choices with kinds; and the action's `kinds` are exactly the kinds those choices use.
 - **One action, one set of flags.** Each flag is required or optional; an action never takes "one of
   these flags". A case that would need it is two actions (fs `remove` and `remove-matching`).
 - jig checks the object strictly: unknown fields (`ok`, `image` and `notes` included: jig adds those),
-  wrong types, empty `actions`, two actions or two flags of one action with the same name, or `choices`
-  missing or misplaced are `IMAGE_FAILED`. jig does not check a run's arguments against the help: the
+  wrong types, empty `actions`, two actions or two flags of one action with the same name, `choices`
+  missing or misplaced, a choice that is not such an object, or kinds on choices that break the rules
+  above are `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the choice rules too. jig does not check a run's arguments against the help: the
   image still parses them itself.
 
 ## Kinds: refactors, sweeps and rewrites
@@ -611,7 +625,8 @@ It runs the transform over the matching `.js/.jsx/.ts/.tsx` files (never `.d.ts`
 `package-lock.json` (`npm ci`), so a rebuild resolves the same dependency versions. The commit subject
 is `<kind>(react-codemod@5.4.4/<transform>): <globs>` and the summary lists the changed files. An unknown
 transform is `INVALID_ARGS`, listing the known ones. A file a transform cannot parse is left alone, named
-in the summary. The kinds, from what each transform does (`packages/action-codemod/src/catalog.ts`):
+in the summary. The kinds, from what each transform does (`packages/action-codemod/src/catalog.ts`, which
+also has a one-line description of each; `--help` shows both on the `--transform` choices):
 
 | Kind | Transforms |
 |---|---|
@@ -638,7 +653,7 @@ in the summary. The kinds, from what each transform does (`packages/action-codem
 | `schemas/` | the JSON Schemas of the image report and the binary's output, and example documents |
 | `packages/engine-typescript` | `TsEngine` (TypeScript 6 language service), the typescript actions and their image entrypoint |
 | `packages/action-prettier` | the format action and its image entrypoint |
-| `packages/action-codemod` | the published-codemod entrypoint (jscodeshift runner) and its table of transforms and kinds |
+| `packages/action-codemod` | the published-codemod entrypoint (jscodeshift runner) and its table of transforms, their kinds and descriptions |
 | `packages/test-utils` | `makeRepo`, `readTree`, fixtures |
 | `examples/` | small example repos used by the tests and as CLI demos (see below) |
 | `containers/` | one Containerfile per image |
