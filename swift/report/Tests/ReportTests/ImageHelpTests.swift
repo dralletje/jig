@@ -49,9 +49,13 @@ private let move = ActionHelp(
 
 @Test func choiceFlagsParse() {
   let flags =
-    #"{"name":"--transform","type":"choice","choices":["a","b"],"required":true,"description":"Which.\nTwo lines."},"#
-    + #"{"name":"--files","type":"globs","required":false,"description":"Where."}"#
-  let line = help(actions: action(name: "codemod", kinds: #"["sweep","rewrite"]"#, flags: flags))
+    #"{"name":"--transform","type":"choice","choices":["#
+    + #"{"name":"a","description":"Does a.","kind":"sweep"},{"name":"b","description":"Does b.","kind":"rewrite"},"#
+    + #"{"name":"c","description":"Does c.","kind":"rewrite"}"#
+    + #"],"required":true,"description":"Which.\nTwo lines."},"#
+    + #"{"name":"--files","type":"globs","required":false,"description":"Where."},"#
+    + #"{"name":"--parser","type":"choice","choices":[{"name":"tsx","description":"TypeScript."}],"required":false,"description":"P."}"#
+  let line = help(actions: action(name: "codemod", kinds: #"["rewrite","sweep"]"#, flags: flags))
   #expect(
     ImageHelpAnswer.parse(stdout: line, stderr: "", termination: .exited(0))
       == .help(
@@ -59,12 +63,71 @@ private let move = ActionHelp(
           summary: "Does things.",
           actions: [
             ActionHelp(
-              name: "codemod", kinds: [.sweep, .rewrite], summary: "Moves it.",
+              name: "codemod", kinds: [.rewrite, .sweep], summary: "Moves it.",
               flags: [
-                FlagHelp(name: "--transform", type: .choice, required: true, description: "Which.\nTwo lines.", choices: ["a", "b"]),
+                FlagHelp(
+                  name: "--transform", type: .choice, required: true, description: "Which.\nTwo lines.",
+                  choices: [
+                    ChoiceHelp(name: "a", description: "Does a.", kind: .sweep),
+                    ChoiceHelp(name: "b", description: "Does b.", kind: .rewrite),
+                    ChoiceHelp(name: "c", description: "Does c.", kind: .rewrite),
+                  ]),
                 FlagHelp(name: "--files", type: .globs, required: false, description: "Where.", choices: nil),
+                FlagHelp(
+                  name: "--parser", type: .choice, required: false, description: "P.",
+                  choices: [ChoiceHelp(name: "tsx", description: "TypeScript.", kind: nil)]),
               ])
           ])))
+}
+
+/// A choice flag named `name` with `choices` (JSON, without the brackets).
+private func choiceFlag(_ choices: String, name: String = "--a") -> String {
+  #"{"name":""# + name + #"","type":"choice","choices":["# + choices + #"],"required":true,"description":"D."}"#
+}
+
+@Test(arguments: [
+  ("a string choice", help(actions: action(flags: choiceFlag(#""x""#)))),
+  ("a choice without description", help(actions: action(flags: choiceFlag(#"{"name":"x"}"#)))),
+  ("a choice with an empty description", help(actions: action(flags: choiceFlag(#"{"name":"x","description":""}"#)))),
+  ("a choice with a multi-line description", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"A.\nB."}"#)))),
+  ("a choice without name", help(actions: action(flags: choiceFlag(#"{"description":"D."}"#)))),
+  ("a choice with an empty name", help(actions: action(flags: choiceFlag(#"{"name":"","description":"D."}"#)))),
+  ("a choice with an unknown field", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","default":true}"#)))),
+  ("a choice with an unknown kind", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":"delete"}"#)))),
+  ("a choice with a null kind", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":null}"#)))),
+  (
+    "two choices with one name",
+    help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D."},{"name":"x","description":"E."}"#)))
+  ),
+  (
+    "a kind on some choices but not all",
+    help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"},{"name":"y","description":"E."}"#)))
+  ),
+  (
+    "kinds on the choices of two flags",
+    help(
+      actions: action(
+        flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"}"#, name: "--a") + ","
+          + choiceFlag(#"{"name":"y","description":"E.","kind":"rewrite"}"#, name: "--b")))
+  ),
+  (
+    "an action kind no choice has",
+    help(
+      actions: action(
+        kinds: #"["sweep","rewrite"]"#, flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"}"#)))
+  ),
+  (
+    "a choice kind the action does not list",
+    help(
+      actions: action(
+        kinds: #"["rewrite"]"#,
+        flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"},{"name":"y","description":"E.","kind":"sweep"}"#)))
+  ),
+])
+func choiceChecksRefuse(problem: String, line: String) {
+  let error = refused(line)
+  #expect(error.code == .IMAGE_FAILED, "\(problem)")
+  #expect(error.instructions.contains("schemas/help-1.schema.json"), "\(problem): \(error.instructions)")
 }
 
 @Test(arguments: [
@@ -102,15 +165,13 @@ private let move = ActionHelp(
   ("choice without choices", help(actions: action(flags: #"{"name":"--a","type":"choice","required":true,"description":"D."}"#))),
   (
     "choices on text",
-    help(actions: action(flags: #"{"name":"--a","type":"text","choices":["x"],"required":true,"description":"D."}"#))
+    help(
+      actions: action(
+        flags: #"{"name":"--a","type":"text","choices":[{"name":"x","description":"D."}],"required":true,"description":"D."}"#))
   ),
   (
     "empty choices",
     help(actions: action(flags: #"{"name":"--a","type":"choice","choices":[],"required":true,"description":"D."}"#))
-  ),
-  (
-    "repeated choice",
-    help(actions: action(flags: #"{"name":"--a","type":"choice","choices":["x","x"],"required":true,"description":"D."}"#))
   ),
   ("flag name without --", help(actions: action(flags: #"{"name":"-a","type":"text","required":true,"description":"D."}"#))),
   ("flag name with a space", help(actions: action(flags: #"{"name":"--a b","type":"text","required":true,"description":"D."}"#))),
@@ -182,9 +243,17 @@ private let codemod = ActionHelp(
   flags: [
     FlagHelp(
       name: "--transform", type: .choice, required: true, description: "The transform to run.\nIts kind is the commit's.",
-      choices: ["rename-unsafe-lifecycles", "pure-component"]),
+      choices: [
+        ChoiceHelp(name: "create-element-to-jsx", description: "Converts React.createElement calls to JSX.", kind: .sweep),
+        ChoiceHelp(name: "pure-component", description: "Converts stateless classes to function components.", kind: .rewrite),
+      ]),
     FlagHelp(name: "--files", type: .globs, required: true, description: "The files to run it on.", choices: nil),
-    FlagHelp(name: "--parser", type: .choice, required: false, description: "The parser.", choices: ["tsx", "babel"]),
+    FlagHelp(
+      name: "--parser", type: .choice, required: false, description: "The parser.",
+      choices: [
+        ChoiceHelp(name: "tsx", description: "TypeScript with JSX.", kind: nil),
+        ChoiceHelp(name: "babel", description: "JavaScript with JSX.", kind: nil),
+      ]),
   ])
 
 private let sample = ImageHelp(
@@ -219,7 +288,12 @@ private let sample = ImageHelp(
 @Test func helpJSONKeepsChoicesAndNotes() throws {
   let printed = helpJSON(image: "i@sha256:abc", notes: ["Used the cached image."], help: ImageHelp(summary: "S.", actions: [codemod]))
   #expect(printed.contains(#""notes":["Used the cached image."]"#))
-  #expect(printed.contains(#""choices":["rename-unsafe-lifecycles","pure-component"]"#))
+  // The choices are carried through as objects, keys sorted, kind left out when there is none.
+  #expect(
+    printed.contains(
+      #""choices":[{"description":"Converts React.createElement calls to JSX.","kind":"sweep","name":"create-element-to-jsx"},"#
+        + #"{"description":"Converts stateless classes to function components.","kind":"rewrite","name":"pure-component"}]"#))
+  #expect(printed.contains(#""choices":[{"description":"TypeScript with JSX.","name":"tsx"},"#))
   #expect(printed.contains(#""kinds":["sweep","rewrite"]"#))
   // Keys sorted, as every other object jig prints.
   #expect(printed.hasPrefix(#"{"actions":[{"flags":[{"choices":"#))
@@ -286,15 +360,27 @@ private let sample = ImageHelp(
 
         --transform <choice>  required  The transform to run.
                                         Its kind is the commit's.
-                                        One of:
-                                          rename-unsafe-lifecycles
-                                          pure-component
+            create-element-to-jsx  sweep    Converts React.createElement calls to JSX.
+            pure-component         rewrite  Converts stateless classes to function components.
         --files <glob,glob>   required  The files to run it on.
         --parser <choice>     optional  The parser.
-                                        One of:
-                                          tsx
-                                          babel
+            tsx    TypeScript with JSX.
+            babel  JavaScript with JSX.
       """)
+}
+
+@Test func helpJSONOfParsedHelpParsesAgain() throws {
+  // What jig prints for a help with choices is a valid help object again, once its own fields are gone.
+  let printed = helpJSON(image: "i@sha256:abc", notes: [], help: ImageHelp(summary: "S.", actions: [codemod]))
+  let value = try JSONDecoder().decode(JSONValue.self, from: Data(printed.utf8))
+  guard case .object(let fields) = value else {
+    Issue.record("not an object: \(printed)")
+    return
+  }
+  let stripped = String(decoding: try JSONValue.object(fields.filter { $0.key != "ok" && $0.key != "image" }).encoded(), as: UTF8.self)
+  #expect(
+    ImageHelpAnswer.parse(stdout: stripped, stderr: "", termination: .exited(0))
+      == .help(ImageHelp(summary: "S.", actions: [codemod])))
 }
 
 @Test func helpTextActionViewWithoutFlagsAndOtherTypes() {

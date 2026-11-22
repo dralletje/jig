@@ -13,8 +13,24 @@ public enum FlagType: String, Encodable, Equatable, Sendable {
   case globs
   /// Anything else (a symbol name, `src/a.ts:12:20`, a list of names).
   case text
-  /// One of the flag's `choices`.
+  /// The name of one of the flag's `choices`.
   case choice
+}
+
+/// One choice of a choice flag: what is passed, one line on what it does, and, when picking it decides
+/// the commit's kind, that kind.
+public struct ChoiceHelp: Encodable, Equatable, Sendable {
+  public var name: String
+  /// One line of plain text.
+  public var description: String
+  /// Left out of the JSON when nil.
+  public var kind: ActionKind?
+
+  public init(name: String, description: String, kind: ActionKind?) {
+    self.name = name
+    self.description = description
+    self.kind = kind
+  }
 }
 
 /// One flag of an action. `choices` is set exactly when `type` is `.choice`.
@@ -25,9 +41,9 @@ public struct FlagHelp: Encodable, Equatable, Sendable {
   /// Plain text, may be several lines.
   public var description: String
   /// Left out of the JSON when nil.
-  public var choices: [String]?
+  public var choices: [ChoiceHelp]?
 
-  public init(name: String, type: FlagType, required: Bool, description: String, choices: [String]?) {
+  public init(name: String, type: FlagType, required: Bool, description: String, choices: [ChoiceHelp]?) {
     self.name = name
     self.type = type
     self.required = required
@@ -200,6 +216,24 @@ public enum ImageHelpAnswer: Equatable, Sendable {
         flags.append(flag)
       }
     }
+    // Choices with kinds decide the commit's kind: on one flag at most, and exactly the action's kinds.
+    let kinded = flags.filter { flag in flag.choices?.contains(where: { $0.kind != nil }) ?? false }
+    if kinded.count > 1 {
+      return .failure(
+        Problem("\(at): \(kinded.map(\.name).joined(separator: " and ")) both have choices with kinds; only one flag may"))
+    }
+    if let flag = kinded.first, let choices = flag.choices {
+      var used: [ActionKind] = []
+      for choice in choices {
+        if let kind = choice.kind, !used.contains(kind) { used.append(kind) }
+      }
+      if Set(used) != Set(kinds) {
+        return .failure(
+          Problem(
+            "\(at).kinds must be exactly the kinds of \(flag.name)'s choices (\(used.map(\.rawValue).joined(separator: ", "))), "
+              + "not \(kinds.map(\.rawValue).joined(separator: ", "))"))
+      }
+    }
     return .success(ActionHelp(name: name, kinds: kinds, summary: actionSummary, flags: flags))
   }
 
@@ -231,17 +265,45 @@ public enum ImageHelpAnswer: Equatable, Sendable {
       return .failure(Problem("\(at) is of type choice but has no choices list"))
     }
     if rawChoices.isEmpty { return .failure(Problem("\(at).choices is empty")) }
-    var choices: [String] = []
-    for rawChoice in rawChoices {
-      guard case .string(let choice) = rawChoice, !choice.isEmpty else {
-        return .failure(Problem("\(at).choices has something that is not a non-empty string"))
+    var choices: [ChoiceHelp] = []
+    for (index, rawChoice) in rawChoices.enumerated() {
+      switch parseChoice(rawChoice, at: "\(at).choices[\(index)]") {
+      case .failure(let problem): return .failure(problem)
+      case .success(let choice):
+        if choices.contains(where: { $0.name == choice.name }) {
+          return .failure(Problem("\(at).choices has \(javaScriptJSONString(choice.name)) twice"))
+        }
+        choices.append(choice)
       }
-      if choices.contains(choice) {
-        return .failure(Problem("\(at).choices has \(javaScriptJSONString(choice)) twice"))
-      }
-      choices.append(choice)
+    }
+    let withKind = choices.filter { $0.kind != nil }.count
+    if withKind != 0 && withKind != choices.count {
+      return .failure(Problem("\(at): some choices have a kind and others not; every choice has one, or none"))
     }
     return .success(FlagHelp(name: name, type: type, required: required, description: description, choices: choices))
+  }
+
+  /// One entry of a flag's `choices`, checked.
+  private static func parseChoice(_ raw: JSONValue, at: String) -> Result<ChoiceHelp, Problem> {
+    guard case .object(let fields) = raw else {
+      return .failure(Problem("\(at) is not an object {name, description, kind?}"))
+    }
+    if let extra = unknownFields(fields, allowed: ["name", "description", "kind"]) {
+      return .failure(Problem("\(at): \(extra)"))
+    }
+    guard case .string(let name) = fields["name"], !name.isEmpty else {
+      return .failure(Problem("\(at).name is missing, empty or not a string"))
+    }
+    guard let rawDescription = fields["description"] else { return .failure(Problem("\(at).description is missing")) }
+    if let problem = lineProblem(rawDescription, "\(at).description") { return .failure(Problem(problem)) }
+    guard case .string(let description) = rawDescription else {
+      return .failure(Problem("\(at).description is not a string"))
+    }
+    guard let rawKind = fields["kind"] else { return .success(ChoiceHelp(name: name, description: description, kind: nil)) }
+    guard case .string(let text) = rawKind, let kind = ActionKind(rawValue: text) else {
+      return .failure(Problem("\(at).kind is not refactor, sweep or rewrite"))
+    }
+    return .success(ChoiceHelp(name: name, description: description, kind: kind))
   }
 }
 
@@ -302,7 +364,8 @@ private func padded(_ text: String, _ width: Int) -> String {
 
 /// The help as text for a person in a terminal. With `action` nil: the image, its summary, the notes and
 /// one line per action. With `action`: that action's kinds, summary, the notes, a usage line (optional
-/// flags in brackets) and one entry per flag, a choice's options listed under it. No trailing newline.
+/// flags in brackets) and one entry per flag, a choice flag's choices in a table under it. No trailing
+/// newline.
 public func helpText(image: String, notes: [String], help: ImageHelp, action: String?) -> String {
   if let action, let shown = help.actions.first(where: { $0.name == action }) {
     var lines: [String] = []
@@ -328,8 +391,15 @@ public func helpText(image: String, notes: [String], help: ImageHelp, action: St
       lines.append(first)
       for line in descriptionLines.dropFirst() { lines.append(indent + line) }
       if let choices = flag.choices {
-        lines.append(indent + "One of:")
-        for choice in choices { lines.append(indent + "  " + choice) }
+        // A table indented under the flag's name: name, kind (only when the choices have kinds), description.
+        let choiceNameWidth = choices.map(\.name.count).max() ?? 0
+        let hasKinds = choices.contains { $0.kind != nil }
+        let kindWidth = choices.map { $0.kind?.rawValue.count ?? 0 }.max() ?? 0
+        for choice in choices {
+          var line = "      " + padded(choice.name, choiceNameWidth) + "  "
+          if hasKinds { line += padded(choice.kind?.rawValue ?? "", kindWidth) + "  " }
+          lines.append(line + choice.description)
+        }
       }
     }
     return lines.joined(separator: "\n")
