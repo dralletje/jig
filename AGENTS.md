@@ -26,6 +26,8 @@ tags:
   our builds for that tool version.
 - An image that wraps no tool (`fs`) has no tool version: it gets `<our minor>.<our patch>` only, for
   example `fs-v1:0.1`.
+- `latest`, for example `fs-v1:latest`: moved on every publish to the newest build of that image name,
+  so nobody has to type `-0.2` to be on the newest version.
 
 A breaking change on our side starts a new image name (`typescript-v2`), so nobody is moved across it
 by a tag. Steps:
