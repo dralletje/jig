@@ -19,7 +19,8 @@ export type CodemodPackage = {
   transforms: Record<string, TransformInfo>;
 };
 
-const PARSERS = ["tsx", "ts", "babel", "flow"] as const;
+/** The parsers `--parser` accepts; its help choices list the same names, each with a description. */
+export const PARSERS = ["tsx", "ts", "babel", "flow"] as const;
 type Parser = (typeof PARSERS)[number];
 const SOURCE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 /** Declaration files hold no code a transform could change. */

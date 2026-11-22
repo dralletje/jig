@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import type { ActionKind, OkReport, RefactorError } from "@jig/core";
 import { HELP_SCHEMA_ID, assertReport, readTree, schemaErrors } from "@jig/test-utils";
-import { TRANSFORMS, help, installedPackage, main } from "../src/index.ts";
+import { PARSERS, TRANSFORMS, help, installedPackage, main } from "../src/index.ts";
 import type { CodemodPackage, TransformInfo } from "../src/index.ts";
 
 async function rejects(p: Promise<unknown>): Promise<RefactorError> {
@@ -294,6 +294,15 @@ describe("codemod help", () => {
     );
     assert.ok(parser.choices.every((choice) => choice.description.length > 0 && choice.kind === undefined));
     assert.equal(parser.required, false);
+  });
+
+  test("--parser's choices are exactly the parsers main accepts, in order", async () => {
+    const parser = help(await fakePackage({ rename: "rewrite" })).actions[0]!.flags.find((f) => f.name === "--parser");
+    assert.ok(parser && parser.type === "choice", JSON.stringify(parser));
+    assert.deepEqual(
+      parser.choices.map((choice) => choice.name),
+      [...PARSERS],
+    );
   });
 
   test("every package of the table gives a valid help", async () => {
