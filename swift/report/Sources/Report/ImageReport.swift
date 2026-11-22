@@ -149,9 +149,15 @@ public enum ImageReport: Equatable, Sendable {
 }
 
 /// Why `action`, the first argument jig passes to an image, cannot name an action in a commit subject
-/// (`<kind>(<image> <action>): `), or nil when it can: it must not be empty or hold whitespace.
+/// (`<kind>(<image> <action>): `), or nil when it can: it must not be empty, start with `-` or hold
+/// whitespace.
 public func actionProblem(_ action: String) -> String? {
   if action.isEmpty { return "the action is empty" }
+  if action.hasPrefix("-") {
+    return "the action \(javaScriptJSONString(action)) starts with -, so it is an option, not an action. "
+      + "Either the action is missing (it comes right after the image), or one of jig's own options "
+      + "(--repo, --message, --sandbox) was put after the image instead of before it"
+  }
   if action.unicodeScalars.contains(where: { $0.properties.isWhitespace }) {
     return "the action \(javaScriptJSONString(action)) has whitespace"
   }

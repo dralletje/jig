@@ -185,6 +185,12 @@ private func exampleRange() -> [CommitVerification] {
   (#"{"args":[],"image":"i@sha256:00"}"#, "its args are empty: the first one is the action"),
   (#"{"args":["","--to","b"],"image":"i@sha256:00"}"#, "its first arg is not an action: the action is empty"),
   (#"{"args":["a b"],"image":"i@sha256:00"}"#, #"its first arg is not an action: the action "a b" has whitespace"#),
+  (
+    #"{"args":["--to","b"],"image":"i@sha256:00"}"#,
+    #"its first arg is not an action: the action "--to" starts with -, so it is an option, not an action. "#
+      + "Either the action is missing (it comes right after the image), or one of jig's own options "
+      + "(--repo, --message, --sandbox) was put after the image instead of before it"
+  ),
 ])
 func aRecordedCommandWithoutAnActionIsUnreadable(json: String, says: String) {
   do {

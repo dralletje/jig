@@ -88,18 +88,33 @@ func verifyHasNoOn(argv: [String]) {
 
 @Test func runStillParses() throws {
   #expect(
-    try parseCommand(["--repo", "r", "img", "--x"])
-      == .run(CLIArgs(repo: "r", message: nil, sandbox: .docker, image: "img", args: ["--x"])))
+    try parseCommand(["--repo", "r", "img", "x", "--y"])
+      == .run(CLIArgs(repo: "r", message: nil, sandbox: .docker, image: "img", args: ["x", "--y"])))
 }
 
-@Test(arguments: [["img", "", "--x"], ["img", "a b"], ["img", "a\tb", "--to", "x"], ["--repo", "r", "img", " "]])
+@Test(arguments: [
+  ["img", "", "--x"], ["img", "a b"], ["img", "a\tb", "--to", "x"], ["--repo", "r", "img", " "], ["img", "--x"],
+  ["img", "--files", "x"], ["img", "-x", "y"], ["img", "--repo", "r", "move"],
+])
 func aRunWhoseFirstArgumentIsNotAnActionIsRefused(argv: [String]) {
   #expect {
     try parseCommand(argv)
   } throws: { error in
     guard let error = error as? RefactorError else { return false }
     return error.code == .INVALID_ARGS
-      && error.instructions.hasPrefix("The first argument after the image must be an action name, without whitespace: ")
+      && error.instructions.hasPrefix("The first argument after the image must be an action name, not starting with - and without whitespace: ")
+  }
+}
+
+@Test func aDashFirstActionHintsAtTheLikelyMistakes() {
+  #expect {
+    try parseCommand(["img", "--files", "x"])
+  } throws: { error in
+    guard let error = error as? RefactorError else { return false }
+    return error.code == .INVALID_ARGS
+      && error.instructions.contains(#"the action "--files" starts with -"#)
+      && error.instructions.contains("the action is missing")
+      && error.instructions.contains("(--repo, --message, --sandbox) was put after the image instead of before it")
   }
 }
 

@@ -309,14 +309,14 @@ struct RunTests {
     removeTree(URL(fileURLWithPath: left).deletingLastPathComponent())
   }
 
-  @Test("a first argument that cannot name an action (empty, whitespace) is INVALID_ARGS before anything runs", .timeLimit(.minutes(2)))
+  @Test("a first argument that cannot name an action (empty, whitespace, starting with -) is INVALID_ARGS before anything runs", .timeLimit(.minutes(2)))
   func notAnAction() throws {
-    for args in [["", "--x"], ["a b"]] {
+    for args in [["", "--x"], ["a b"], ["--files", "x"]] {
       let dir = try temp.repo()
       let before = try headCommit(dir)
       let err = try failImage(repo: dir, image: PROBE, args: args)
       #expect(err.code == "INVALID_ARGS", "\(args)")
-      #expect(err.instructions.hasPrefix("The first argument after the image must be an action name, without whitespace: "), "\(err.instructions)")
+      #expect(err.instructions.hasPrefix("The first argument after the image must be an action name, not starting with - and without whitespace: "), "\(err.instructions)")
       #expect(try headCommit(dir) == before)
       #expect(try status(dir) == "")
     }

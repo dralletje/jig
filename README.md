@@ -49,7 +49,8 @@ tests of every package and the end-to-end tests (see [Tests](#tests)).
 Only `--repo`, `--message` and `--sandbox` before the image are the binary's own options. `--sandbox`
 picks where the image runs (see [Sandboxes](#sandboxes)): `docker` (the default) or `rootlesskit`.
 Everything after the image goes to the image verbatim, even values starting with `--`. The first
-of them is the action name, which the commit subject names: an empty one, or one with whitespace, is
+of them is the action name, which the commit subject names: an empty one, one starting with `-` (the
+action is missing, or one of jig's own options was put after the image), or one with whitespace, is
 `INVALID_ARGS` before anything runs (and `verify` refuses a recorded command like that as unreadable).
 `verify` as the first argument selects [Verify](#verify) instead.
 

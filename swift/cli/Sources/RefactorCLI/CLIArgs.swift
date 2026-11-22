@@ -109,7 +109,7 @@ public func parseCommand(_ argv: [String]) throws -> Command {
     if let problem = actionProblem(cli.args[0]) {
       throw RefactorError(
         code: .INVALID_ARGS,
-        instructions: "The first argument after the image must be an action name, without whitespace: \(problem). "
+        instructions: "The first argument after the image must be an action name, not starting with - and without whitespace: \(problem). "
           + "jig <image> lists the image's actions. \(usage)")
     }
     return .run(cli)
