@@ -22,7 +22,7 @@ dist/jig --repo <repo> localhost/jig/typescript:local lift-out --file src/a.ts -
 dist/jig --repo <repo> localhost/jig/typescript:local move-file --file src/a.ts --to src/lib/a.ts
 dist/jig --repo <repo> localhost/jig/typescript:local organize-imports --files "src/**/*.ts,src/**/*.tsx"
 dist/jig --repo <repo> localhost/jig/prettier:local format --files "src/**"
-dist/jig --repo <repo> localhost/jig/codemod-react:local codemod --transform rename-unsafe-lifecycles --files "src/**"
+dist/jig --repo <repo> localhost/jig/codemod-react:local rename-unsafe-lifecycles --files "src/**"
 dist/jig --repo <repo> localhost/jig/fs:local move --from src/old --to src/new
 #   typescript actions also take --kind function|class|interface|type|enum|variable
 #   every action, its flags and its limits: see "Actions" below, or ask the image (see "Help")
@@ -172,8 +172,10 @@ Refactor-Kind: refactor
 Co-Authored-By: codemodder <codemodder@users.noreply.github.com>
 ```
 
-The message is the subject, a blank line, then the summary. The subject comes from the image, and starts
-with the action's kind: `<kind>(<action>): <description>`. The image's summary follows it, and says what
+The message is the subject, a blank line, then the summary. The subject comes from the image, and names
+the kind, the image and the action: `<kind>(<image> <action>): <description>`, where `<image>` is the
+image's own name (`typescript`, `prettier`, `codemod-react`, `fs`), not the reference it was run as, so a
+replay from any registry or tag gives the same subject. The image's summary follows it, and says what
 a partial result left alone. An optional `--message` goes between the summary and the trailers.
 The trailers are `Refactor-Command`, `Refactor-Kind` and the co-author.
 `Refactor-Command` is canonical JSON (keys sorted by UTF-16 code units, no whitespace, strings escaped
@@ -275,13 +277,12 @@ Moves a file or folder to a free destination.
 
 Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>` and `<choice>`; optional flags are in
 brackets in the usage line; several kinds show as `sweep|rewrite`. A choice flag's choices are a table
-indented under it: the name, the kind when picking the choice decides the commit's kind, and what it
-does:
+indented under it: the name and what it does:
 
 ```
-  --transform <choice>  required  Which transform to run.
-      create-element-to-jsx  sweep    Converts React.createElement calls to JSX.
-      pure-component         rewrite  Converts classes that only render, without state or refs, to function components.
+  --parser <choice>    optional  The parser for every file. …
+      tsx    TypeScript with JSX.
+      ts     TypeScript without JSX.
       …
 ```
 
@@ -311,8 +312,10 @@ Success (exit 0):
 These five fields, and no others (any other field is `IMAGE_FAILED`):
 
 - `kind`: `refactor` | `sweep` | `rewrite` (see [Kinds](#kinds-refactors-sweeps-and-rewrites)).
-- `subject`: `<kind>(<label>): <description>`, one line; it must start with `<kind>(` for the reported
-  `kind`.
+- `subject`: `<kind>(<image> <action>): <description>`, one line. It must start with `<kind>(` for the
+  reported `kind`, then the image's own name (not empty, without spaces, `(` or `)`), one space, the
+  action jig ran (the first argument it passed to the image) and `): `. Anything else, the older
+  `<kind>(<action>): ` form included, is `IMAGE_FAILED`, with the expected start in the instructions.
 - `summary`: what happened, for people: plain text, may be several lines and hold an ASCII graph, not
   only whitespace. A partial result says here what it left alone and what to do about it. The binary
   drops trailing whitespace and blank lines at the ends, the same in the commit and its output.
@@ -354,7 +357,9 @@ binary's own (dirty tree, image not found, …) alike:
 ## Writing an action
 
 An action is an object with `id`, `kind`, `parseParams`, `describe` and `run` (`packages/core/src/types.ts`).
-The image's `main` runs it and turns its result into the report with `okReport(kind, id, describe(params), result)`;
+The image's `main` runs it and turns its result into the report with
+`okReport(kind, "<image>", id, describe(params), result)`, `"<image>"` being the image's own name, written
+out once in its `main` (`"typescript"`, `"prettier"`);
 `runEntrypoint` prints that, or the failure report for a thrown error. What an action has to do:
 
 - **`run` returns what it did**, `ActionResult` from `@jig/core`: only a `summary`.
@@ -365,7 +370,8 @@ The image's `main` runs it and turns its result into the report with `okReport(k
   };
   ```
 
-  `okReport` throws on an action bug (an empty summary, a subject with a line break). Write the summary
+  `okReport` throws on an image bug (an image name that is empty or has a space or parenthesis, an empty
+  summary, a subject with a line break). Write the summary
   of a long list with `listLines(items)` (one per line, capped at 20) and `plural(n, word)`.
 - **A partial result** ends its summary with a `Not handled (N):` block, one entry per place left alone:
   `path:line: reason`, then the instructions indented two more spaces.
@@ -417,16 +423,15 @@ example in [`schemas/examples/help-1.json`](schemas/examples/help-1.json):
   text, may be several lines). `type` is `path` (one repo-relative path), `paths` (comma-separated
   repo-relative paths), `globs` (comma-separated globs), `text` (anything else) or `choice` (the name of
   one of `choices`, a non-empty list present only on a `choice`).
-- A choice is `{"name": "<value>", "description": "<one line>", "kind"?: "refactor"|"sweep"|"rewrite"}`,
-  names unique within the flag. `kind` means picking the choice decides the commit's kind (codemod's
-  `--transform`): when one choice of a flag has a kind, all of them do; at most one flag of an action has
-  choices with kinds; and the action's `kinds` are exactly the kinds those choices use.
+- A choice is `{"name": "<value>", "description": "<one line>"}`, both required and nothing else, names
+  unique within the flag. A choice never decides the commit's kind: what would need that is one action
+  per choice (the codemod image's transforms).
 - **One action, one set of flags.** Each flag is required or optional; an action never takes "one of
   these flags". A case that would need it is two actions (fs `remove` and `remove-matching`).
 - jig checks the object strictly: unknown fields (`ok`, `image` and `notes` included: jig adds those),
   wrong types, empty `actions`, two actions or two flags of one action with the same name, `choices`
-  missing or misplaced, a choice that is not such an object, or kinds on choices that break the rules
-  above are `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the choice rules too. jig does not
+  missing or misplaced, or a choice that is not such an object (one with a `kind` included) are
+  `IMAGE_FAILED`. `imageHelp` in `packages/core` throws on the choice rules too. jig does not
   check a run's arguments against the help: the image still parses them itself.
 
 ## Kinds: refactors, sweeps and rewrites
@@ -471,9 +476,11 @@ N", not as an exit code. An interrupted run is `INTERNAL` with exit code 130, 14
 
 ## Container images
 
-Each tool is one image, `localhost/jig/<tool>:local`, for `typescript` (all
-`typescript-*` actions, with TypeScript 6.0.3 bundled), `prettier` (`format`, with one pinned
-prettier 3) and `codemod-react` (`codemod`, see [Published codemods](#published-codemods)). The base is `node:26.13.1-slim`, which runs the TypeScript source directly. The entrypoint is
+Each tool is one image, `localhost/jig/<tool>:local`, for `typescript` (the typescript actions,
+`rename`, `extract`, …, with TypeScript 6.0.3 bundled), `prettier` (`format`, with one pinned
+prettier 3) and `codemod-react` (one action per react-codemod transform, see
+[Published codemods](#published-codemods)). Each image's name, the `<image>` in its commit subjects, is
+the tool's: `typescript`, `prettier`, `codemod-react`, `fs`. The base is `node:26.13.1-slim`, which runs the TypeScript source directly. The entrypoint is
 `node /app/packages/<pkg>/src/bin.ts`.
 
 The `fs` image ([fs](#fs)) is the exception: no Node. It is `busybox:1.38.0` plus the static (musl)
@@ -584,7 +591,7 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 | Action | Flags | What it does; limits |
 |---|---|---|
 | `remove-console` | `--files [--methods log,debug]` | removes `console.<method>(...)` statements (default `log`), with a same-line comment; a call whose value is used is left alone (named in the summary), and as the body of an `if` or loop it leaves `{}` (or drops an `if` with a pure condition) |
-| `codemod` (codemod image) | `--transform --files [--parser]` | runs a published codemod; kinds, parsers and limits in [Published codemods](#published-codemods) |
+| the transforms (codemod-react image) | `--files [--parser]` | each react-codemod transform is an action of its own; kinds, parsers and limits in [Published codemods](#published-codemods) |
 
 ### fs
 
@@ -616,17 +623,22 @@ file. Every check runs before anything is touched, so a refusal changes nothing.
 
 ```sh
 dist/jig --repo <repo> localhost/jig/codemod-react:local \
-  codemod --transform <name> --files <glob,glob> [--parser tsx|ts|babel|flow]
+  <transform> --files <glob,glob> [--parser tsx|ts|babel|flow]
 ```
 
-It runs the transform over the matching `.js/.jsx/.ts/.tsx` files (never `.d.ts`). The parser is
+Every transform is an action of its own, named as the transform (`sort-comp`, `pure-component`,
+`React-DOM-to-react-dom-factories`, …), with that transform's kind and its one-line description as its
+summary. It runs the transform over the matching `.js/.jsx/.ts/.tsx` files (never `.d.ts`). The parser is
 `--parser` if given, else `tsx`/`ts` by the file's extension, else the one the transform declares
 (`flow` for `class` and `manual-bind-to-arrow`), else `babel`. Images install from a committed
 `package-lock.json` (`npm ci`), so a rebuild resolves the same dependency versions. The commit subject
-is `<kind>(react-codemod@5.4.4/<transform>): <globs>` and the summary lists the changed files. An unknown
-transform is `INVALID_ARGS`, listing the known ones. A file a transform cannot parse is left alone, named
-in the summary. The kinds, from what each transform does (`packages/action-codemod/src/catalog.ts`, which
-also has a one-line description of each; `--help` shows both on the `--transform` choices):
+is `<kind>(codemod-react <transform>): <globs>` (for example `sweep(codemod-react sort-comp): src/**`),
+and the summary names react-codemod's version and lists the changed files. An unknown action
+(`codemod` included: it was the one action before the transforms became actions) is `UNKNOWN_ACTION`,
+listing the transforms. A file a transform cannot parse is left alone, named in the summary. The kinds,
+from what each transform does (`packages/action-codemod/src/catalog.ts`, which also has a one-line
+description of each and the name of the image that carries the package; `--help` shows the kind and
+description of every action):
 
 | Kind | Transforms |
 |---|---|
@@ -653,7 +665,7 @@ also has a one-line description of each; `--help` shows both on the `--transform
 | `schemas/` | the JSON Schemas of the image report and the binary's output, and example documents |
 | `packages/engine-typescript` | `TsEngine` (TypeScript 6 language service), the typescript actions and their image entrypoint |
 | `packages/action-prettier` | the format action and its image entrypoint |
-| `packages/action-codemod` | the published-codemod entrypoint (jscodeshift runner) and its table of transforms, their kinds and descriptions |
+| `packages/action-codemod` | the published-codemod entrypoint (jscodeshift runner, one action per transform) and its table of transforms, their kinds and descriptions, and of the image carrying each package |
 | `packages/test-utils` | `makeRepo`, `readTree`, fixtures |
 | `examples/` | small example repos used by the tests and as CLI demos (see below) |
 | `containers/` | one Containerfile per image |

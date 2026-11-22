@@ -69,8 +69,8 @@ The owner picked A.
 
 - `summary` (image and action) is one line of plain text.
 - `kinds` lists the kinds the action's commits can have (`refactor`, `sweep`, `rewrite`): at least one, no
-  repeats. Most actions have one; the codemod action has the kinds of its transforms (some `sweep`, some
-  `rewrite`), and each `--transform` choice carries its transform's kind.
+  repeats. Every action of today's images has one: each react-codemod transform is an action of its own
+  with its transform's kind.
 - `flags` may be empty. Each flag has `name` (starting with `--`), `type`, `required` and `description`
   (plain text, may be several lines).
 - `type` is one of:
@@ -79,14 +79,12 @@ The owner picked A.
   - `globs`: comma-separated globs;
   - `text`: anything else (a symbol name, `src/a.ts:12:20`, a comma-separated list of names);
   - `choice`: the name of one of `choices` (required for `choice`, at least one, and not allowed on any
-    other type). A choice is an object `{name, description, kind?}`: `name` and `description` (one line)
-    are non-empty strings, names are unique within the flag, and there are no other fields.
-  - `kind` on a choice means picking it decides the commit's kind (codemod's `--transform`). When one
-    choice of a flag has a kind, all of them do; at most one flag of an action has choices with kinds; and
-    the action's `kinds` are exactly the kinds those choices use.
+    other type). A choice is an object `{name, description}`: both are non-empty strings, `description`
+    one line, names are unique within the flag, and there are no other fields (a `kind` included: a choice
+    never decides the commit's kind).
 - jig checks the object strictly, like a report: unknown fields, a wrong type, an empty `actions`, two
   actions with the same name, two flags with the same name in one action, `choices` missing or misplaced,
-  or a choice or its kind breaking the rules above are `IMAGE_FAILED`. core's help builder throws on the
+  or a choice breaking the rules above are `IMAGE_FAILED`. core's help builder throws on the
   choice rules, so an image's own tests catch them.
 - A schema file, `schemas/help-1.schema.json`, describes it, with an example in `schemas/examples/`.
 
@@ -130,14 +128,13 @@ Moves a file or folder to a free destination.
 ```
 
   Types show as `<path>`, `<path,path>`, `<glob,glob>`, `<text>`, and a choice as `<choice>` with its
-  choices in a table indented under the flag: name, kind (only when the flag's choices have kinds), and
-  description. Optional flags show in brackets in the usage line. The notes print under the header;
-  several kinds show as `sweep|rewrite`.
+  choices in a table indented under the flag: name and description. Optional flags show in brackets in
+  the usage line. The notes print under the header; several kinds show as `sweep|rewrite`.
 
 ```
-  --transform <choice>  required  Which transform to run.
-      create-element-to-jsx  sweep    Converts React.createElement calls to JSX.
-      pure-component         rewrite  Converts classes that only render, without state or refs, to function components.
+  --parser <choice>    optional  The parser for every file. …
+      tsx    TypeScript with JSX.
+      ts     TypeScript without JSX.
 ```
 
 - **When it fails** (exit 1, the usual one-line error JSON on stdout in both cases):
@@ -160,8 +157,9 @@ Moves a file or folder to a free destination.
   `path` for `move-file` and `text` for `rename`). `main` and `parseParams` stay as
   they are. The README's usage lines are the source for the wording.
 - **prettier and codemod-react images.** Not built from `Action`s: each declares its help object directly
-  and passes it to `runEntrypoint`. Codemod's `--transform` is a `choice` of the pinned react-codemod's
-  transforms, each with a one-line description and its kind (from the image's catalog).
+  and passes it to `runEntrypoint`. Each transform of the pinned react-codemod is an action of its own,
+  named as the transform, with its kind and its one-line description as summary (from the image's
+  catalog), and flags `--files` and `--parser`.
 - **fs image.** `fs.nu` answers `--help` with the help object, written out in the script. `remove` splits:
   - `remove --paths <path,path>` removes files and folders (every path must exist), as `remove --paths`
     does today; `--files` is no longer one of its flags.
@@ -208,10 +206,17 @@ Open to correction:
 - `jig <image>` with no arguments is help and exits 0, the same as `--help`.
 - An image without help is `IMAGE_FAILED`, not a new error code.
 - `--message` with a help call is refused; `--repo` is accepted and ignored.
-- An action lists `kinds` (a list), not one `kind`, because the codemod action's kind depends on its
-  transform.
-- A choice is an object with a one-line `description` and an optional `kind` (the commit's kind when it
-  is picked), not a bare string; strings are refused, so there is one shape only.
+- An action lists `kinds` (a list), not one `kind`, so an action whose kind depends on its arguments
+  stays possible; today every action has one.
+- A choice is an object with a one-line `description`, not a bare string; strings are refused, so there
+  is one shape only.
+- Codemod transforms are actions: each react-codemod transform is an action of the codemod-react image,
+  named as the transform, with one kind. The `codemod` action and its `--transform` flag are gone.
+- Subjects name image and action: every commit subject is `<kind>(<image> <action>): <description>`,
+  `<image>` the image's own name (`typescript`, `prettier`, `codemod-react`, `fs`), and jig refuses any
+  other start. The typescript actions dropped their `typescript-` prefix (`rename`, `extract`, ...).
+- Choice kind removed: a choice is `{name, description}` only; with the transforms as actions no flag
+  decides the commit's kind, so a choice with `kind` is refused as an unknown field.
 - jig adds the resolve `notes` to help, as it does to a run's output, and `ok: true`.
 - The split fs action is named `remove-matching`.
 - After this, the images are published again as new versions (`…-0.2`); that is a separate step.
