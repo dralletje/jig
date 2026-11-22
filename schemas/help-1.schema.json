@@ -43,33 +43,19 @@
           "uniqueItems": true
         },
         "summary": { "$ref": "#/$defs/line" },
-        "flags": {
-          "description": "At most one flag has choices with kinds.",
-          "type": "array",
-          "items": { "$ref": "#/$defs/flag" },
-          "contains": {
-            "type": "object",
-            "required": ["choices"],
-            "properties": {
-              "choices": { "type": "array", "contains": { "type": "object", "properties": { "kind": true }, "required": ["kind"] } }
-            }
-          },
-          "minContains": 0,
-          "maxContains": 1
-        }
+        "flags": { "type": "array", "items": { "$ref": "#/$defs/flag" } }
       },
       "additionalProperties": false
     },
     "flagName": { "type": "string", "pattern": "^--[^\\s]+$" },
     "flagDescription": { "description": "Plain text, may be several lines.", "type": "string", "minLength": 1 },
     "choice": {
-      "description": "One value of a choice flag: what is passed (name), one line on what it does, and, when picking it decides the commit's kind, that kind.",
+      "description": "One value of a choice flag: what is passed (name), and one line on what it does.",
       "type": "object",
       "required": ["name", "description"],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
-        "description": { "$ref": "#/$defs/line" },
-        "kind": { "$ref": "urn:jig:report:1#/$defs/kind" }
+        "description": { "$ref": "#/$defs/line" }
       },
       "additionalProperties": false
     },
@@ -94,14 +80,10 @@
             "name": { "$ref": "#/$defs/flagName" },
             "type": { "const": "choice" },
             "choices": {
-              "description": "When one choice has a kind, all of them do (checked here; at most one flag of an action has choices with kinds is checked on the action's flags). Names are unique within the flag, and the action's kinds are exactly the kinds the choices use: jig checks these two alone, the schema cannot express them.",
+              "description": "Names are unique within the flag: jig checks this alone, the schema cannot express it.",
               "type": "array",
               "items": { "$ref": "#/$defs/choice" },
-              "minItems": 1,
-              "anyOf": [
-                { "items": { "type": "object", "properties": { "kind": true }, "required": ["kind"] } },
-                { "items": { "not": { "type": "object", "properties": { "kind": true }, "required": ["kind"] } } }
-              ]
+              "minItems": 1
             },
             "required": { "type": "boolean" },
             "description": { "$ref": "#/$defs/flagDescription" }

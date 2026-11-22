@@ -50,8 +50,8 @@ private let move = ActionHelp(
 @Test func choiceFlagsParse() {
   let flags =
     #"{"name":"--transform","type":"choice","choices":["#
-    + #"{"name":"a","description":"Does a.","kind":"sweep"},{"name":"b","description":"Does b.","kind":"rewrite"},"#
-    + #"{"name":"c","description":"Does c.","kind":"rewrite"}"#
+    + #"{"name":"a","description":"Does a."},{"name":"b","description":"Does b."},"#
+    + #"{"name":"c","description":"Does c."}"#
     + #"],"required":true,"description":"Which.\nTwo lines."},"#
     + #"{"name":"--files","type":"globs","required":false,"description":"Where."},"#
     + #"{"name":"--parser","type":"choice","choices":[{"name":"tsx","description":"TypeScript."}],"required":false,"description":"P."}"#
@@ -68,14 +68,14 @@ private let move = ActionHelp(
                 FlagHelp(
                   name: "--transform", type: .choice, required: true, description: "Which.\nTwo lines.",
                   choices: [
-                    ChoiceHelp(name: "a", description: "Does a.", kind: .sweep),
-                    ChoiceHelp(name: "b", description: "Does b.", kind: .rewrite),
-                    ChoiceHelp(name: "c", description: "Does c.", kind: .rewrite),
+                    ChoiceHelp(name: "a", description: "Does a."),
+                    ChoiceHelp(name: "b", description: "Does b."),
+                    ChoiceHelp(name: "c", description: "Does c."),
                   ]),
                 FlagHelp(name: "--files", type: .globs, required: false, description: "Where.", choices: nil),
                 FlagHelp(
                   name: "--parser", type: .choice, required: false, description: "P.",
-                  choices: [ChoiceHelp(name: "tsx", description: "TypeScript.", kind: nil)]),
+                  choices: [ChoiceHelp(name: "tsx", description: "TypeScript.")]),
               ])
           ])))
 }
@@ -93,35 +93,10 @@ private func choiceFlag(_ choices: String, name: String = "--a") -> String {
   ("a choice without name", help(actions: action(flags: choiceFlag(#"{"description":"D."}"#)))),
   ("a choice with an empty name", help(actions: action(flags: choiceFlag(#"{"name":"","description":"D."}"#)))),
   ("a choice with an unknown field", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","default":true}"#)))),
-  ("a choice with an unknown kind", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":"delete"}"#)))),
-  ("a choice with a null kind", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":null}"#)))),
+  ("a choice with a kind", help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"}"#)))),
   (
     "two choices with one name",
     help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D."},{"name":"x","description":"E."}"#)))
-  ),
-  (
-    "a kind on some choices but not all",
-    help(actions: action(flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"},{"name":"y","description":"E."}"#)))
-  ),
-  (
-    "kinds on the choices of two flags",
-    help(
-      actions: action(
-        flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"}"#, name: "--a") + ","
-          + choiceFlag(#"{"name":"y","description":"E.","kind":"rewrite"}"#, name: "--b")))
-  ),
-  (
-    "an action kind no choice has",
-    help(
-      actions: action(
-        kinds: #"["sweep","rewrite"]"#, flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"}"#)))
-  ),
-  (
-    "a choice kind the action does not list",
-    help(
-      actions: action(
-        kinds: #"["rewrite"]"#,
-        flags: choiceFlag(#"{"name":"x","description":"D.","kind":"rewrite"},{"name":"y","description":"E.","kind":"sweep"}"#)))
   ),
 ])
 func choiceChecksRefuse(problem: String, line: String) {
@@ -238,21 +213,21 @@ func strictChecksRefuse(problem: String, line: String) {
 
 // MARK: - What jig prints
 
-private let codemod = ActionHelp(
-  name: "codemod", kinds: [.sweep, .rewrite], summary: "Runs a react-codemod transform.",
+private let convert = ActionHelp(
+  name: "convert", kinds: [.sweep, .rewrite], summary: "Converts React code.",
   flags: [
     FlagHelp(
-      name: "--transform", type: .choice, required: true, description: "The transform to run.\nIts kind is the commit's.",
+      name: "--to", type: .choice, required: true, description: "What to convert to.\nOne of these.",
       choices: [
-        ChoiceHelp(name: "create-element-to-jsx", description: "Converts React.createElement calls to JSX.", kind: .sweep),
-        ChoiceHelp(name: "pure-component", description: "Converts stateless classes to function components.", kind: .rewrite),
+        ChoiceHelp(name: "jsx", description: "Converts React.createElement calls to JSX."),
+        ChoiceHelp(name: "function", description: "Converts stateless classes to function components."),
       ]),
     FlagHelp(name: "--files", type: .globs, required: true, description: "The files to run it on.", choices: nil),
     FlagHelp(
       name: "--parser", type: .choice, required: false, description: "The parser.",
       choices: [
-        ChoiceHelp(name: "tsx", description: "TypeScript with JSX.", kind: nil),
-        ChoiceHelp(name: "babel", description: "JavaScript with JSX.", kind: nil),
+        ChoiceHelp(name: "tsx", description: "TypeScript with JSX."),
+        ChoiceHelp(name: "babel", description: "JavaScript with JSX."),
       ]),
   ])
 
@@ -262,7 +237,7 @@ private let sample = ImageHelp(
     ActionHelp(name: "copy", kinds: [.rewrite], summary: "Copies a file or folder to a free destination.", flags: []),
     move,
     ActionHelp(name: "remove-matching", kinds: [.rewrite], summary: "Removes every file a glob matches.", flags: []),
-    codemod,
+    convert,
   ])
 
 @Test func helpJSONAddsOkAndImage() throws {
@@ -286,13 +261,13 @@ private let sample = ImageHelp(
 }
 
 @Test func helpJSONKeepsChoicesAndNotes() throws {
-  let printed = helpJSON(image: "i@sha256:abc", notes: ["Used the cached image."], help: ImageHelp(summary: "S.", actions: [codemod]))
+  let printed = helpJSON(image: "i@sha256:abc", notes: ["Used the cached image."], help: ImageHelp(summary: "S.", actions: [convert]))
   #expect(printed.contains(#""notes":["Used the cached image."]"#))
-  // The choices are carried through as objects, keys sorted, kind left out when there is none.
+  // The choices are carried through as objects, keys sorted.
   #expect(
     printed.contains(
-      #""choices":[{"description":"Converts React.createElement calls to JSX.","kind":"sweep","name":"create-element-to-jsx"},"#
-        + #"{"description":"Converts stateless classes to function components.","kind":"rewrite","name":"pure-component"}]"#))
+      #""choices":[{"description":"Converts React.createElement calls to JSX.","name":"jsx"},"#
+        + #"{"description":"Converts stateless classes to function components.","name":"function"}]"#))
   #expect(printed.contains(#""choices":[{"description":"TypeScript with JSX.","name":"tsx"},"#))
   #expect(printed.contains(#""kinds":["sweep","rewrite"]"#))
   // Keys sorted, as every other object jig prints.
@@ -311,7 +286,7 @@ private let sample = ImageHelp(
         copy             rewrite        Copies a file or folder to a free destination.
         move             rewrite        Moves a file or folder to a free destination.
         remove-matching  rewrite        Removes every file a glob matches.
-        codemod          sweep|rewrite  Runs a react-codemod transform.
+        convert          sweep|rewrite  Converts React code.
 
       jig <image> <action> --help shows an action's flags.
       """)
@@ -349,21 +324,21 @@ private let sample = ImageHelp(
 
 @Test func helpTextActionViewWithChoicesOptionalFlagsAndNotes() {
   let text = helpText(
-    image: "i@sha256:abc", notes: ["A note."], help: ImageHelp(summary: "S.", actions: [codemod]), action: "codemod")
+    image: "i@sha256:abc", notes: ["A note."], help: ImageHelp(summary: "S.", actions: [convert]), action: "convert")
   #expect(
     text == """
-      codemod (sweep|rewrite)
-      Runs a react-codemod transform.
+      convert (sweep|rewrite)
+      Converts React code.
       A note.
 
-        jig <image> codemod --transform <choice> --files <glob,glob> [--parser <choice>]
+        jig <image> convert --to <choice> --files <glob,glob> [--parser <choice>]
 
-        --transform <choice>  required  The transform to run.
-                                        Its kind is the commit's.
-            create-element-to-jsx  sweep    Converts React.createElement calls to JSX.
-            pure-component         rewrite  Converts stateless classes to function components.
-        --files <glob,glob>   required  The files to run it on.
-        --parser <choice>     optional  The parser.
+        --to <choice>        required  What to convert to.
+                                       One of these.
+            jsx       Converts React.createElement calls to JSX.
+            function  Converts stateless classes to function components.
+        --files <glob,glob>  required  The files to run it on.
+        --parser <choice>    optional  The parser.
             tsx    TypeScript with JSX.
             babel  JavaScript with JSX.
       """)
@@ -371,7 +346,7 @@ private let sample = ImageHelp(
 
 @Test func helpJSONOfParsedHelpParsesAgain() throws {
   // What jig prints for a help with choices is a valid help object again, once its own fields are gone.
-  let printed = helpJSON(image: "i@sha256:abc", notes: [], help: ImageHelp(summary: "S.", actions: [codemod]))
+  let printed = helpJSON(image: "i@sha256:abc", notes: [], help: ImageHelp(summary: "S.", actions: [convert]))
   let value = try JSONDecoder().decode(JSONValue.self, from: Data(printed.utf8))
   guard case .object(let fields) = value else {
     Issue.record("not an object: \(printed)")
@@ -380,7 +355,7 @@ private let sample = ImageHelp(
   let stripped = String(decoding: try JSONValue.object(fields.filter { $0.key != "ok" && $0.key != "image" }).encoded(), as: UTF8.self)
   #expect(
     ImageHelpAnswer.parse(stdout: stripped, stderr: "", termination: .exited(0))
-      == .help(ImageHelp(summary: "S.", actions: [codemod])))
+      == .help(ImageHelp(summary: "S.", actions: [convert])))
 }
 
 @Test func helpTextActionViewWithoutFlagsAndOtherTypes() {
