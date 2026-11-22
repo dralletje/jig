@@ -52,10 +52,10 @@ const SRC = "export const foo = 1;\nexport const keep = foo;\n";
 const DONE = "export const bar = 1;\nexport const keep = bar;\n";
 
 describe("codemod", () => {
-  test("runs the transform over the matching files and reports its kind from the table", async () => {
+  test("runs the transform named by the action over the matching files and reports its kind from the table", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": SRC, "b.tsx": "const x = <div>{foo}</div>;\n", "notes.md": "foo\n" });
-    const report = await main(["codemod", "--transform", "rename", "--files", "*.ts,*.tsx,*.md"], dir, pkg);
+    const report = await main(["rename", "--files", "*.ts,*.tsx,*.md"], dir, pkg);
     assertReport(report);
     assert.deepEqual(Object.keys(report), ["schema", "ok", "kind", "subject", "summary"]);
     assert.deepEqual(report, {
@@ -74,21 +74,21 @@ describe("codemod", () => {
   test("a file the transform leaves alone is not changed or listed", async () => {
     const pkg = await fakePackage({ rename: "rewrite", nothing: "sweep" }, { nothing: NOTHING });
     const dir = await workspace({ "a.ts": SRC, "b.ts": "export const keep = 2;\n" });
-    const report = (await main(["codemod", "--transform", "rename", "--files", "*.ts"], dir, pkg)) as OkReport;
+    const report = (await main(["rename", "--files", "*.ts"], dir, pkg)) as OkReport;
     assert.equal(report.summary, "Ran rename from fake-codemods 1.2.3 on 1 file:\n  a.ts");
     assert.equal((await readTree(dir))["b.ts"], "export const keep = 2;\n");
-    const none = (await main(["codemod", "--transform", "nothing", "--files", "*.ts"], dir, pkg)) as OkReport;
+    const none = (await main(["nothing", "--files", "*.ts"], dir, pkg)) as OkReport;
     assert.equal(none.kind, "sweep");
     assert.equal(none.subject, "sweep(fake-codemods@1.2.3/nothing): *.ts");
     assert.equal(none.summary, "Ran nothing from fake-codemods 1.2.3; it changed no files.");
   });
 
-  test("every transform of the table reports the kind the table gives it", async () => {
+  test("every transform of the table, run as its action, reports the kind the table gives it", async () => {
     for (const [name, transforms] of Object.entries(TRANSFORMS)) {
       for (const [transform, info] of Object.entries(transforms)) {
         const pkg = await fakePackage({ [transform]: info.kind });
         const dir = await workspace({ "a.ts": SRC });
-        const report = (await main(["codemod", "--transform", transform, "--files", "a.ts"], dir, { ...pkg, name })) as OkReport;
+        const report = (await main([transform, "--files", "a.ts"], dir, { ...pkg, name })) as OkReport;
         assert.equal(report.kind, info.kind, `${name}/${transform}`);
         assert.ok(report.subject.startsWith(`${info.kind}(${name}@1.2.3/${transform}): `), report.subject);
       }
@@ -107,7 +107,7 @@ describe("codemod", () => {
   test("a file whose transform throws is listed in the summary as not handled, with what to do", async () => {
     const pkg = await fakePackage({ boom: "rewrite", rename: "rewrite" }, { boom: THROWS });
     const dir = await workspace({ "a.ts": SRC, "b.ts": SRC });
-    const report = await main(["codemod", "--transform", "boom", "--files", "*.ts"], dir, pkg);
+    const report = await main(["boom", "--files", "*.ts"], dir, pkg);
     assertReport(report);
     assert.deepEqual(Object.keys(report), ["schema", "ok", "kind", "subject", "summary"]);
     assert.equal(
@@ -128,14 +128,14 @@ describe("codemod", () => {
   test("files changed and files not handled are both in the summary", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": SRC, "b.ts": "export const = ;\n" });
-    const report = (await main(["codemod", "--transform", "rename", "--files", "*.ts"], dir, pkg)) as OkReport;
+    const report = (await main(["rename", "--files", "*.ts"], dir, pkg)) as OkReport;
     assert.match(report.summary, /^Ran rename from fake-codemods 1\.2\.3 on 1 file:\n {2}a\.ts\n\nNot handled \(1\):\n {2}b\.ts:1: rename failed: /);
   });
 
   test("a parse error's position goes to the path:line, not into the reason", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": "export const a = 1;\nexport const = ;\n" });
-    const ok = (await main(["codemod", "--transform", "rename", "--files", "a.ts"], dir, pkg)) as OkReport;
+    const ok = (await main(["rename", "--files", "a.ts"], dir, pkg)) as OkReport;
     const line = ok.summary.split("\n").find((l) => l.startsWith("  a.ts:"));
     assert.ok(line, ok.summary);
     assert.match(line, /^ {2}a\.ts:2: rename failed: \S/);
@@ -147,19 +147,19 @@ describe("codemod", () => {
     const pkg = await fakePackage({ flowy: "rewrite" }, { flowy: FLOW });
     const typed = "const x = (1: number);\n"; // a type cast: Flow's parser reads it, Babel's does not
     const dir = await workspace({ "a.js": typed });
-    const report = (await main(["codemod", "--transform", "flowy", "--files", "a.js"], dir, pkg)) as OkReport;
+    const report = (await main(["flowy", "--files", "a.js"], dir, pkg)) as OkReport;
     assert.doesNotMatch(report.summary, /Not handled/, report.summary);
     assert.equal((await readTree(dir))["a.js"], "const y = (1: number);\n");
     const plain = await fakePackage({ rename: "rewrite" });
     const other = await workspace({ "a.js": typed });
-    const viaFlag = (await main(["codemod", "--transform", "rename", "--files", "a.js", "--parser", "flow"], other, plain)) as OkReport;
+    const viaFlag = (await main(["rename", "--files", "a.js", "--parser", "flow"], other, plain)) as OkReport;
     assert.doesNotMatch(viaFlag.summary, /Not handled/, viaFlag.summary);
   });
 
   test("declaration files are not passed to transforms", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": SRC, "types.d.ts": "export declare const foo: number;\n", "x.d.mts": "export declare const foo: number;\n" });
-    const report = (await main(["codemod", "--transform", "rename", "--files", "**/*.ts,**/*.mts"], dir, pkg)) as OkReport;
+    const report = (await main(["rename", "--files", "**/*.ts,**/*.mts"], dir, pkg)) as OkReport;
     assert.equal(report.summary, "Ran rename from fake-codemods 1.2.3 on 1 file:\n  a.ts");
     assert.equal((await readTree(dir))["types.d.ts"], "export declare const foo: number;\n");
   });
@@ -167,7 +167,7 @@ describe("codemod", () => {
   test("when nothing changed the summary says so instead of listing zero files", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": "export const keep = 2;\n" });
-    const report = (await main(["codemod", "--transform", "rename", "--files", "*.ts"], dir, pkg)) as OkReport;
+    const report = (await main(["rename", "--files", "*.ts"], dir, pkg)) as OkReport;
     assert.equal(report.summary, "Ran rename from fake-codemods 1.2.3; it changed no files.");
   });
 
@@ -175,7 +175,7 @@ describe("codemod", () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     for (const parser of ["tsx", "ts", "babel"]) {
       const dir = await workspace({ "a.ts": SRC });
-      await main(["codemod", "--transform", "rename", "--files", "a.ts", "--parser", parser], dir, pkg);
+      await main(["rename", "--files", "a.ts", "--parser", parser], dir, pkg);
       assert.equal((await readTree(dir))["a.ts"], DONE, parser);
     }
   });
@@ -183,45 +183,52 @@ describe("codemod", () => {
   test("a wrong --parser is INVALID_ARGS", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": SRC });
-    const err = await rejects(main(["codemod", "--transform", "rename", "--files", "a.ts", "--parser", "bogus"], dir, pkg));
+    const err = await rejects(main(["rename", "--files", "a.ts", "--parser", "bogus"], dir, pkg));
     assert.equal(err.code, "INVALID_ARGS");
     assert.match(err.instructions, /tsx, ts, babel, flow/);
   });
 });
 
 describe("codemod arguments", () => {
-  test("an unknown transform is INVALID_ARGS and the instructions list the known ones", async () => {
+  test("an unknown action is UNKNOWN_ACTION and the instructions list the transforms", async () => {
     const pkg = await fakePackage({ b: "sweep", a: "rewrite" });
     const dir = await workspace({ "a.ts": SRC });
-    const err = await rejects(main(["codemod", "--transform", "nope", "--files", "a.ts"], dir, pkg));
-    assert.equal(err.code, "INVALID_ARGS");
-    assert.equal(err.instructions, 'Unknown transform "nope". fake-codemods@1.2.3 has: a, b.');
+    const err = await rejects(main(["nope", "--files", "a.ts"], dir, pkg));
+    assert.equal(err.code, "UNKNOWN_ACTION");
+    assert.equal(err.instructions, 'Unknown action "nope". This image has: a, b.');
     assert.equal((await readTree(dir))["a.ts"], SRC);
   });
 
-  test("a name from Object.prototype is not a transform", async () => {
+  test("codemod is no longer an action, and no arguments at all is UNKNOWN_ACTION", async () => {
+    const pkg = await fakePackage({ rename: "rewrite" });
+    const dir = await workspace({ "a.ts": SRC });
+    const err = await rejects(main(["codemod", "--transform", "rename", "--files", "a.ts"], dir, pkg));
+    assert.equal(err.code, "UNKNOWN_ACTION");
+    assert.equal(err.instructions, 'Unknown action "codemod". This image has: rename.');
+    assert.equal((await rejects(main([], dir, pkg))).code, "UNKNOWN_ACTION");
+    assert.equal((await readTree(dir))["a.ts"], SRC);
+  });
+
+  test("a name from Object.prototype is not an action", async () => {
     const pkg = await fakePackage({ a: "rewrite" });
     const dir = await workspace({ "a.ts": SRC });
-    assert.equal((await rejects(main(["codemod", "--transform", "constructor", "--files", "a.ts"], dir, pkg))).code, "INVALID_ARGS");
+    assert.equal((await rejects(main(["constructor", "--files", "a.ts"], dir, pkg))).code, "UNKNOWN_ACTION");
   });
 
-  test("missing --transform and missing --files are INVALID_ARGS", async () => {
+  test("missing --files is INVALID_ARGS", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": SRC });
-    assert.equal((await rejects(main(["codemod", "--files", "a.ts"], dir, pkg))).code, "INVALID_ARGS");
-    assert.equal((await rejects(main(["codemod", "--transform", "rename"], dir, pkg))).code, "INVALID_ARGS");
-    assert.equal((await rejects(main(["codemod", "--transform", "rename", "--files", " , "], dir, pkg))).code, "INVALID_ARGS");
+    assert.equal((await rejects(main(["rename"], dir, pkg))).code, "INVALID_ARGS");
+    assert.equal((await rejects(main(["rename", "--files", " , "], dir, pkg))).code, "INVALID_ARGS");
   });
 
-  test("an unknown flag is INVALID_ARGS", async () => {
+  test("an unknown flag is INVALID_ARGS, --transform too", async () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace({ "a.ts": SRC });
-    assert.equal((await rejects(main(["codemod", "--transform", "rename", "--files", "a.ts", "--force"], dir, pkg))).code, "INVALID_ARGS");
-  });
-
-  test("an unknown action is UNKNOWN_ACTION", async () => {
-    const dir = await workspace({});
-    assert.equal((await rejects(main(["format"], dir, await fakePackage({})))).code, "UNKNOWN_ACTION");
+    assert.equal((await rejects(main(["rename", "--files", "a.ts", "--force"], dir, pkg))).code, "INVALID_ARGS");
+    const err = await rejects(main(["rename", "--transform", "rename", "--files", "a.ts"], dir, pkg));
+    assert.equal(err.code, "INVALID_ARGS");
+    assert.match(err.instructions, /rename takes --files <glob,glob> \[--parser tsx\|ts\|babel\|flow\]/);
   });
 
   test("CODEMOD_PACKAGE must name a package of the table", () => {
@@ -231,69 +238,55 @@ describe("codemod arguments", () => {
 });
 
 describe("codemod help", () => {
-  test("is a valid help object with one action, codemod", async () => {
-    const h = help(await fakePackage({ rename: "rewrite" }));
+  test("is a valid help object with one action per transform, sorted, each with its kind and description", async () => {
+    const h = help(await fakePackage({ zeta: "rewrite", alpha: "sweep", mid: "refactor" }));
     assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, h), []);
     assert.deepEqual(
-      h.actions.map((a) => a.name),
-      ["codemod"],
+      h.actions.map((a) => [a.name, a.kinds, a.summary]),
+      [
+        ["alpha", ["sweep"], "Runs alpha."],
+        ["mid", ["refactor"], "Runs mid."],
+        ["zeta", ["rewrite"], "Runs zeta."],
+      ],
     );
   });
 
-  test("kinds are the distinct kinds of the transforms, in the order refactor, sweep, rewrite", async () => {
-    const kinds = async (transforms: Record<string, ActionKind>) => help(await fakePackage(transforms)).actions[0]!.kinds;
-    assert.deepEqual(await kinds({ a: "rewrite", b: "sweep", c: "rewrite" }), ["sweep", "rewrite"]);
-    assert.deepEqual(await kinds({ a: "rewrite", b: "refactor" }), ["refactor", "rewrite"]);
-    assert.deepEqual(await kinds({ a: "sweep" }), ["sweep"]);
-  });
-
-  test("--transform is a required choice of the sorted transforms, each with its description and kind", async () => {
-    const [codemod] = help(await fakePackage({ zeta: "rewrite", alpha: "sweep", mid: "rewrite" })).actions;
-    const transform = codemod!.flags.find((f) => f.name === "--transform");
-    assert.ok(transform && transform.type === "choice", JSON.stringify(transform));
-    assert.deepEqual(transform.choices, [
-      { name: "alpha", description: "Runs alpha.", kind: "sweep" },
-      { name: "mid", description: "Runs mid.", kind: "rewrite" },
-      { name: "zeta", description: "Runs zeta.", kind: "rewrite" },
-    ]);
-    assert.equal(transform.required, true);
-    assert.equal(transform.description, "Which transform to run.");
-  });
-
-  test("each --transform choice of the real table has the kind its run commits", async () => {
+  test("the real table gives 14 actions, each with the kind its run commits and the transform's description", async () => {
     for (const [name, transforms] of Object.entries(TRANSFORMS)) {
       const pkg = { ...(await fakePackageOf(transforms)), name };
-      const transform = help(pkg).actions[0]!.flags.find((f) => f.name === "--transform");
-      assert.ok(transform && transform.type === "choice", JSON.stringify(transform));
+      const actions = help(pkg).actions;
       assert.deepEqual(
-        transform.choices.map((choice) => choice.name),
+        actions.map((action) => action.name),
         Object.keys(transforms).sort(),
       );
-      for (const choice of transform.choices) {
+      if (name === "react-codemod") assert.equal(actions.length, 14);
+      for (const action of actions) {
+        assert.deepEqual(action.kinds, [transforms[action.name]!.kind], action.name);
+        assert.equal(action.summary, transforms[action.name]!.description);
         const dir = await workspace({ "a.ts": SRC });
-        const report = (await main(["codemod", "--transform", choice.name, "--files", "a.ts"], dir, pkg)) as OkReport;
-        assert.equal(choice.kind, report.kind, `${name}/${choice.name}`);
-        assert.equal(choice.description, transforms[choice.name]!.description);
+        const report = (await main([action.name, "--files", "a.ts"], dir, pkg)) as OkReport;
+        assert.equal(report.kind, action.kinds[0], `${name}/${action.name}`);
       }
     }
   });
 
-  test("--files is required globs, --parser an optional choice of tsx, ts, babel, flow", async () => {
-    const [codemod] = help(await fakePackage({ rename: "rewrite" })).actions;
-    assert.deepEqual(
-      codemod!.flags.map((f) => f.name),
-      ["--transform", "--files", "--parser"],
-    );
-    const files = codemod!.flags.find((f) => f.name === "--files");
-    assert.deepEqual([files?.type, files?.required], ["globs", true]);
-    const parser = codemod!.flags.find((f) => f.name === "--parser");
-    assert.ok(parser && parser.type === "choice", JSON.stringify(parser));
-    assert.deepEqual(
-      parser.choices.map((choice) => choice.name),
-      ["tsx", "ts", "babel", "flow"],
-    );
-    assert.ok(parser.choices.every((choice) => choice.description.length > 0 && choice.kind === undefined));
-    assert.equal(parser.required, false);
+  test("every action takes --files, required globs, and --parser, an optional choice of tsx, ts, babel, flow; no --transform", async () => {
+    for (const action of help(await fakePackage({ rename: "rewrite", other: "sweep" })).actions) {
+      assert.deepEqual(
+        action.flags.map((f) => f.name),
+        ["--files", "--parser"],
+      );
+      const files = action.flags.find((f) => f.name === "--files");
+      assert.deepEqual([files?.type, files?.required], ["globs", true]);
+      const parser = action.flags.find((f) => f.name === "--parser");
+      assert.ok(parser && parser.type === "choice", JSON.stringify(parser));
+      assert.deepEqual(
+        parser.choices.map((choice) => choice.name),
+        ["tsx", "ts", "babel", "flow"],
+      );
+      assert.ok(parser.choices.every((choice) => choice.description.length > 0 && Object.keys(choice).length === 2));
+      assert.equal(parser.required, false);
+    }
   });
 
   test("--parser's choices are exactly the parsers main accepts, in order", async () => {
@@ -320,7 +313,7 @@ describe("codemod --files matching", () => {
     const pkg = await fakePackage({ rename: "rewrite" });
     const dir = await workspace(Object.fromEntries(FILES.map((f) => [f, SRC])));
     try {
-      await main(["codemod", "--transform", "rename", "--files", globs], dir, pkg);
+      await main(["rename", "--files", globs], dir, pkg);
       const after = await readTree(dir);
       return Object.keys(after)
         .filter((file) => after[file] !== SRC)

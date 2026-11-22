@@ -38,16 +38,15 @@ export function installedPackage(env: NodeJS.ProcessEnv = process.env): CodemodP
   return { name, version, dir: dirname(manifest), transforms };
 }
 
-type Flags = { transform: string; globs: string[]; parser: Parser | undefined };
+type Flags = { globs: string[]; parser: Parser | undefined };
 
-function parseFlags(args: string[]): Flags {
-  let values: { transform?: string; files?: string; parser?: string };
+function parseFlags(name: string, args: string[]): Flags {
+  let values: { files?: string; parser?: string };
   try {
-    values = parseArgs({ args, options: { transform: { type: "string" }, files: { type: "string" }, parser: { type: "string" } } }).values;
+    values = parseArgs({ args, options: { files: { type: "string" }, parser: { type: "string" } } }).values;
   } catch (e) {
-    throw new RefactorError("INVALID_ARGS", `${(e as Error).message}. codemod takes --transform <name> --files <glob,glob> [--parser tsx|ts|babel|flow].`);
+    throw new RefactorError("INVALID_ARGS", `${(e as Error).message}. ${name} takes --files <glob,glob> [--parser tsx|ts|babel|flow].`);
   }
-  if (!values.transform) throw new RefactorError("INVALID_ARGS", "Missing --transform. Pass --transform <name> --files <glob,glob>.");
   const globs = (values.files ?? "")
     .split(",")
     .map((g) => g.trim())
@@ -57,7 +56,7 @@ function parseFlags(args: string[]): Flags {
   if (parser !== undefined && !(PARSERS as readonly string[]).includes(parser)) {
     throw new RefactorError("INVALID_ARGS", `Unknown --parser ${JSON.stringify(parser)}. Use one of: ${PARSERS.join(", ")}.`);
   }
-  return { transform: values.transform, globs, parser: parser as Parser | undefined };
+  return { globs, parser: parser as Parser | undefined };
 }
 
 type Transform = ((file: { path: string; source: string }, api: unknown, options: object) => unknown) & { parser?: string };
@@ -86,32 +85,20 @@ function firstLine(text: string): string {
 }
 
 /**
- * The codemod image's help: its one action, `codemod`, whose kinds are those of the carried package's
- * transforms; each `--transform` choice carries its transform's kind, the kind of the commit it makes.
- * `pkg` is the package the image carries (injected by tests).
+ * The codemod image's help: one action per transform of the carried package, named as the transform,
+ * sorted, each with its transform's kind and description. `pkg` is the package the image carries
+ * (injected by tests).
  */
 export function help(pkg?: CodemodPackage): ImageHelp {
   const carried = pkg ?? installedPackage();
   const names = Object.keys(carried.transforms).sort();
-  const used = Object.values(carried.transforms).map((transform) => transform.kind);
-  const kinds = (["refactor", "sweep", "rewrite"] as const).filter((kind) => used.includes(kind));
-  return imageHelp(`Runs a transform of ${carried.name} ${carried.version} with jscodeshift.`, [
-    {
-      name: "codemod",
-      kinds,
-      summary: `Runs one transform of ${carried.name} ${carried.version} over the matching JavaScript and TypeScript files.`,
+  return imageHelp(
+    `Runs the transforms of ${carried.name} ${carried.version} with jscodeshift, each as an action.`,
+    names.map((name) => ({
+      name,
+      kinds: [carried.transforms[name]!.kind],
+      summary: carried.transforms[name]!.description,
       flags: [
-        {
-          name: "--transform",
-          type: "choice",
-          choices: names.map((name) => ({
-            name,
-            description: carried.transforms[name]!.description,
-            kind: carried.transforms[name]!.kind,
-          })),
-          required: true,
-          description: "Which transform to run.",
-        },
         {
           name: "--files",
           type: "globs",
@@ -131,29 +118,26 @@ export function help(pkg?: CodemodPackage): ImageHelp {
           description: "The parser for every file. Without it: tsx for .tsx, ts for .ts, .mts and .cts, else the transform's own or babel.",
         },
       ],
-    },
-  ]);
+    })),
+  );
 }
 
 /**
- * The codemod image's entrypoint: `codemod --transform <name> --files <glob,glob> [--parser tsx|ts|babel|flow]`
- * runs one transform of the pinned package, with jscodeshift's API, over the matching JavaScript and
+ * The codemod image's entrypoint: `<transform> --files <glob,glob> [--parser tsx|ts|babel|flow]` runs
+ * that transform of the pinned package, with jscodeshift's API, over the matching JavaScript and
  * TypeScript files under `root`. `pkg` is the package the image carries (injected by tests).
  */
 export async function main(argv: string[], root: string, pkg?: CodemodPackage): Promise<Report> {
-  const [id, ...args] = argv;
-  if (id !== "codemod") {
-    throw new RefactorError("UNKNOWN_ACTION", `Unknown action ${JSON.stringify(id ?? "")}. This image has: codemod.`);
-  }
-  const { transform: name, globs, parser: flag } = parseFlags(args);
+  const [name = "", ...args] = argv;
   const carried = pkg ?? installedPackage();
   const kind = Object.hasOwn(carried.transforms, name) ? carried.transforms[name]!.kind : undefined;
   if (kind === undefined) {
     throw new RefactorError(
-      "INVALID_ARGS",
-      `Unknown transform ${JSON.stringify(name)}. ${carried.name}@${carried.version} has: ${Object.keys(carried.transforms).sort().join(", ")}.`,
+      "UNKNOWN_ACTION",
+      `Unknown action ${JSON.stringify(name)}. This image has: ${Object.keys(carried.transforms).sort().join(", ")}.`,
     );
   }
+  const { globs, parser: flag } = parseFlags(name, args);
   const transform = await loadTransform(carried, name);
   const files: string[] = [];
   /** Each file the transform threw on: `path:line: reason`, then what to do, indented under it. */

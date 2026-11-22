@@ -25,7 +25,7 @@ private struct CodemodBuilt: SuiteTrait, TestScoping {
   }
 }
 
-private let ARGS = ["codemod", "--transform", "rename-unsafe-lifecycles", "--files", "src/**"]
+private let ARGS = ["rename-unsafe-lifecycles", "--files", "src/**"]
 
 @Suite("codemod-react (docker)", .serialized, .enabled(if: dockerAvailable, dockerMissing), CodemodBuilt())
 struct CodemodTests {
@@ -52,14 +52,16 @@ struct CodemodTests {
     #expect(try status(dir) == "")
   }
 
-  @Test("an unknown transform is INVALID_ARGS and lists the known ones", .timeLimit(.minutes(2)))
+  @Test("an unknown action is UNKNOWN_ACTION and lists the transforms; codemod --transform is gone", .timeLimit(.minutes(2)))
   func unknownTransform() throws {
     let dir = try temp.fixture("examples/react-app")
     let before = try headCommit(dir)
-    let err = try failImage(repo: dir, image: CODEMOD, args: ["codemod", "--transform", "nope", "--files", "src/**"])
-    #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.hasPrefix("Unknown transform \"nope\". react-codemod@5.4.4 has: "))
+    let err = try failImage(repo: dir, image: CODEMOD, args: ["nope", "--files", "src/**"])
+    #expect(err.code == "UNKNOWN_ACTION")
+    #expect(err.instructions.hasPrefix("Unknown action \"nope\". This image has: "))
     #expect(err.instructions.contains("rename-unsafe-lifecycles"))
+    let old = try failImage(repo: dir, image: CODEMOD, args: ["codemod", "--transform", "rename-unsafe-lifecycles", "--files", "src/**"])
+    #expect(old.code == "UNKNOWN_ACTION")
     #expect(try headCommit(dir) == before)
   }
 
