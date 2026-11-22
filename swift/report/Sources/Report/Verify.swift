@@ -93,7 +93,7 @@ public func verdict(recorded: RecordedCommand, replayed: Report, treesEqual: Boo
 
 /// Reads the `Refactor-Command` trailer (`{"args":[...],"image":"..."}`) with the commit's other recorded
 /// values. Anything but an object with exactly a non-empty string `image` and a string array `args`
-/// throws `INVALID_ARGS`.
+/// whose first item is an action (see `actionProblem`) throws `INVALID_ARGS`.
 public func parseRecordedCommand(json: String, kind: String, subject: String) throws -> RecordedCommand {
   func invalid(_ why: String) -> RefactorError {
     RefactorError(
@@ -115,6 +115,8 @@ public func parseRecordedCommand(json: String, kind: String, subject: String) th
   guard case .array(let items) = fields["args"] else { throw invalid("its args are missing or not an array") }
   let args = items.compactMap { item -> String? in if case .string(let s) = item { s } else { nil } }
   guard args.count == items.count else { throw invalid("its args are not all strings") }
+  guard let action = args.first else { throw invalid("its args are empty: the first one is the action") }
+  if let problem = actionProblem(action) { throw invalid("its first arg is not an action: \(problem)") }
   return RecordedCommand(image: image, args: args, kind: kind, subject: subject)
 }
 

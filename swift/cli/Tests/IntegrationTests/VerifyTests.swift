@@ -346,6 +346,29 @@ struct VerifyTests {
     #expect(only.instructions?.contains("<name>@sha256:<64 hex>") == true, "\(range.stdout)")
   }
 
+  @Test("a recorded command without an action (args []) is never replayed: INVALID_ARGS alone, invalid in a range", .timeLimit(.minutes(3)))
+  func verifyRecordedArgsWithoutActionIsInvalid() throws {
+    let dir = try temp.repo()
+    let base = try headCommit(dir)
+    _ = try runImage(repo: dir, image: PROBE, args: ["write", "a.txt"])
+    try amendRecordedArgs(dir, [])
+    let commit = try headCommit(dir)
+
+    let single = try verify(["--repo", dir.path, "HEAD"])
+    #expect(single.exitCode == 1)
+    #expect(single.output.schema == "urn:jig:output:1")
+    #expect(single.output.code == "INVALID_ARGS")
+    #expect(single.output.instructions?.contains("its args are empty: the first one is the action") == true, "\(single.stdout)")
+
+    let range = try verify(["--repo", dir.path, "\(base)..HEAD"])
+    #expect(range.exitCode == 1)
+    let only = try #require(try range.commits().first)
+    #expect(only.commit == commit)
+    #expect(only.verdict == "invalid")
+    #expect(only.code == "INVALID_ARGS")
+    #expect(only.reason == "unreadable Refactor-Command")
+  }
+
   @Test("a pinned image this machine does not have fails, saying only that exact ID can replay it", .timeLimit(.minutes(3)))
   func verifyMissingPinnedImageFails() throws {
     let dir = try temp.repo()

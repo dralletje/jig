@@ -181,6 +181,23 @@ private func exampleRange() -> [CommitVerification] {
     command == RecordedCommand(image: image, args: ["rename", "--to", "b"], kind: "refactor", subject: "refactor(x): y"))
 }
 
+@Test(arguments: [
+  (#"{"args":[],"image":"i@sha256:00"}"#, "its args are empty: the first one is the action"),
+  (#"{"args":["","--to","b"],"image":"i@sha256:00"}"#, "its first arg is not an action: the action is empty"),
+  (#"{"args":["a b"],"image":"i@sha256:00"}"#, #"its first arg is not an action: the action "a b" has whitespace"#),
+])
+func aRecordedCommandWithoutAnActionIsUnreadable(json: String, says: String) {
+  do {
+    _ = try parseRecordedCommand(json: json, kind: "refactor", subject: "s")
+    Issue.record("expected a refusal of \(json)")
+  } catch let error as RefactorError {
+    #expect(error.code == .INVALID_ARGS)
+    #expect(error.instructions.contains("The commit's Refactor-Command trailer cannot be read: \(says)."), "\(error.instructions)")
+  } catch {
+    Issue.record("unexpected \(error)")
+  }
+}
+
 @Test func badCommandJSONThrows() {
   for json in [
     "", "not json", "[]", #"{"args":["a"]}"#, #"{"image":"i"}"#, #"{"image":"","args":[]}"#,
