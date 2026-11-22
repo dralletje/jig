@@ -20,7 +20,7 @@ private let schema = #""schema":"urn:jig:report:1""#
 /// value leaves the field out.
 private func ok(_ fields: [String: String] = [:]) -> String {
   var all: [String: String] = [
-    "schema": #""urn:jig:report:1""#, "ok": "true", "kind": #""refactor""#, "subject": #""refactor(x): S""#,
+    "schema": #""urn:jig:report:1""#, "ok": "true", "kind": #""refactor""#, "subject": #""refactor(img run): S""#,
     "summary": #""Did it.""#,
   ]
   for (key, value) in fields { all[key] = value }
@@ -28,8 +28,9 @@ private func ok(_ fields: [String: String] = [:]) -> String {
     .joined(separator: ",") + "}"
 }
 
-private func failure(_ stdout: String, stderr: String = "", exitCode: Int32 = 0) -> RefactorError {
-  let report = ImageReport.parse(stdout: stdout, stderr: stderr, exitCode: exitCode)
+/// Every report in these tests answers the action `run`, unless it says otherwise.
+private func failure(_ stdout: String, stderr: String = "", exitCode: Int32 = 0, action: String = "run") -> RefactorError {
+  let report = ImageReport.parse(stdout: stdout, stderr: stderr, exitCode: exitCode, action: action)
   guard case .failed(let error) = report else {
     Issue.record("expected a failure, got \(report)")
     return RefactorError(code: .INTERNAL, instructions: "")
@@ -37,8 +38,8 @@ private func failure(_ stdout: String, stderr: String = "", exitCode: Int32 = 0)
   return error
 }
 
-private func success(_ stdout: String) -> Report? {
-  let report = ImageReport.parse(stdout: stdout, stderr: "", exitCode: 0)
+private func success(_ stdout: String, action: String = "run") -> Report? {
+  let report = ImageReport.parse(stdout: stdout, stderr: "", exitCode: 0, action: action)
   guard case .ok(let value) = report else {
     Issue.record("expected success, got \(report)")
     return nil
@@ -49,39 +50,41 @@ private func success(_ stdout: String) -> Report? {
 @Test func minimalReportParses() {
   let line = #"{"schema":"urn:jig:report:1","ok":true,"kind":"sweep","subject":"sweep(prettier format): x","summary":"Formatted."}"#
   #expect(
-    ImageReport.parse(stdout: line, stderr: "", exitCode: 0)
+    ImageReport.parse(stdout: line, stderr: "", exitCode: 0, action: "format")
       == .ok(Report(kind: .sweep, subject: "sweep(prettier format): x", summary: "Formatted.")))
 }
 
 @Test func statusAndEffectAreUnknownFields() {
   let line =
     #"{"schema":"urn:jig:report:1","ok":true,"kind":"sweep","subject":"sweep(prettier format): x","summary":"Formatted.","status":"complete","effect":[]}"#
-  let error = failure(line)
+  let error = failure(line, action: "format")
   #expect(error.code == .IMAGE_FAILED)
   #expect(error.instructions.contains("unknown field(s) effect, status"), "\(error.instructions)")
 }
 
 @Test func subjectOfAnotherKindIsImageFailed() {
-  let error = failure(ok(["kind": #""rewrite""#, "subject": #""refactor(x): y""#]))
+  let error = failure(ok(["kind": #""rewrite""#, "subject": #""refactor(img run): y""#]))
   #expect(error.code == .IMAGE_FAILED)
-  #expect(error.instructions.contains("the subject must start with \"rewrite(\" for kind rewrite"), "\(error.instructions)")
+  #expect(
+    error.instructions.contains("the subject must start with \"rewrite(<image> run): \" for kind rewrite and action run"),
+    "\(error.instructions)")
 }
 
 @Test func reportAfterLogLines() throws {
   let report = success("starting\nworking...\n\(ok())\n\n")
-  #expect(report == Report(kind: .refactor, subject: "refactor(x): S", summary: "Did it."))
+  #expect(report == Report(kind: .refactor, subject: "refactor(img run): S", summary: "Did it."))
 }
 
 @Test func reportSkipsLinesThatAreNotReports() throws {
-  #expect(success("\(ok())\n{not json\n{\"ok\":\"x\"}\n[1]\n")?.subject == "refactor(x): S")
+  #expect(success("\(ok())\n{not json\n{\"ok\":\"x\"}\n[1]\n")?.subject == "refactor(img run): S")
 }
 
 @Test func reportWithCRLFLineEndings() throws {
-  #expect(success("log\r\n\(ok())\r\n")?.subject == "refactor(x): S")
+  #expect(success("log\r\n\(ok())\r\n")?.subject == "refactor(img run): S")
 }
 
 @Test func theExampleReportsParse() throws {
-  let complete = try #require(success(try example("report-complete.json")))
+  let complete = try #require(success(try example("report-complete.json"), action: "rename"))
   #expect(
     complete
       == Report(

@@ -60,12 +60,13 @@ public enum ImageReport: Equatable, Sendable {
 
   /// The image's report, validated against report v1, or the image's own error. Anything else (no
   /// report, another `schema`, a shape v1 does not allow, an error code we do not know) is `IMAGE_FAILED`.
-  public static func parse(stdout: String, stderr: String, exitCode: Int32) -> ImageReport {
-    parse(stdout: stdout, stderr: stderr, termination: .exited(exitCode))
+  /// `action` is the first argument jig passed to the image: a success's subject must name it.
+  public static func parse(stdout: String, stderr: String, exitCode: Int32, action: String) -> ImageReport {
+    parse(stdout: stdout, stderr: stderr, termination: .exited(exitCode), action: action)
   }
 
   /// The same, for an image process that ended as `termination` (killed by a signal, say).
-  public static func parse(stdout: String, stderr: String, termination: Termination) -> ImageReport {
+  public static func parse(stdout: String, stderr: String, termination: Termination, action: String) -> ImageReport {
     guard let (line, fields) = findReport(stdout) else {
       return .failed(
         RefactorError(
@@ -112,7 +113,7 @@ public enum ImageReport: Equatable, Sendable {
     } catch {
       return broken(describe(error))
     }
-    if let problem = problems(report) { return broken(problem) }
+    if let problem = problems(report, action: action) { return broken(problem) }
     // The text the commit message and the output both show: trailing whitespace and blank lines at the
     // ends dropped.
     var tidied = report
@@ -121,17 +122,28 @@ public enum ImageReport: Equatable, Sendable {
   }
 
   /// What v1 asks beyond the types: a one-line subject, a summary that is not only whitespace, and a
-  /// subject that starts with `<kind>(`.
-  private static func problems(_ report: Report) -> String? {
+  /// subject that starts with `<kind>(<name> <action>): `, `<name>` being the image's own name (not
+  /// empty, without whitespace, `(` or `)`) and `<action>` the first argument jig passed. Compared byte
+  /// for byte.
+  private static func problems(_ report: Report, action: String) -> String? {
     let subject = report.subject
     if subject.isEmpty || subject.unicodeScalars.contains(where: { $0 == "\n" || $0 == "\r" }) {
       return "the subject is empty or has a line break: \(javaScriptJSONString(subject))"
     }
     if report.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "the summary is empty" }
-    if !subject.utf8.starts(with: "\(report.kind.rawValue)(".utf8) {
-      return "the subject must start with \"\(report.kind.rawValue)(\" for kind \(report.kind.rawValue): "
-        + javaScriptJSONString(subject)
-    }
+    let kind = report.kind.rawValue
+    let wrongStart =
+      "the subject must start with \"\(kind)(<image> \(action)): \" for kind \(kind) and action \(action), "
+      + "where <image> is the image's own name (not empty, without spaces, \"(\" or \")\"): " + javaScriptJSONString(subject)
+    let bytes = Array(subject.utf8)
+    let opening = Array("\(kind)(".utf8)
+    guard bytes.starts(with: opening) else { return wrongStart }
+    let afterKind = bytes[opening.count...]
+    guard let space = afterKind.firstIndex(of: UInt8(ascii: " ")) else { return wrongStart }
+    let name = String(decoding: afterKind[afterKind.startIndex..<space], as: UTF8.self)
+    if name.isEmpty { return wrongStart }
+    if name.unicodeScalars.contains(where: { $0 == "(" || $0 == ")" || $0.properties.isWhitespace }) { return wrongStart }
+    guard afterKind[(space + 1)...].starts(with: Array("\(action)): ".utf8)) else { return wrongStart }
     return nil
   }
 }

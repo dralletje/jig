@@ -39,20 +39,20 @@ switch (mode) {
   case "check": {
     const seen = { nodeModules: existsSync("node_modules"), git: existsSync(".git"), network: await hasNetwork(), args: rest };
     writeFileSync("probe.json", `${JSON.stringify(seen)}\n`);
-    ok("refactor(probe): check");
+    ok("refactor(probe check): ran");
     break;
   }
   case "tree":
     // Writes `tree.json`: every regular file it sees, as base64.
     writeFileSync("tree.json", `${JSON.stringify(files("."))}\n`);
-    ok("refactor(probe): tree");
+    ok("refactor(probe tree): ran");
     break;
   case "noisy":
     console.log("log one");
     console.log("{not json");
     console.log('{"ok":"not a boolean"}');
     writeFileSync("n.txt", "noisy\n");
-    ok("refactor(probe): noisy");
+    ok("refactor(probe noisy): ran");
     break;
   case "crash":
     console.log("boom");
@@ -73,7 +73,7 @@ switch (mode) {
         schema: SCHEMA,
         ok: true,
         kind: "rewrite",
-        subject: "rewrite(probe): partial",
+        subject: "rewrite(probe partial): ran",
         summary: "Changed p.txt.\n\nNot handled (1):\n  q.txt:3: q.txt is not handled\n    Change q.txt by hand.",
       }),
     );
@@ -87,56 +87,56 @@ switch (mode) {
         ok: true,
         kind: "refactor",
         status: "complete",
-        subject: "refactor(probe): status",
+        subject: "refactor(probe status): ran",
         summary: "The probe ran status.",
       }),
     );
     break;
   case "none":
-    ok("refactor(probe): none");
+    ok("refactor(probe none): ran");
     break;
   case "write":
     // `write <path...>`: creates each path (and its folders) with the text "from image".
     for (const path of rest) write(path);
-    ok("refactor(probe): write");
+    ok("refactor(probe write): ran");
     break;
   case "gitfile":
     // `gitfile <path> <gitdir>`: a gitfile (`gitdir: <gitdir>`) at <path>, plus a new file.
     write(rest[0] as string, `gitdir: ${rest[1]}\n`);
     writeFileSync("fresh.txt", "fresh\n");
-    ok("refactor(probe): gitfile");
+    ok("refactor(probe gitfile): ran");
     break;
   case "rm":
     // `rm <path...>`: removes each path, folders included.
     for (const path of rest) rmSync(path, { recursive: true, force: true });
-    ok("refactor(probe): rm");
+    ok("refactor(probe rm): ran");
     break;
   case "mix":
     writeFileSync("a.ts", "// changed\n");
     write("new/deep/n.ts", "export {};\n");
     unlinkSync("b.ts");
-    ok("refactor(probe): mix");
+    ok("refactor(probe mix): ran");
     break;
   case "replace-dir":
     // `replace-dir <path>`: the folder at <path> becomes a file.
     rmSync(rest[0] as string, { recursive: true });
     writeFileSync(rest[0] as string, "now a file\n");
-    ok("refactor(probe): replace-dir");
+    ok("refactor(probe replace-dir): ran");
     break;
   case "ignore-self":
     // `ignore-self <dir>`: a new `<dir>/.gitignore` that ignores itself and a file next to it.
     write(`${rest[0]}/.gitignore`, "*\n");
     write(`${rest[0]}/hidden.txt`);
-    ok("refactor(probe): ignore-self");
+    ok("refactor(probe ignore-self): ran");
     break;
   case "exec":
     appendFileSync("run.sh", "# x\n");
-    ok("refactor(probe): exec");
+    ok("refactor(probe exec): ran");
     break;
   case "exec-new":
     writeFileSync("new.sh", "#!/bin/sh\necho new\n");
     chmodSync("new.sh", 0o755);
-    ok("refactor(probe): exec-new");
+    ok("refactor(probe exec-new): ran");
     break;
   case "readonly-dir":
     // A normal change, plus a folder the host cannot delete without chmod.
@@ -144,14 +144,14 @@ switch (mode) {
     mkdirSync("ro");
     writeFileSync("ro/x", "x\n");
     chmodSync("ro", 0o555);
-    ok("refactor(probe): readonly-dir");
+    ok("refactor(probe readonly-dir): ran");
     break;
   case "hidden-git":
     // A `.git` inside a folder that can be listed but whose entries cannot be inspected (no x bit).
     write("d/sub/.git/x");
     writeFileSync("fresh.txt", "fresh\n");
     chmodSync("d", 0o444);
-    ok("refactor(probe): hidden-git");
+    ok("refactor(probe hidden-git): ran");
     break;
   case "subject":
     // `subject <text>`: reports the text (with `\n` and `\r` escapes read as newlines) as the subject.
@@ -161,19 +161,19 @@ switch (mode) {
   case "random":
     // Writes `r.txt` with random content: a different tree on every run, with the same report.
     writeFileSync("r.txt", `${randomUUID()}\n`);
-    ok("refactor(probe): random");
+    ok("refactor(probe random): ran");
     break;
   case "write-text":
     // `write-text <path> <text>`: creates <path> (and its folders) with <text> and a newline.
     write(rest[0] as string, `${rest[1]}\n`);
-    ok("refactor(probe): write-text");
+    ok("refactor(probe write-text): ran");
     break;
   case "sleep":
     // `sleep <seconds> [<token>]`: a slow (or, with a large number, hanging) image. The token only
     // marks the container (its args) so a test can find it.
     await new Promise((resolve) => setTimeout(resolve, Number(rest[0]) * 1000));
     writeFileSync("slept.txt", "slept\n");
-    ok("refactor(probe): sleep");
+    ok("refactor(probe sleep): ran");
     break;
   case "spew": {
     // `spew [<token>]`: writes files into 50 folders, forever, as fast as it can (an image still writing
@@ -190,14 +190,14 @@ switch (mode) {
     // A file whose name is not valid UTF-8 (b, 0xff, .txt), plus a normal change.
     writeFileSync(Buffer.from([0x62, 0xff, 0x2e, 0x74, 0x78, 0x74]), "bad\n");
     writeFileSync("fresh.txt", "fresh\n");
-    ok("refactor(probe): bad-name");
+    ok("refactor(probe bad-name): ran");
     break;
   case "bad-dir":
     // A folder whose name is not valid UTF-8 (d, 0xfe) holding a `.git` folder.
     mkdirSync(Buffer.from([0x64, 0xfe]));
     mkdirSync(Buffer.concat([Buffer.from([0x64, 0xfe]), Buffer.from("/.git")]));
     writeFileSync("fresh.txt", "fresh\n");
-    ok("refactor(probe): bad-dir");
+    ok("refactor(probe bad-dir): ran");
     break;
   default:
     failed("UNKNOWN_ACTION", `unknown: ${mode}`);

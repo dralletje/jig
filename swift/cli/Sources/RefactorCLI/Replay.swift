@@ -40,7 +40,7 @@ public func replay(git: Git, base: String, pinned: PinnedImage, args: [String], 
   let report: Report
   switch ImageReport.parse(
     stdout: String(decoding: ran.stdout, as: UTF8.self), stderr: String(decoding: ran.stderr, as: UTF8.self),
-    termination: ran.termination)
+    termination: ran.termination, action: args.first ?? "")
   {
   case .ok(let reported): report = reported
   case .failed(let error): throw error

@@ -213,13 +213,20 @@ extension DockerInterruptionSuites {
       #expect(err.instructions.contains("git mv"))
     }
 
-    @Test("a subject without <kind>( is IMAGE_FAILED", .timeLimit(.minutes(2)))
+    @Test("a subject that does not start with <kind>(<image> <action>): is IMAGE_FAILED", .timeLimit(.minutes(2)))
     func stricterReports() throws {
       let dir = try temp.repo()
       let before = try headCommit(dir)
+      let expected =
+        #"the subject must start with "refactor(<image> subject): " for kind refactor and action subject, "#
+        + #"where <image> is the image's own name (not empty, without spaces, "(" or ")"): "#
       let cases: [([String], String)] = [
-        (["subject", "probe: no kind"], #"the subject must start with "refactor(" for kind refactor: "probe: no kind""#),
-        (["subject", "sweep(probe): wrong kind"], #"the subject must start with "refactor(" for kind refactor"#),
+        (["subject", "probe: no kind"], expected + #""probe: no kind""#),
+        (["subject", "sweep(probe subject): wrong kind"], expected + #""sweep(probe subject): wrong kind""#),
+        // The form from before subjects named the image.
+        (["subject", "refactor(subject): no image"], expected + #""refactor(subject): no image""#),
+        (["subject", "refactor(probe write): another action"], expected),
+        (["subject", "refactor(my probe subject): a space"], expected),
       ]
       for (args, says) in cases {
         let err = try failImage(repo: dir, image: PROBE, args: args)

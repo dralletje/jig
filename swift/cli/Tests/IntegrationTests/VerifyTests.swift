@@ -159,14 +159,14 @@ struct VerifyTests {
     let dir = try temp.repo()
     _ = try runImage(repo: dir, image: PROBE, args: ["write", "a.txt"])
     let message = try git(dir, ["log", "-1", "--format=%B"])
-    try git(dir, ["commit", "-q", "--amend", "-m", message.replacingOccurrences(of: "refactor(probe): write", with: "refactor(probe): edited")])
+    try git(dir, ["commit", "-q", "--amend", "-m", message.replacingOccurrences(of: "refactor(probe write): ran", with: "refactor(probe write): edited")])
     let verified = try verify(["--repo", dir.path, "HEAD"])
 
     #expect(verified.exitCode == 1)
     let only = try #require(try verified.commits().first)
     #expect(only.verdict == "different")
     #expect(only.filesDiffering == [])
-    #expect(only.mismatches == [["field": "subject", "recorded": "refactor(probe): edited", "replayed": "refactor(probe): write"]])
+    #expect(only.mismatches == [["field": "subject", "recorded": "refactor(probe write): edited", "replayed": "refactor(probe write): ran"]])
   }
 
   @Test("an image with random output is different", .timeLimit(.minutes(3)))

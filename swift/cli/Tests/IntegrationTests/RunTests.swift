@@ -172,7 +172,7 @@ struct RunTests {
     #expect(
       body.hasPrefix(
         """
-        rewrite(probe): partial
+        rewrite(probe partial): ran
 
         Changed p.txt.
 
@@ -229,7 +229,7 @@ struct RunTests {
     let dir = try temp.repo()
     let result = try runImage(repo: dir, image: PROBE, args: ["noisy"])
     #expect(result.filesChanged == ["n.txt"])
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(probe): noisy\n")
+    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "refactor(probe noisy): ran\n")
     #expect(result.kind == "refactor")
     #expect(try git(dir, ["log", "-1", "--format=%B"]).contains("\nRefactor-Kind: refactor\n"))
   }

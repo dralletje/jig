@@ -48,7 +48,7 @@ private func object(_ text: String) throws -> JSONValue {
     Issue.record("unexpected example \(expected)")
     return
   }
-  guard case .ok(let report) = ImageReport.parse(stdout: try example("report-complete.json"), stderr: "", exitCode: 0)
+  guard case .ok(let report) = ImageReport.parse(stdout: try example("report-complete.json"), stderr: "", exitCode: 0, action: "rename")
   else {
     Issue.record("the complete example does not parse")
     return
