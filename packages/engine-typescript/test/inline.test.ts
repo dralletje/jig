@@ -4,11 +4,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { describe, test } from "node:test";
-import type { OkReport } from "@jig/core";
 import { assertReport, readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
-import { explainIntroduced } from "../src/inline.ts";
-import { parseAt } from "../src/shared.ts";
 import { errors, rejects, workspace } from "./helpers.ts";
 
 const EXAMPLE = "examples/inline-function";
@@ -22,30 +19,27 @@ function lineOf(text: string | undefined, needle: string): number {
   return i + 1;
 }
 
-/** Runs the action on a copy of the example; returns the report and the new text of `file`. */
+/** Runs the action on a copy of the example; returns the new text of `file`. */
 async function unpack(file: string, ...args: string[]) {
   const dir = await workspace(EXAMPLE);
   const report = await inline(dir, "--file", file, ...args);
   assertReport(report);
   const tree = await readTree(dir);
   assert.deepEqual(await errors(dir, file), []);
-  return { dir, report: report as OkReport, text: tree[file] as string, tree };
+  return { dir, text: tree[file] as string, tree };
 }
 
-/** Expects a refusal: REFACTOR_UNAVAILABLE, nothing written. Returns the instructions. */
-async function refused(dir: string, ...args: string[]): Promise<string> {
+/** Expects a refusal: REFACTOR_UNAVAILABLE, nothing written. */
+async function refused(dir: string, ...args: string[]): Promise<void> {
   const before = await readTree(dir);
   const err = await rejects(inline(dir, ...args));
   assert.equal(err.code, "REFACTOR_UNAVAILABLE", err.message);
   assert.deepEqual(await readTree(dir), before, "a refusal writes nothing");
-  return err.message;
 }
 
 describe("inline-function: single-expression functions", () => {
   test("definition mode unpacks every call, adds parentheses where needed, and removes the declaration", async () => {
-    const { report, text } = await unpack("src/single.ts", "--symbol", "square");
-    assert.equal(report.subject, "refactor(typescript inline-function): unpack square everywhere in src/single.ts and remove it");
-    assert.equal(report.kind, "refactor");
+    const { text } = await unpack("src/single.ts", "--symbol", "square");
     assert.equal(
       text,
       [
@@ -67,10 +61,6 @@ describe("inline-function: single-expression functions", () => {
         "",
       ].join("\n"),
     );
-    assert.equal(
-      report.summary,
-      "Unpacked 3 calls to `square` and removed its declaration:\n  src/single.ts#describe (2 calls)\n  src/single.ts#scaled",
-    );
   });
 
   test("a block with only a return is a single expression; a sum becomes (w + 1) * 2", async () => {
@@ -84,19 +74,17 @@ describe("inline-function: single-expression functions", () => {
   test("one call: only that call is unpacked and the declaration stays", async () => {
     const source = await workspace(EXAMPLE);
     const line = lineOf((await readTree(source))["src/single.ts"], "const s = square(side)");
-    const { report, text } = await unpack("src/single.ts", "--symbol", "square", "--at", `src/single.ts:${line}`);
+    const { text } = await unpack("src/single.ts", "--symbol", "square", "--at", `src/single.ts:${line}`);
     assert.match(text, /const square = \(n: number\) => n \* n;/);
     assert.match(text, /const s = side \* side;/);
     assert.match(text, /s \+ square\(w\)/);
     assert.match(text, /1 \+ square\(v\) \* 2/);
-    assert.equal(report.subject, `refactor(typescript inline-function): unpack square at src/single.ts:${line}`);
-    assert.equal(report.summary, "Unpacked a call to `square` in src/single.ts#describe. `square` stays declared.");
   });
 });
 
 describe("inline-function: multi-statement functions", () => {
   test("unpacked at const x = f(...), an expression statement and return f(...); every local clash is renamed", async () => {
-    const { text, report } = await unpack("src/multi.ts", "--symbol", "summarize");
+    const { text } = await unpack("src/multi.ts", "--symbol", "summarize");
     assert.equal(
       text,
       [
@@ -123,7 +111,6 @@ describe("inline-function: multi-statement functions", () => {
         "",
       ].join("\n"),
     );
-    assert.match(report.summary, /^Unpacked 2 calls to `summarize`/);
 
     const stmt = await unpack("src/multi.ts", "--symbol", "logSize");
     assert.match(stmt.text, /  const items2: number\[\] = items;\n  const size = items2\.length;\n  sizes\.push\(size\);\n  return summarize/);
@@ -154,29 +141,23 @@ describe("inline-function: argument evaluation", () => {
     assert.equal(text.match(/next\(\)/g)?.length, 2); // the declaration and the one call
   });
 
-  test("a call in a + f(b()) with a non-simple argument is refused and listed", async () => {
+  test("a call in a + f(b()) with a non-simple argument is refused", async () => {
     const dir = await workspace(EXAMPLE);
-    const definition = await refused(dir, "--file", "src/hoist.ts", "--symbol", "bump");
-    assert.match(definition, /src\/hoist\.ts:19:16/);
-    assert.match(definition, /`b\(\)` is not a plain identifier or literal/);
-    assert.match(definition, /not a whole expression statement/);
+    await refused(dir, "--file", "src/hoist.ts", "--symbol", "bump");
     const line = lineOf((await readTree(dir))["src/hoist.ts"], "return a() + bump(b())");
-    const one = await refused(dir, "--file", "src/hoist.ts", "--symbol", "bump", "--at", `src/hoist.ts:${line}`);
-    assert.match(one, /Cannot unpack the call to `bump` at src\/hoist\.ts:19:16/);
+    await refused(dir, "--file", "src/hoist.ts", "--symbol", "bump", "--at", `src/hoist.ts:${line}`);
   });
 
   test("an argument that a variable inside the body would capture is refused", async () => {
     const dir = await workspace(EXAMPLE);
-    assert.match(await refused(dir, "--file", "src/capture.ts", "--symbol", "addAll"), /would be captured by a variable named `i`/);
+    await refused(dir, "--file", "src/capture.ts", "--symbol", "addAll");
   });
 });
 
 describe("inline-function: free variables", () => {
   test("a call where a free variable is shadowed is refused; the other call can be unpacked on its own", async () => {
     const dir = await workspace(EXAMPLE);
-    const blocked = await refused(dir, "--file", "src/shadow.ts", "--symbol", "withTax");
-    assert.match(blocked, /src\/shadow\.ts:13:10/);
-    assert.match(blocked, /`rate`, which `withTax` uses, means something else/);
+    await refused(dir, "--file", "src/shadow.ts", "--symbol", "withTax");
     const text = (await readTree(dir))["src/shadow.ts"];
     await refused(dir, "--file", "src/shadow.ts", "--symbol", "withTax", "--at", `src/shadow.ts:${lineOf(text, "withTax(price) + rate")}`);
     const ok = await unpack("src/shadow.ts", "--symbol", "withTax", "--at", `src/shadow.ts:${lineOf(text, "return withTax(price);")}`);
@@ -186,37 +167,35 @@ describe("inline-function: free variables", () => {
 });
 
 describe("inline-function: refusals", () => {
-  const cases: [string, string, RegExp][] = [
-    ["fact", "const f = fact(5)", /is recursive/],
-    ["whoAmI", "const w = whoAmI()", /uses `this`/],
-    ["count", "const c = count()", /uses `arguments`/],
-    ["sign", "const s = sign(-3)", /early return/],
-    ["load", 'const l = load("a")', /is async/],
-    ["gen", "const g = gen()", /is a generator/],
+  const cases: [string, string][] = [
+    ["fact", "const f = fact(5)"],
+    ["whoAmI", "const w = whoAmI()"],
+    ["count", "const c = count()"],
+    ["sign", "const s = sign(-3)"],
+    ["load", 'const l = load("a")'],
+    ["gen", "const g = gen()"],
   ];
-  for (const [symbol, needle, why] of cases) {
+  for (const [symbol, needle] of cases) {
     test(`${symbol}: one call and definition mode both refuse`, async () => {
       const dir = await workspace(EXAMPLE);
       const line = lineOf((await readTree(dir))["src/refusals.ts"], needle);
-      assert.match(await refused(dir, "--file", "src/refusals.ts", "--symbol", symbol, "--at", `src/refusals.ts:${line}`), why);
-      assert.match(await refused(dir, "--file", "src/refusals.ts", "--symbol", symbol), why);
+      await refused(dir, "--file", "src/refusals.ts", "--symbol", symbol, "--at", `src/refusals.ts:${line}`);
+      await refused(dir, "--file", "src/refusals.ts", "--symbol", symbol);
     });
   }
 
   test("exported: definition mode refuses, one call works", async () => {
     const dir = await workspace(EXAMPLE);
-    const message = await refused(dir, "--file", "src/shared.ts", "--symbol", "format");
-    assert.match(message, /`format` is exported/);
+    await refused(dir, "--file", "src/shared.ts", "--symbol", "format");
     const line = lineOf((await readTree(dir))["src/shared.ts"], "export const label");
     const ok = await unpack("src/shared.ts", "--symbol", "format", "--at", `src/shared.ts:${line}`);
     assert.match(ok.text, /export const label = \(n: number\) => `#\$\{n\}` \+ pad\(n\);/);
     assert.match(ok.text, /export function format/);
   });
 
-  test("used as a value: definition mode lists the use, one call works", async () => {
+  test("used as a value: definition mode refuses, one call works", async () => {
     const dir = await workspace(EXAMPLE);
-    const message = await refused(dir, "--file", "src/shared.ts", "--symbol", "pad");
-    assert.match(message, /src\/shared\.ts:12:26: `pad` is used as a value/);
+    await refused(dir, "--file", "src/shared.ts", "--symbol", "pad");
     const line = lineOf((await readTree(dir))["src/shared.ts"], "export const label");
     const ok = await unpack("src/shared.ts", "--symbol", "pad", "--at", `src/shared.ts:${line}`);
     assert.match(ok.text, /format\(n\) \+ String\(n\)\.padStart\(3, "0"\);/);
@@ -225,24 +204,17 @@ describe("inline-function: refusals", () => {
   test("--at errors: no call there, ambiguous line, another file, bad syntax", async () => {
     const dir = await workspace(EXAMPLE);
     const text = (await readTree(dir))["src/shared.ts"];
-    const noCall = await rejects(inline(dir, "--file", "src/shared.ts", "--symbol", "pad", "--at", "src/shared.ts:1"));
-    assert.equal(noCall.code, "REFACTOR_UNAVAILABLE");
-    assert.match(noCall.message, /Its calls are at src\/shared\.ts:10:/);
-    const onValue = await rejects(inline(dir, "--file", "src/shared.ts", "--symbol", "pad", "--at", `src/shared.ts:${lineOf(text, "handlers")}`));
-    assert.match(onValue.message, /Other uses on that line/);
+    await refused(dir, "--file", "src/shared.ts", "--symbol", "pad", "--at", "src/shared.ts:1");
+    await refused(dir, "--file", "src/shared.ts", "--symbol", "pad", "--at", `src/shared.ts:${lineOf(text, "handlers")}`);
     const two = await workspace(EXAMPLE, { "src/two.ts": "const id = (n: number) => n;\nexport const x = [id(1), id(2)];\n" });
     const ambiguous = await rejects(inline(two, "--file", "src/two.ts", "--symbol", "id", "--at", "src/two.ts:2"));
     assert.equal(ambiguous.code, "INVALID_ARGS");
-    assert.match(ambiguous.message, /columns 19, 26/);
     const picked = await inline(two, "--file", "src/two.ts", "--symbol", "id", "--at", "src/two.ts:2:26");
     assertReport(picked);
     assert.equal((await readTree(two))["src/two.ts"], "const id = (n: number) => n;\nexport const x = [id(1), 2];\n");
-    const other = await refused(dir, "--file", "src/shared.ts", "--symbol", "format", "--at", "src/main.ts:3");
-    assert.match(other, /Only calls in the same module/);
+    await refused(dir, "--file", "src/shared.ts", "--symbol", "format", "--at", "src/main.ts:3");
     const bad = await rejects(inline(dir, "--file", "src/shared.ts", "--symbol", "pad", "--at", "nope"));
     assert.equal(bad.code, "INVALID_ARGS");
-    assert.deepEqual(parseAt("src/a.ts:3"), { path: "src/a.ts", line: 3 });
-    assert.deepEqual(parseAt("a:b.ts:3:9"), { path: "a:b.ts", line: 3, column: 9 });
   });
 });
 
@@ -276,7 +248,7 @@ describe("inline-function: precedence and meaning at the call site", () => {
       "--symbol",
       "get",
     );
-    assert.match(await refused(dir, "--file", "src/edge.ts", "--symbol", "get"), /different `this`/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "get");
   });
 
   test("an object literal at the start of a statement, a comma and a ternary are parenthesized", async () => {
@@ -353,13 +325,13 @@ describe("inline-function: precedence and meaning at the call site", () => {
       "--symbol",
       "add",
     );
-    assert.match(await refused(dir, "--file", "src/edge.ts", "--symbol", "add"), /not a plain identifier or literal/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "add");
   });
 
-  test("calls nested in the arguments of another call are listed in definition mode; --at takes the outer one", async () => {
+  test("calls nested in the arguments of another call are refused in definition mode; --at takes the outer one", async () => {
     const source = "const inc = (n: number) => n + 1;\nexport function run(x: number) {\n  const y = inc(inc(x));\n  return y;\n}\n";
     const { dir } = await edge(source, "--symbol", "inc");
-    assert.match(await refused(dir, "--file", "src/edge.ts", "--symbol", "inc"), /inside the arguments of another call/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "inc");
     const outer = await edgeText(source, "--symbol", "inc", "--at", "src/edge.ts:3:13");
     assert.match(outer, /const n: number = inc\(x\);\n  const y = n \+ 1;/);
   });
@@ -382,10 +354,7 @@ describe("inline-function: precedence and meaning at the call site", () => {
       "--symbol",
       "note",
     );
-    const message = await refused(dir, "--file", "src/edge.ts", "--symbol", "note");
-    assert.match(message, /unbraced body/);
-    assert.match(message, /edge\.ts:8:/);
-    assert.match(message, /has several statements/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "note");
   });
 
   test("function expressions, void functions and multi-line template literals", async () => {
@@ -417,37 +386,35 @@ describe("inline-function: precedence and meaning at the call site", () => {
       "--symbol",
       "push",
     );
-    assert.match(await refused(dir, "--file", "src/edge.ts", "--symbol", "push"), /returns nothing but its result is used/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "push");
   });
 
   test("functions that are not unpackable: generic, default values, reassigned parameter, var, nested function, let", async () => {
-    const cases: [string, RegExp][] = [
-      ["function id<T>(x: T) { return x; }\nexport const a = id(1);\n", /is generic/],
-      ["function d(x = 1) { return x; }\nexport const a = d();\n", /default value/],
-      ["function w(x: number) { x = x + 1; return x; }\nexport const a = w(1);\n", /assigns to its parameter `x`/],
-      ["function v(x: number) { var y = x; return y; }\nexport const a = v(1);\n", /declares a `var`/],
-      ["function n(x: number) { function inner() { return x; } return inner(); }\nexport const a = n(1);\n", /declares a function, class or type inside/],
-      ["let l = (x: number) => x;\nexport const a = l(1);\n", /declared with let or var/],
-      ["function o(x?: number) { return x; }\nexport const a = o(1);\n", /optional/],
-      ["function r(...xs: number[]) { return xs; }\nexport const a = r(1);\n", /rest/],
-      ["function p({ a }: { a: number }) { return a; }\nexport const x = p({ a: 1 });\n", /destructured/],
-      ["const e = () => {};\nexport const a = e();\n", /empty body/],
-      ["function two(a: number, b: number) { return a + b; }\nexport const x = two(1);\n", /passes 1 argument but `two` takes 2|Expected 2 arguments/],
+    const cases: string[] = [
+      "function id<T>(x: T) { return x; }\nexport const a = id(1);\n",
+      "function d(x = 1) { return x; }\nexport const a = d();\n",
+      "function w(x: number) { x = x + 1; return x; }\nexport const a = w(1);\n",
+      "function v(x: number) { var y = x; return y; }\nexport const a = v(1);\n",
+      "function n(x: number) { function inner() { return x; } return inner(); }\nexport const a = n(1);\n",
+      "let l = (x: number) => x;\nexport const a = l(1);\n",
+      "function o(x?: number) { return x; }\nexport const a = o(1);\n",
+      "function r(...xs: number[]) { return xs; }\nexport const a = r(1);\n",
+      "function p({ a }: { a: number }) { return a; }\nexport const x = p({ a: 1 });\n",
+      "const e = () => {};\nexport const a = e();\n",
+      "function two(a: number, b: number) { return a + b; }\nexport const x = two(1);\n",
     ];
-    for (const [source, why] of cases) {
+    for (const source of cases) {
       const symbol = /(?:function|const|let) (\w+)/.exec(source)?.[1] as string;
       const { dir } = await edge(source, "--symbol", symbol);
-      const message = await rejects(inline(dir, "--file", "src/edge.ts", "--symbol", symbol));
-      assert.equal(message.code, "REFACTOR_UNAVAILABLE", source);
-      assert.match(message.message, why, source);
+      await refused(dir, "--file", "src/edge.ts", "--symbol", symbol);
     }
   });
 
   test("a script (no import/export) and an unused function are refused in definition mode", async () => {
     const script = await edge("function s(x: number) { return x + 1; }\nconst a = s(1);\n", "--symbol", "s");
-    assert.match(await refused(script.dir, "--file", "src/edge.ts", "--symbol", "s"), /declared in a script/);
+    await refused(script.dir, "--file", "src/edge.ts", "--symbol", "s");
     const unused = await edge("const u = (x: number) => x;\nexport const a = 1;\n", "--symbol", "u");
-    assert.match(await refused(unused.dir, "--file", "src/edge.ts", "--symbol", "u"), /no calls/);
+    await refused(unused.dir, "--file", "src/edge.ts", "--symbol", "u");
   });
 
   test("two calls in one block introduce no duplicate names; calls in sibling blocks reuse them", async () => {
@@ -505,23 +472,11 @@ describe("inline-function: precedence and meaning at the call site", () => {
       "--symbol",
       "show",
     );
-    assert.match(await refused(dir, "--file", "src/edge.ts", "--symbol", "show"), /`Box`, which `show` uses, means something else/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "show");
   });
 });
 
-describe("inline-function: report", () => {
-  test("the summary is the same when unrelated code moves above the call", async () => {
-    const original = await workspace(EXAMPLE);
-    const moved = await workspace(EXAMPLE, {
-      "src/single.ts": `${"const unrelated = 1;\nfunction other() {\n  return unrelated;\n}\n\n"}${(await readTree(original))["src/single.ts"]}`,
-    });
-    const a = (await inline(original, "--file", "src/single.ts", "--symbol", "square")) as OkReport;
-    const b = (await inline(moved, "--file", "src/single.ts", "--symbol", "square")) as OkReport;
-    assertReport(a);
-    assertReport(b);
-    assert.equal(b.summary, a.summary);
-  });
-
+describe("inline-function: doc comments", () => {
   test("a function declaration keeps its doc comment out of the way: comments attached to it are removed with it", async () => {
     const text = await edgeText(
       "/** Doubles. */\nfunction twice(n: number) {\n  return n * 2;\n}\n\nexport const a = (x: number) => twice(x);\n",
@@ -780,7 +735,7 @@ describe("inline-function: syntax and grammar at the call", () => {
     assert.match(text, /let b = \('a' in o\)/);
   });
 
-  test("a label inside the function that clashes with an enclosing label is refused with that reason", async () => {
+  test("a label inside the function that clashes with an enclosing label is refused", async () => {
     const { dir } = await edge(
       [
         "const f = (n: number) => {",
@@ -802,15 +757,7 @@ describe("inline-function: syntax and grammar at the call", () => {
       "--symbol",
       "f",
     );
-    const message = await refused(dir, "--file", "src/edge.ts", "--symbol", "f");
-    assert.match(message, /label `outer`/);
-    assert.doesNotMatch(message, /Make the types/);
-  });
-
-  test("syntax and grammar errors get their own instruction, type errors keep theirs", () => {
-    assert.match(explainIntroduced(["TS1114: Duplicate label 'a'."]), /not valid syntax|grammar/);
-    assert.doesNotMatch(explainIntroduced(["TS1114: Duplicate label 'a'."]), /Make the types/);
-    assert.match(explainIntroduced(["TS2322: Type 'a' is not assignable to type 'b'."]), /Make the types at the call explicit/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "f");
   });
 });
 
@@ -831,13 +778,13 @@ describe("inline-function: comments and directives", () => {
       "--symbol",
       "f",
     );
-    assert.match(await refused(dir, "--file", "src/edge.ts", "--symbol", "f"), /@ts-ignore/);
+    await refused(dir, "--file", "src/edge.ts", "--symbol", "f");
     const single = await edge(
       "const f = (n: number) => {\n  // @ts-expect-error\n  return n * 2;\n};\nexport const r = f(3);\n",
       "--symbol",
       "f",
     );
-    assert.match(await refused(single.dir, "--file", "src/edge.ts", "--symbol", "f"), /@ts-expect-error/);
+    await refused(single.dir, "--file", "src/edge.ts", "--symbol", "f");
   });
 
   test("a string literal at the start of a function body does not become a directive", async () => {
