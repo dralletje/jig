@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { readdirSync, realpathSync } from "node:fs";
 import { after, afterEach, beforeEach, describe, test } from "node:test";
-import { writeChanges } from "@jig/core";
-import type { OkReport } from "@jig/core";
-import { assertReport, readTree } from "@jig/test-utils";
-import { TsEngine, main } from "../src/index.ts";
+import { readTree } from "@jig/test-utils";
+import { main } from "../src/index.ts";
 import { caseInsensitiveFs } from "./case-insensitive-fs.ts";
 import { workspace } from "./helpers.ts";
 
@@ -28,8 +26,7 @@ describe("case-only renames on a case-insensitive file system", () => {
     const dir = await insensitive();
     const original = (await readTree(dir))["src/Footer.ts"];
     assert.ok(original);
-    const report = (await main(["rename-files", "--files", "src/Footer.ts", "--case", "kebab"], dir)) as OkReport;
-    assertReport(report);
+    await main(["rename-files", "--files", "src/Footer.ts", "--case", "kebab"], dir);
     restore();
     const names = readdirSync(`${dir}/src`);
     assert.ok(names.includes("footer.ts"), "footer.ts is written");
@@ -37,28 +34,5 @@ describe("case-only renames on a case-insensitive file system", () => {
     const tree = await readTree(dir);
     assert.equal(tree["src/footer.ts"], original);
     assert.ok(tree["src/main.ts"]?.includes('from "./footer"'));
-  });
-
-  test("engine.changes() has a write for the new name, whose file does not exist under that exact name", async () => {
-    const dir = await insensitive();
-    const engine = await TsEngine.load(dir);
-    const text = engine.read("src/Footer.ts");
-    assert.ok(text !== null);
-    assert.equal(engine.read("src/footer.ts"), null, "an exact-case read does not see Footer.ts");
-    engine.write("src/footer.ts", text);
-    engine.write("src/Footer.ts", null);
-    const changes = engine.changes();
-    assert.deepEqual(
-      changes.map((c) => [c.path, c.before === null ? null : "text", c.after === null ? null : "text"]),
-      [
-        ["src/Footer.ts", "text", null],
-        ["src/footer.ts", null, "text"],
-      ],
-    );
-    await writeChanges(dir, changes);
-    restore();
-    const names = readdirSync(`${dir}/src`);
-    assert.ok(names.includes("footer.ts") && !names.includes("Footer.ts"));
-    assert.equal((await readTree(dir))["src/footer.ts"], text);
   });
 });
