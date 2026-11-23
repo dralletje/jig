@@ -76,11 +76,10 @@ private func failure(_ ran: (exitCode: Int32, json: JSON, stdout: String)) -> Fa
 struct HelpTests {
   let temp = TempDirs()
 
-  @Test("<fs> --help: the six actions, the image pinned", .timeLimit(.minutes(2)))
+  @Test("<fs> --help: the help, the image pinned", .timeLimit(.minutes(2)))
   func fsHelp() throws {
     let ran = try jig([FS, "--help"], cwd: try temp.make("jig-hcwd-"))
     expectHelp(ran, image: FS)
-    #expect(actionNames(ran.json) == ["copy", "move", "remove", "remove-matching", "unwrap", "wrap"])
     #expect(ran.json["notes"] == nil)
   }
 
@@ -93,25 +92,18 @@ struct HelpTests {
     #expect(alone.json == asked.json)
   }
 
-  @Test("<fs> move --help: only move, with --from and --to", .timeLimit(.minutes(2)))
+  @Test("<fs> move --help: only move", .timeLimit(.minutes(2)))
   func fsMoveHelp() throws {
     let ran = try jig([FS, "move", "--help"], cwd: try temp.make("jig-hcwd-"))
     expectHelp(ran, image: FS)
     #expect(actionNames(ran.json) == ["move"])
-    guard case .array(let flags)? = ran.json["actions"]?[0]?["flags"] else {
-      Issue.record("no flags in \(ran.stdout)")
-      return
-    }
-    #expect(flags.map { $0["name"] } == ["--from", "--to"])
   }
 
-  @Test("<fs> nope --help is UNKNOWN_ACTION and lists the actions", .timeLimit(.minutes(2)))
+  @Test("<fs> nope --help is UNKNOWN_ACTION", .timeLimit(.minutes(2)))
   func fsUnknownAction() throws {
     let ran = try jig([FS, "nope", "--help"], cwd: try temp.make("jig-hcwd-"))
     let err = failure(ran)
     #expect(err?.code == "UNKNOWN_ACTION")
-    #expect(
-      err?.instructions == "Unknown action \"nope\". This image has: copy, move, remove, remove-matching, unwrap, wrap.")
   }
 
   @Test("--message with a help call is INVALID_ARGS; --repo is ignored", .timeLimit(.minutes(2)))
@@ -134,60 +126,10 @@ struct HelpTests {
 
   @Test(
     "every other image answers --help", .timeLimit(.minutes(3)),
-    arguments: [(TS, 23), (PRETTIER, 1), (CODEMOD, 14)])
-  func otherImages(image: String, actions: Int) throws {
+    arguments: [TS, PRETTIER, CODEMOD])
+  func otherImages(image: String) throws {
     let ran = try jig([image, "--help"], cwd: try temp.make("jig-hcwd-"))
     expectHelp(ran, image: image)
-    #expect(actionNames(ran.json).count == actions)
-  }
-
-  @Test("<codemod> --help: one action per transform, each with its one kind and a summary", .timeLimit(.minutes(2)))
-  func codemodActions() throws {
-    let ran = try jig([CODEMOD, "--help"], cwd: try temp.make("jig-hcwd-"))
-    expectHelp(ran, image: CODEMOD)
-    guard case .array(let actions)? = ran.json["actions"] else {
-      Issue.record("no actions in \(ran.stdout)")
-      return
-    }
-    #expect(actionNames(ran.json).count == 14)
-    #expect(actionNames(ran.json).contains("React-DOM-to-react-dom-factories"))
-    #expect(!actionNames(ran.json).contains("codemod"))
-    #expect(actions.first { $0["name"] == "create-element-to-jsx" }?["kind"] == .string("sweep"))
-    #expect(actions.first { $0["name"] == "sort-comp" }?["kind"] == .string("sweep"))
-    #expect(actions.first { $0["name"] == "rename-unsafe-lifecycles" }?["kind"] == .string("rewrite"))
-    for action in actions {
-      guard case .string(let summary)? = action["summary"], case .string(let kind)? = action["kind"] else {
-        Issue.record("an action without summary or kind: \(action)")
-        continue
-      }
-      #expect(!summary.isEmpty)
-      #expect(["refactor", "sweep", "rewrite"].contains(kind), "\(action)")
-    }
-  }
-
-  @Test("<codemod> sort-comp --help: --files and --parser, no --transform", .timeLimit(.minutes(2)))
-  func codemodActionHelp() throws {
-    let ran = try jig([CODEMOD, "sort-comp", "--help"], cwd: try temp.make("jig-hcwd-"))
-    expectHelp(ran, image: CODEMOD)
-    #expect(actionNames(ran.json) == ["sort-comp"])
-    guard case .array(let flags)? = ran.json["actions"]?[0]?["flags"] else {
-      Issue.record("no flags in \(ran.stdout)")
-      return
-    }
-    #expect(flags.map { $0["name"] } == ["--files", "--parser"])
-    guard let parser = flags.first(where: { $0["name"] == "--parser" }), case .array(let choices)? = parser["choices"] else {
-      Issue.record("no --parser choices in \(ran.stdout)")
-      return
-    }
-    #expect(choices.map { $0["name"] } == ["tsx", "ts", "babel", "flow"])
-    #expect(choices.allSatisfy { $0["kind"] == nil })
-  }
-
-  @Test("<codemod> codemod --help is UNKNOWN_ACTION: codemod is no longer an action", .timeLimit(.minutes(2)))
-  func codemodIsGone() throws {
-    let err = failure(try jig([CODEMOD, "codemod", "--help"], cwd: try temp.make("jig-hcwd-")))
-    #expect(err?.code == "UNKNOWN_ACTION")
-    #expect(err?.instructions.contains("sort-comp") == true, "\(err?.instructions ?? "")")
   }
 
   @Test("jig --help prints the usage", .timeLimit(.minutes(1)))

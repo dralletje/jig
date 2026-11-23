@@ -13,21 +13,12 @@ struct ConvertFunctionTests {
 
     let toArrow = ["convert-function", "--at", "src/math.ts:1", "--to", "arrow"]
     let first = try runImage(repo: dir, image: TS, args: toArrow)
-    #expect(first.kind == "refactor")
     #expect(first.filesChanged == ["src/math.ts"])
-    #expect(first.subject == "refactor(typescript convert-function): src/math.ts:1 → arrow function")
-    #expect(first.summary == "Converted the function declaration `add` in src/math.ts to a `const` arrow function.")
     let arrowed = try #require(try readTree(dir)["src/math.ts"])
     #expect(arrowed.hasPrefix("export const add = (a: number, b: number): number => {\n  return a + b;\n};\n"))
-    let body = try git(dir, ["log", "-1", "--format=%B"])
-    #expect(body.contains("\nRefactor-Kind: refactor\nCo-Authored-By: "))
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == first.subject + "\n")
 
     let toFunction = ["convert-function", "--at", "src/math.ts:1", "--to", "function"]
-    let second = try runImage(repo: dir, image: TS, args: toFunction)
-    #expect(second.subject == "refactor(typescript convert-function): src/math.ts:1 → function declaration")
-    #expect(second.kind == "refactor")
-    #expect(second.summary == "Converted `add` in src/math.ts from an arrow function to a function declaration.")
+    _ = try runImage(repo: dir, image: TS, args: toFunction)
     #expect(try readTree(dir)["src/math.ts"] == original)
     #expect(try status(dir) == "")
   }

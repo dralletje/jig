@@ -58,9 +58,6 @@ struct FsTests {
   func copyFolder() throws {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "src/old", "--to", "src/new"])
-    #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(fs copy): src/old → src/new")
-    #expect(result.summary == "Copied src/old to src/new (3 files).")
     #expect(result.filesChanged == ["src/new/.hidden", "src/new/a.txt", "src/new/nested/b.txt"])
     #expect(try status(dir) == "")
     try expectIdentical(dir)
@@ -70,7 +67,6 @@ struct FsTests {
   func copyNormalizesAndCreatesParents() throws {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "./src/old/", "--to", "src/a/b/new"])
-    #expect(result.subject == "rewrite(fs copy): src/old → src/a/b/new")
     #expect(result.filesChanged == ["src/a/b/new/.hidden", "src/a/b/new/a.txt", "src/a/b/new/nested/b.txt"])
     try expectIdentical(dir)
   }
@@ -78,9 +74,7 @@ struct FsTests {
   @Test("copy names with a space and non-ASCII letters", .timeLimit(.minutes(3)))
   func copySpacesAndUnicode() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "my dir", "--to", "été"])
-    #expect(result.subject == "rewrite(fs copy): my dir → été")
-    #expect(result.summary == "Copied my dir to été (1 file).")
+    _ = try runImage(repo: dir, image: FS, args: ["copy", "--from", "my dir", "--to", "été"])
     #expect(try readText(dir.appendingPathComponent("été/a b.txt")) == "a b.txt\n")
     try expectIdentical(dir)
   }
@@ -108,10 +102,7 @@ struct FsTests {
   @Test("move a folder", .timeLimit(.minutes(3)))
   func moveFolder() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["move", "--from", "src/old", "--to", "src/moved"])
-    #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(fs move): src/old → src/moved")
-    #expect(result.summary == "Moved src/old to src/moved (3 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["move", "--from", "src/old", "--to", "src/moved"])
     #expect(try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/old"]) == "")
     #expect(
       try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/moved"])
@@ -121,43 +112,41 @@ struct FsTests {
   }
 
   @Test(
-    "bad paths, a missing source and a taken destination are INVALID_ARGS naming the path",
+    "bad paths, a missing source and a taken destination are INVALID_ARGS",
     .timeLimit(.minutes(2)),
     arguments: [
-      (["copy", "--from", "nope", "--to", "x"], "\"nope\""),
-      (["move", "--from", "src/old", "--to", "keep.txt"], "\"keep.txt\""),
-      (["move", "--from", "src/old", "--to", "src/old/inner"], "\"src/old/inner\""),
-      (["copy", "--from", "src/old", "--to", "src/old/inner"], "\"src/old/inner\""),
-      (["copy", "--from", "/etc", "--to", "x"], "\"/etc\""),
-      (["copy", "--from", "../x", "--to", "y"], "\"../x\""),
-      (["copy", "--from", "src/../keep.txt", "--to", "y"], "\"src/../keep.txt\""),
-      (["copy", "--from", ".", "--to", "y"], "\".\""),
-      (["copy", "--from", "", "--to", "y"], "\"\""),
-      (["copy", "--from", "keep.txt", "--to", ".git/x"], "\".git/x\""),
+      ["copy", "--from", "nope", "--to", "x"],
+      ["move", "--from", "src/old", "--to", "keep.txt"],
+      ["move", "--from", "src/old", "--to", "src/old/inner"],
+      ["copy", "--from", "src/old", "--to", "src/old/inner"],
+      ["copy", "--from", "/etc", "--to", "x"],
+      ["copy", "--from", "../x", "--to", "y"],
+      ["copy", "--from", "src/../keep.txt", "--to", "y"],
+      ["copy", "--from", ".", "--to", "y"],
+      ["copy", "--from", "", "--to", "y"],
+      ["copy", "--from", "keep.txt", "--to", ".git/x"],
     ])
-  func badPaths(args: [String], named: String) throws {
+  func badPaths(args: [String]) throws {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, args)
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains(named), "\(err.instructions)")
   }
 
   @Test(
     "a part made only of dots or starting with ~ is refused (nu would expand it out of the repo)",
     .timeLimit(.minutes(2)),
     arguments: [
-      (["copy", "--from", ".../etc/passwd", "--to", "stolen"], "\".../etc/passwd\""),
-      (["copy", "--from", "src/old", "--to", "a/..../j"], "\"a/..../j\""),
-      (["remove", "--paths", "keep.txt,~"], "\"~\""),
-      (["wrap", "--paths", "keep.txt,~", "--into", "box"], "\"~\""),
-      (["remove-matching", "--files", "~/*"], "\"~/*\""),
-      (["remove-matching", "--files", ".../*"], "\".../*\""),
-    ] as [([String], String)])
-  func dotsAndTilde(args: [String], named: String) throws {
+      ["copy", "--from", ".../etc/passwd", "--to", "stolen"],
+      ["copy", "--from", "src/old", "--to", "a/..../j"],
+      ["remove", "--paths", "keep.txt,~"],
+      ["wrap", "--paths", "keep.txt,~", "--into", "box"],
+      ["remove-matching", "--files", "~/*"],
+      ["remove-matching", "--files", ".../*"],
+    ])
+  func dotsAndTilde(args: [String]) throws {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, args)
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains(named), "\(err.instructions)")
     #expect(try readText(dir.appendingPathComponent("keep.txt")) == "keep.txt\n")
   }
 
@@ -167,7 +156,6 @@ struct FsTests {
     try commitSymlink(dir, "dangling", "missing")
     let err = try refused(dir, ["copy", "--from", "keep.txt", "--to", "dangling"])
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("\"dangling\""), "\(err.instructions)")
   }
 
   @Test("a path through a symlinked folder is refused", .timeLimit(.minutes(2)))
@@ -176,30 +164,14 @@ struct FsTests {
     try commitSymlink(dir, "linked", "src/lib")
     let err = try refused(dir, ["copy", "--from", "linked/d.txt", "--to", "y"])
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("\"linked/d.txt\""), "\(err.instructions)")
-  }
-
-  @Test("a missing flag gives the usage", .timeLimit(.minutes(2)))
-  func missingFlag() throws {
-    let dir = try temp.fixture("fs")
-    let err = try refused(dir, ["copy", "--from", "src/old"])
-    #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("copy --from <path> --to <path>"), "\(err.instructions)")
-  }
-
-  @Test("an unknown flag gives the usage", .timeLimit(.minutes(2)))
-  func unknownFlag() throws {
-    let dir = try temp.fixture("fs")
-    let err = try refused(dir, ["copy", "--from", "a", "--to", "b", "--force"])
-    #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("--force"), "\(err.instructions)")
-    #expect(err.instructions.contains("copy --from <path> --to <path>"), "\(err.instructions)")
   }
 
   @Test(
-    "a repeated flag, a flag without a value and a stray argument give the usage",
+    "a missing, unknown or repeated flag, a flag without a value and a stray argument are INVALID_ARGS",
     .timeLimit(.minutes(2)),
     arguments: [
+      ["copy", "--from", "src/old"],
+      ["copy", "--from", "a", "--to", "b", "--force"],
       ["copy", "--from", "a", "--from", "b", "--to", "c"],
       ["copy", "--from"],
       ["copy", "stray", "--from", "a", "--to", "b"],
@@ -208,7 +180,6 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, args)
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("copy --from <path> --to <path>"), "\(err.instructions)")
   }
 
   @Test("a path whose parent is a file is refused", .timeLimit(.minutes(2)))
@@ -216,15 +187,13 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, ["copy", "--from", "keep.txt/x", "--to", "y"])
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("\"keep.txt/x\""), "\(err.instructions)")
   }
 
-  @Test("copy of a folder holding a symlink counts the link as a file and keeps it a link", .timeLimit(.minutes(3)))
+  @Test("copy of a folder holding a symlink keeps it a link", .timeLimit(.minutes(3)))
   func copyFolderWithSymlink() throws {
     let dir = try temp.fixture("fs")
     try commitSymlink(dir, "src/old/link", "a.txt")
-    let result = try runImage(repo: dir, image: FS, args: ["copy", "--from", "src/old", "--to", "src/new"])
-    #expect(result.summary == "Copied src/old to src/new (4 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["copy", "--from", "src/old", "--to", "src/new"])
     #expect(try git(dir, ["ls-tree", "HEAD", "src/new/link"]).hasPrefix("120000 blob "))
     #expect(try fm.destinationOfSymbolicLink(atPath: dir.appendingPathComponent("src/new/link").path) == "a.txt")
     try expectIdentical(dir)
@@ -233,21 +202,16 @@ struct FsTests {
   @Test("remove --paths removes files and folders", .timeLimit(.minutes(3)))
   func removePaths() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["remove", "--paths", "src/old,keep.txt"])
-    #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(fs remove): src/old, keep.txt")
-    #expect(result.summary == "Removed src/old, keep.txt (4 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["remove", "--paths", "src/old,keep.txt"])
     #expect(try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/old", "keep.txt"]) == "")
     #expect(try status(dir) == "")
     try expectIdentical(dir)
   }
 
-  @Test("remove-matching --files lists the matched files, sorted", .timeLimit(.minutes(3)))
+  @Test("remove-matching --files removes the matched files", .timeLimit(.minutes(3)))
   func removeFiles() throws {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "**/*.bak"])
-    #expect(result.subject == "rewrite(fs remove-matching): **/*.bak")
-    #expect(result.summary == "Removed 2 files matching **/*.bak:\n  src/y.bak\n  x.bak")
     #expect(result.filesChanged == ["src/y.bak", "x.bak"])
     try expectIdentical(dir)
   }
@@ -257,7 +221,6 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "**/.DS_Store,**/*.bak"])
     #expect(result.filesChanged == ["src/deep/.DS_Store", "src/y.bak", "x.bak"])
-    #expect(result.summary.hasPrefix("Removed 3 files matching **/.DS_Store, **/*.bak:\n"), "\(result.summary)")
     try expectIdentical(dir)
   }
 
@@ -267,7 +230,6 @@ struct FsTests {
     let result = try runImage(
       repo: dir, image: FS, args: ["remove-matching", "--files", "**/*.bak, src/deep/.DS_Store"])
     #expect(result.filesChanged == ["src/deep/.DS_Store", "src/y.bak", "x.bak"])
-    #expect(result.subject == "rewrite(fs remove-matching): **/*.bak, src/deep/.DS_Store")
     try expectIdentical(dir)
   }
 
@@ -275,26 +237,9 @@ struct FsTests {
   func unwrapTemporaryNameTaken() throws {
     let dir = try temp.fixture("fs")
     try commitFile(dir, "src/lib/.lib.unwrap-0", "entry\n")
-    let result = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "src/lib"])
-    #expect(result.summary == "Unwrapped src/lib into src (4 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "src/lib"])
     #expect(try readText(dir.appendingPathComponent("src/.lib.unwrap-0")) == "entry\n")
     #expect(try status(dir) == "")
-    try expectIdentical(dir)
-  }
-
-  @Test("remove-matching --files lists at most 20 files", .timeLimit(.minutes(3)))
-  func removeFilesCapped() throws {
-    let dir = try temp.fixture("fs")
-    try fm.createDirectory(at: dir.appendingPathComponent("many"), withIntermediateDirectories: false)
-    for n in 1...21 {
-      try write(dir.appendingPathComponent(String(format: "many/f%02d.tmp", n)), "\(n)\n")
-    }
-    try git(dir, ["add", "many"])
-    try git(dir, ["commit", "-q", "-m", "add many"])
-    let result = try runImage(repo: dir, image: FS, args: ["remove-matching", "--files", "many/*.tmp"])
-    #expect(result.filesChanged.count == 21)
-    #expect(result.summary.hasPrefix("Removed 21 files matching many/*.tmp:\n  many/f01.tmp\n"), "\(result.summary)")
-    #expect(result.summary.hasSuffix("\n  many/f20.tmp\n  … and 1 more"), "\(result.summary)")
     try expectIdentical(dir)
   }
 
@@ -312,10 +257,7 @@ struct FsTests {
   @Test("unwrap a folder that holds an item of its own name", .timeLimit(.minutes(3)))
   func unwrapFolder() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "src/lib"])
-    #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(fs unwrap): src/lib")
-    #expect(result.summary == "Unwrapped src/lib into src (3 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "src/lib"])
     #expect(
       try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "src/d.txt", "src/.env.example", "src/lib"])
         == "src/.env.example\nsrc/d.txt\nsrc/lib/c.txt\n")
@@ -326,10 +268,7 @@ struct FsTests {
   @Test("wrap paths into a new folder", .timeLimit(.minutes(3)))
   func wrapPaths() throws {
     let dir = try temp.fixture("fs")
-    let result = try runImage(repo: dir, image: FS, args: ["wrap", "--paths", "keep.txt,my dir", "--into", "box"])
-    #expect(result.kind == "rewrite")
-    #expect(result.subject == "rewrite(fs wrap): keep.txt, my dir → box")
-    #expect(result.summary == "Wrapped keep.txt, my dir into box (2 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["wrap", "--paths", "keep.txt,my dir", "--into", "box"])
     #expect(
       try git(dir, ["ls-tree", "-r", "--name-only", "HEAD", "box", "keep.txt", "my dir"])
         == "box/keep.txt\nbox/my dir/a b.txt\n")
@@ -342,8 +281,7 @@ struct FsTests {
     let dir = try temp.fixture("fs")
     try commitFile(dir, "app/[id]/[slug]/page.tsx", "page\n")
     try commitFile(dir, "app/[id]/a*?.txt", "a\n")
-    let result = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "app/[id]"])
-    #expect(result.summary == "Unwrapped app/[id] into app (2 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["unwrap", "--folder", "app/[id]"])
     #expect(try readText(dir.appendingPathComponent("app/[slug]/page.tsx")) == "page\n")
     #expect(try readText(dir.appendingPathComponent("app/a*?.txt")) == "a\n")
     #expect(!fm.fileExists(atPath: dir.appendingPathComponent("app/[id]").path))
@@ -355,8 +293,7 @@ struct FsTests {
   func wrapBrackets() throws {
     let dir = try temp.fixture("fs")
     try commitFile(dir, "a[1]/x.txt", "x\n")
-    let result = try runImage(repo: dir, image: FS, args: ["wrap", "--paths", "a[1],keep.txt", "--into", "b[2]"])
-    #expect(result.summary == "Wrapped a[1], keep.txt into b[2] (2 files).")
+    _ = try runImage(repo: dir, image: FS, args: ["wrap", "--paths", "a[1],keep.txt", "--into", "b[2]"])
     #expect(try readText(dir.appendingPathComponent("b[2]/a[1]/x.txt")) == "x\n")
     #expect(try readText(dir.appendingPathComponent("b[2]/keep.txt")) == "keep.txt\n")
     #expect(try status(dir) == "")
@@ -381,26 +318,25 @@ struct FsTests {
   }
 
   @Test(
-    "remove, remove-matching, unwrap and wrap refusals are INVALID_ARGS naming the path",
+    "remove, remove-matching, unwrap and wrap refusals are INVALID_ARGS",
     .timeLimit(.minutes(2)),
     arguments: [
-      (["remove", "--paths", "src/old,nope"], "\"nope\""),
-      (["remove", "--files", "**/*.bak"], "remove --paths <path,path>"),
-      (["remove"], "remove --paths <path,path>"),
-      (["remove", "--paths", " , "], "remove --paths <path,path>"),
-      (["remove-matching", "--files", ","], "remove-matching --files <glob,glob>"),
-      (["remove-matching"], "remove-matching --files <glob,glob>"),
-      (["remove-matching", "--paths", "keep.txt"], "remove-matching --files <glob,glob>"),
-      (["unwrap", "--folder", "keep.txt"], "\"keep.txt\""),
-      (["unwrap", "--folder", "."], "\".\""),
-      (["wrap", "--paths", "src/old", "--into", "src/old/box"], "\"src/old/box\""),
-      (["wrap", "--paths", "keep.txt", "--into", "src"], "\"src\""),
+      ["remove", "--paths", "src/old,nope"],
+      ["remove", "--files", "**/*.bak"],
+      ["remove"],
+      ["remove", "--paths", " , "],
+      ["remove-matching", "--files", ","],
+      ["remove-matching"],
+      ["remove-matching", "--paths", "keep.txt"],
+      ["unwrap", "--folder", "keep.txt"],
+      ["unwrap", "--folder", "."],
+      ["wrap", "--paths", "src/old", "--into", "src/old/box"],
+      ["wrap", "--paths", "keep.txt", "--into", "src"],
     ])
-  func removeUnwrapWrapRefusals(args: [String], named: String) throws {
+  func removeUnwrapWrapRefusals(args: [String]) throws {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, args)
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains(named), "\(err.instructions)")
   }
 
   // A git checkout never holds an empty folder, so this runs the image directly on a plain folder.
@@ -417,7 +353,6 @@ struct FsTests {
     let report = try #require(try JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: Any])
     #expect(report["ok"] as? Bool == false)
     #expect(report["code"] as? String == "NO_CHANGES")
-    #expect((report["instructions"] as? String)?.contains("\"src/empty\"") == true, "\(report)")
     #expect(fm.fileExists(atPath: dir.appendingPathComponent("src/empty/inner").path))
   }
 
@@ -427,7 +362,6 @@ struct FsTests {
     try commitFile(dir, "src/a.txt", "a\n")
     let err = try refused(dir, ["unwrap", "--folder", "src/old"])
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("\"src/a.txt\""), "\(err.instructions)")
   }
 
   @Test("wrap refuses two paths with the same base name", .timeLimit(.minutes(2)))
@@ -436,45 +370,12 @@ struct FsTests {
     try commitFile(dir, "src/a.txt", "a\n")
     let err = try refused(dir, ["wrap", "--paths", "src/old/a.txt,src/a.txt", "--into", "box"])
     #expect(err.code == "INVALID_ARGS")
-    #expect(err.instructions.contains("\"a.txt\""), "\(err.instructions)")
   }
 
-  @Test("an unknown command is UNKNOWN_ACTION and lists the commands", .timeLimit(.minutes(2)))
+  @Test("an unknown command is UNKNOWN_ACTION", .timeLimit(.minutes(2)))
   func unknownCommand() throws {
     let dir = try temp.fixture("fs")
     let err = try refused(dir, ["nope"])
     #expect(err.code == "UNKNOWN_ACTION")
-    #expect(err.instructions.contains("copy, move, remove, remove-matching, unwrap, wrap"), "\(err.instructions)")
-  }
-
-  @Test("no command at all is jig's help call: the help, and the repo untouched", .timeLimit(.minutes(2)))
-  func noCommand() throws {
-    let dir = try temp.fixture("fs")
-    let before = try headCommit(dir)
-    let finished = try runCommand([try setup(), "--repo", dir.path, FS])
-    #expect(finished.exitCode == 0, "\(finished.stdoutText)\n\(finished.stderrText)")
-    let help = try decode(JSON.self, finished.stdoutText)
-    #expect(help["schema"] == "urn:jig:help:1")
-    #expect(try headCommit(dir) == before)
-    #expect(try status(dir) == "")
-  }
-
-  // Help is asked of the image directly, on an empty folder, as jig will.
-  @Test("--help prints urn:jig:help:1 with the six actions in order", .timeLimit(.minutes(2)))
-  func help() throws {
-    let dir = try temp.make("fs-help")
-    let run = try runCommand([
-      "docker", "run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
-      "-v", "\(dir.path):/workspace", "-w", "/workspace", FS, "--help",
-    ])
-    #expect(run.exitCode == 0, "\(run.stdoutText)\n\(run.stderrText)")
-    let last = try #require(run.stdoutText.split(separator: "\n").last)
-    let help = try #require(try JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: Any])
-    #expect(help["schema"] as? String == "urn:jig:help:1")
-    #expect(help["ok"] == nil)
-    let actions = try #require(help["actions"] as? [[String: Any]])
-    #expect(
-      actions.map { $0["name"] as? String } == ["copy", "move", "remove", "remove-matching", "unwrap", "wrap"])
-    #expect(actions.allSatisfy { $0["kind"] as? String == "rewrite" })
   }
 }

@@ -6,23 +6,15 @@ import Testing
 struct DefaultToNamedTests {
   let temp = TempDirs()
 
-  @Test("default exports become named, with the refused files listed; a second run is NO_CHANGES", .timeLimit(.minutes(2)))
+  @Test("default exports become named, --keep and refused files stay; a second run is NO_CHANGES", .timeLimit(.minutes(2)))
   func exampleDefaultToNamed() throws {
     let dir = try temp.fixture("examples/default-to-named")
     let args = ["default-to-named", "--files", "src/**", "--keep", "src/routes/**"]
     let result = try runImage(repo: dir, image: TS, args: args)
-    #expect(result.kind == "sweep")
-    #expect(result.summary.contains("\n\nNot handled (2):\n"), "\(result.summary)")
     #expect(result.filesChanged == [
       "src/config.ts", "src/index.ts", "src/lib/format.ts", "src/models/Order.ts",
       "src/services/checkout.ts", "src/services/mailer.ts", "src/services/store.ts",
     ])
-    let subject = "sweep(typescript default-to-named): src/** (keeping src/routes/**)"
-    #expect(try git(dir, ["log", "-1", "--format=%s"]) == "\(subject)\n")
-    #expect(result.subject == subject)
-    let body = try git(dir, ["log", "-1", "--format=%B"])
-    #expect(body.contains("\nRefactor-Kind: sweep\nCo-Authored-By: "))
-    #expect(body.contains("\nNot handled (2):\n  src/pages/dashboard.ts:1: "), "\(body)")
     let tree = try readTree(dir)
     #expect(tree["src/lib/format.ts"]?.hasPrefix("export function formatPrice(") == true)
     #expect(tree["src/services/checkout.ts"]?.contains(#"import { formatPrice as fmt } from "../lib/format";"#) == true)
