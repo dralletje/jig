@@ -1,12 +1,23 @@
 import { dirname, relative, resolve, sep } from "node:path";
 import { RefactorError, listLines, matchesAnyGlob, plural } from "@jig/core";
 import type { Action } from "@jig/core";
-import type ts from "typescript";
+import type * as ast7 from "typescript7/ast";
+import { createFileSystemLayer } from "typescript7/fs";
+import { API } from "typescript7/sync";
+import type {
+  CompilerOptions,
+  Diagnostic,
+  ModuleResolver,
+  Program,
+  ProjectId,
+  ResolutionMode,
+  ResolveModuleNameResult,
+  Snapshot,
+} from "typescript7/sync";
 import type { TsEngine } from "./engine.ts";
 import {
-  diagnostics,
   list as globList,
-  importSpecifiers,
+  importSpecifiers7,
   importsOf,
   introduced,
   matchFiles,
@@ -17,10 +28,11 @@ import {
   slashed,
   spelledPath,
   styleOf,
+  TS_FILE,
   unavailable,
   usesExactKey,
 } from "./shared.ts";
-import type { NotHandled } from "./shared.ts";
+import type { NotHandled, PathsOptions } from "./shared.ts";
 
 /**
  * imports-to-relative, imports-to-alias, imports-to-subpath: import specifiers in `--files` that resolve to
@@ -30,7 +42,8 @@ import type { NotHandled } from "./shared.ts";
  *
  * Specifiers come from `import`/`export … from` (type-only too), `import()`, `import x = require()`,
  * `require()` and `import("…")` types. Each is resolved with TypeScript's module resolution under the
- * importing file's project. The style of a specifier: relative (`./`, `../`), subpath (`#…`), alias (a
+ * importing file's project. Parsing, resolution and the check for new errors run on TypeScript 7.1's API (the
+ * native compiler, see `Sweep7`), not on the engine's TypeScript 6 language service. The style of a specifier: relative (`./`, `../`), subpath (`#…`), alias (a
  * `paths` key of the project other than a catch-all `"*"` matches it), else a package, which never changes;
  * neither does anything that resolves into `node_modules` or as an external library. A specifier already in
  * the target style is left as it is (an alias stays an alias, whatever its prefix). One through an exact
@@ -53,17 +66,100 @@ type Edit = { start: number; end: number; text: string };
 /** For a path the new specifier should name (a file, a file without extension, or a folder): the specifier, or why it cannot be written. */
 type Spelling = { specifier: string } | { miss: string; instructions: string };
 
-/** Module resolution that reads files the way the engine does (its overlay, and exact-case names on disk). */
-function resolutionHost(engine: TsEngine): ts.ModuleResolutionHost {
-  const t = engine.ts;
-  const inRoot = (p: string): boolean => engine.relPath(p) !== p;
-  return {
-    fileExists: (p) => (inRoot(p) ? engine.read(p) !== null : t.sys.fileExists(p)),
-    readFile: (p) => (inRoot(p) ? (engine.read(p) ?? undefined) : t.sys.readFile(p)),
-    directoryExists: (p) => t.sys.directoryExists(p),
-    realpath: (p) => t.sys.realpath?.(p) ?? p,
-    getCurrentDirectory: () => engine.repoRoot,
-  };
+/**
+ * TypeScript 7's view of the engine for one sweep: a snapshot whose filesystem is the engine's overlay laid over the
+ * disk, and per engine project (the folder of a tsconfig.json, or the root) a program of every TypeScript file under
+ * it, with the tsconfig's options. Writes go to the engine and, as a new layer, to the snapshot.
+ */
+class Sweep7 {
+  readonly api: API;
+  private readonly engine: TsEngine;
+  private snapshot: Snapshot;
+  /** Project folder → its program's id, its options, and a module resolver with them. */
+  private readonly projects = new Map<string, { id: ProjectId; options: CompilerOptions; resolver: ModuleResolver }>();
+
+  constructor(engine: TsEngine) {
+    this.engine = engine;
+    this.api = new API({ cwd: engine.repoRoot });
+    const written: [string, string][] = [];
+    const removed: string[] = [];
+    for (const [rel, content] of engine.overlayEntries()) {
+      if (content === null) removed.push(engine.absPath(rel));
+      else written.push([engine.absPath(rel), content]);
+    }
+    this.snapshot = this.api.createSnapshot({ fileSystem: createFileSystemLayer(written, { removedPaths: removed }) });
+  }
+
+  close(): void {
+    this.api.close();
+  }
+
+  /** The file's project: its program in the current snapshot, its options and its resolver. Created on first use. */
+  project(file: string): { program: Program; options: CompilerOptions; resolver: ModuleResolver } {
+    const engineProject = this.engine.project(file);
+    let found = this.projects.get(engineProject.folder);
+    if (found === undefined) {
+      let options: CompilerOptions = {};
+      if (engineProject.tsconfig !== null) {
+        try {
+          options = this.api.parseConfigFile(this.engine.absPath(engineProject.tsconfig)).options;
+        } catch (e) {
+          unavailable(`TypeScript 7 could not read ${engineProject.tsconfig} (${(e as Error).message}). Fix it, then run again.`);
+        }
+        // TypeScript 7 reads baseUrl but resolves nothing through it: paths are relative to the tsconfig's folder.
+        const baseUrl = (options as PathsOptions).baseUrl;
+        if (baseUrl !== undefined && baseUrl !== this.engine.absPath(dirname(engineProject.tsconfig))) {
+          unavailable(
+            `${engineProject.tsconfig} sets baseUrl to another folder than its own. jig resolves imports with TypeScript 7, which no ` +
+              `longer resolves through baseUrl, so these imports could resolve differently than in your TypeScript. Remove baseUrl ` +
+              `(write its paths relative to the tsconfig's folder, and bare imports through baseUrl as paths aliases), then run again.`,
+          );
+        }
+      }
+      const prefix = engineProject.folder === "." ? "" : `${engineProject.folder}/`;
+      const rootFiles = this.engine
+        .listFiles()
+        .filter((f) => f.startsWith(prefix) && TS_FILE.test(f))
+        .map((f) => this.engine.absPath(f));
+      this.snapshot = this.snapshot.update({ createPrograms: [{ rootFiles, compilerOptions: options }] });
+      const program = this.snapshot.operation.createdPrograms?.[0];
+      if (program === undefined) throw new Error(`import-style: TypeScript 7 created no program for ${engineProject.folder}`);
+      found = { id: program.id, options, resolver: this.api.createModuleResolver(options) };
+      this.projects.set(engineProject.folder, found);
+    }
+    const program = this.snapshot.getProgram(found.id);
+    if (program === undefined) throw new Error(`import-style: the program of ${engineProject.folder} is gone`);
+    return { program, options: found.options, resolver: found.resolver };
+  }
+
+  /** The file's source file in its project's program (the current text). */
+  sourceFile(file: string): { program: Program; sf: ast7.SourceFile; options: CompilerOptions; resolver: ModuleResolver } {
+    const rel = this.engine.relPath(file);
+    const { program, options, resolver } = this.project(rel);
+    const sf = program.getSourceFile(this.engine.absPath(rel));
+    if (sf === undefined) unavailable(`${rel} is not a TypeScript file. Pass a .ts, .tsx, .mts or .cts file.`);
+    return { program, sf, options, resolver };
+  }
+
+  /** Resolves `name` from the file's folder as TypeScript would, in the current snapshot. */
+  resolve(file: string, name: string, mode: ResolutionMode | undefined): ResolveModuleNameResult {
+    const { resolver } = this.project(file);
+    return resolver.resolveModuleName(name, dirname(this.engine.absPath(file)), mode, { snapshot: this.snapshot });
+  }
+
+  /** The file's syntactic and semantic errors, as `TS<code>: <message>` (chained messages joined by spaces). */
+  diagnostics(file: string): string[] {
+    const { program } = this.sourceFile(file);
+    const abs = this.engine.absPath(file);
+    const flatten = (d: Diagnostic): string => [d.text, ...(d.messageChain ?? []).map(flatten)].join(" ");
+    return [...program.getSyntacticDiagnostics(abs), ...program.getSemanticDiagnostics(abs)].map((d) => `TS${d.code}: ${flatten(d)}`);
+  }
+
+  /** Writes the file to the engine, and to the snapshot as a layer over the current one. */
+  write(file: string, text: string): void {
+    this.engine.write(file, text);
+    this.snapshot = this.snapshot.update({ fileSystem: createFileSystemLayer([[this.engine.absPath(file), text]]) });
+  }
 }
 
 /** What `sweepImports` needs to know about the target style. */
@@ -75,7 +171,7 @@ type TargetStyle = {
    * For an importing file with an import to rewrite: how to spell a path for it. Refuses (INVALID_ARGS)
    * when the style's configuration is missing for that file.
    */
-  writerFor: (file: string) => (path: string, target: string) => Spelling;
+  writerFor: (file: string, options: CompilerOptions) => (path: string, target: string) => Spelling;
   /** Added to the instructions of a specifier that would not resolve to the same file. */
   resolveHint: string;
 };
@@ -83,16 +179,13 @@ type TargetStyle = {
 type Planned = { file: string; edits: Edit[]; before: string[] };
 
 /** The edits for one file's specifiers in other styles that resolve to a target, and the ones left alone. */
-function planFile(engine: TsEngine, file: string, targets: string[], to: TargetStyle): { edits: Edit[]; misses: NotHandled[] } {
-  const t = engine.ts;
-  const { program, sf } = engine.sourceFile(file);
-  const options = program.getCompilerOptions();
-  const host = resolutionHost(engine);
+function planFile(engine: TsEngine, sweep: Sweep7, file: string, targets: string[], to: TargetStyle): { edits: Edit[]; misses: NotHandled[] } {
+  const { program, sf, options } = sweep.sourceFile(file);
   const from = engine.absPath(file);
   const edits: Edit[] = [];
   const misses: NotHandled[] = [];
   let writer: ((path: string, target: string) => Spelling) | null = null;
-  for (const specifier of importSpecifiers(t, sf)) {
+  for (const specifier of importSpecifiers7(sf)) {
     const style = styleOf(specifier.text, options);
     if (style === "package" || style === to.style) continue;
     const quoted = JSON.stringify(specifier.text);
@@ -100,10 +193,9 @@ function planFile(engine: TsEngine, file: string, targets: string[], to: TargetS
       const { path, line } = engine.locationAt(file, specifier.getStart(sf));
       misses.push({ path, line, reason, instructions });
     };
-    const mode = t.getModeForUsageLocation(sf, specifier, options);
-    const resolveName = (name: string): string | undefined =>
-      t.resolveModuleName(name, from, options, host, undefined, undefined, mode).resolvedModule?.resolvedFileName;
-    const resolvedModule = t.resolveModuleName(specifier.text, from, options, host, undefined, undefined, mode).resolvedModule;
+    const mode = program.getModeForUsageLocation(from, specifier) as ResolutionMode;
+    const resolveName = (name: string): string | undefined => sweep.resolve(file, name, mode).resolvedModule?.resolvedFileName;
+    const resolvedModule = sweep.resolve(file, specifier.text, mode).resolvedModule;
     if (resolvedModule === undefined) {
       miss(`${quoted} does not resolve`, `Fix or remove the import of ${quoted} in ${file}, or leave it as it is.`);
       continue;
@@ -139,7 +231,7 @@ function planFile(engine: TsEngine, file: string, targets: string[], to: TargetS
       );
       continue;
     }
-    writer ??= to.writerFor(file);
+    writer ??= to.writerFor(file, options);
     const spelling = writer(path, target);
     if ("miss" in spelling) {
       miss(spelling.miss, spelling.instructions);
@@ -170,13 +262,23 @@ function planFile(engine: TsEngine, file: string, targets: string[], to: TargetS
 
 /** Plans every file, writes the rewrites, puts back a file that would gain errors, and reports. */
 async function sweepImports(engine: TsEngine, files: string[], targets: string[], to: TargetStyle): Promise<{ summary: string }> {
+  const matched = await matchFiles(engine.repoRoot, files);
+  const sweep = new Sweep7(engine);
+  try {
+    return finishSweep(engine, sweep, matched, files, targets, to);
+  } finally {
+    sweep.close();
+  }
+}
+
+function finishSweep(engine: TsEngine, sweep: Sweep7, matched: string[], files: string[], targets: string[], to: TargetStyle): { summary: string } {
   // Plan everything first, so a refusal (missing configuration) leaves nothing written.
   const planned: Planned[] = [];
   const misses: NotHandled[] = [];
-  for (const file of await matchFiles(engine.repoRoot, files)) {
-    const found = planFile(engine, file, targets, to);
+  for (const file of matched) {
+    const found = planFile(engine, sweep, file, targets, to);
     misses.push(...found.misses);
-    if (found.edits.length > 0) planned.push({ file, edits: found.edits, before: diagnostics(engine, file) });
+    if (found.edits.length > 0) planned.push({ file, edits: found.edits, before: sweep.diagnostics(file) });
   }
 
   const done: Planned[] = [];
@@ -185,13 +287,13 @@ async function sweepImports(engine: TsEngine, files: string[], targets: string[]
     const original = engine.read(file) ?? "";
     let text = original;
     for (const edit of [...edits].sort((a, b) => b.start - a.start)) text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
-    engine.write(file, text);
-    const errors = introduced(item.before, diagnostics(engine, file));
+    sweep.write(file, text);
+    const errors = introduced(item.before, sweep.diagnostics(file));
     if (errors.length === 0) {
       done.push(item);
       continue;
     }
-    engine.write(file, original);
+    sweep.write(file, original);
     const { path, line } = engine.locationAt(file, edits[0]?.start ?? 0);
     misses.push({
       path,
@@ -314,11 +416,12 @@ export const importsToAliasAction: Action<ImportsToAliasParams, TsEngine> = {
       style: "alias",
       label: `\`${p.alias}\` imports`,
       resolveHint: "",
-      writerFor: (file) => {
+      writerFor: (file, projectOptions) => {
         const project = engine.project(file);
         let aliasFolder = folders.get(project.folder);
         if (aliasFolder === undefined) {
-          const options = project.service.getProgram()?.getCompilerOptions() ?? {};
+          // TypeScript 7 has no baseUrl: paths are relative to the tsconfig's folder, its pathsBasePath (not in its typings).
+          const options: PathsOptions = projectOptions;
           const where = project.tsconfig ?? "the repo root (no tsconfig.json above it)";
           const entry = options.paths?.[key];
           if (entry === undefined) {

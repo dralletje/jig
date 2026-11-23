@@ -395,6 +395,16 @@ function relocateWith(engine: TsEngine, r: Relocation, api: API, worldListing: L
             `Fix ${tsconfig}, then run again.`,
         );
       }
+      // TypeScript 7 reads baseUrl but resolves nothing through it: paths are relative to the tsconfig's folder.
+      const baseUrl = (options as PathsOptions).baseUrl;
+      if (baseUrl !== undefined && baseUrl !== engine.absPath(dirname(tsconfig))) {
+        throw new RefactorError(
+          "REFACTOR_UNAVAILABLE",
+          `${tsconfig} sets baseUrl to another folder than its own, so nothing was ${move ? "moved" : "copied"}. jig resolves imports ` +
+            `with TypeScript 7, which no longer resolves through baseUrl, so imports could resolve differently than in your TypeScript. ` +
+            `Remove baseUrl (write its paths relative to the tsconfig's folder, and bare imports through baseUrl as paths aliases), then run again.`,
+        );
+      }
       optionsCache.set(tsconfig, options);
     }
     return options;

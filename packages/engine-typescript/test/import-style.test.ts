@@ -220,14 +220,16 @@ describe("imports-to-* edge cases", () => {
     assert.match(error.message, /\nsrc\/x\/a\.ts:1: "#config" uses an exact package\.json imports key\. /);
   });
 
-  test("paths relative to baseUrl: the alias folder is found through it; a baseUrl import is a package and stays", async () => {
+  test("a baseUrl other than the tsconfig's folder is refused: TypeScript 7 no longer resolves through it", async () => {
     const dir = await workspace(EXAMPLE, {
       "tsconfig.json": tsconfig({ baseUrl: "./src", paths: { "~/*": ["./*"] } }),
       "src/x/a.ts": 'import { formatDay } from "../lib/date";\nimport { cents } from "lib/money";\nexport const z = [formatDay, cents];\n',
     });
-    const report = await ok(toAlias(dir, "src/x/**", "**", "~/"));
-    assert.equal(report.summary, "Rewrote 1 import to `~/` imports in 1 file:\n  src/x/a.ts");
-    assert.equal((await readTree(dir))["src/x/a.ts"]?.split("\n").slice(0, 2).join("\n"), 'import { formatDay } from "~/lib/date";\nimport { cents } from "lib/money";');
+    const before = await readTree(dir);
+    const error = await rejects(toAlias(dir, "src/x/**", "**", "~/"));
+    assert.equal(error.code, "REFACTOR_UNAVAILABLE");
+    assert.match(error.message, /^tsconfig\.json sets baseUrl to another folder than its own\. .* Remove baseUrl /);
+    assert.deepEqual(await readTree(dir), before);
   });
 
   test("a template-literal import(), .js for .ts, .mjs for .mts and an extensionless .tsx keep their form and quotes", async () => {
