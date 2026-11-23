@@ -648,10 +648,14 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 The three `imports-to-*` sweeps resolve every specifier (`import`/`export … from`, type-only, `import()`,
 `import x = require()`, `require()`, `import("…")` types) with TypeScript under the importer's project, and
 write the new one in the same extension form (`./a`, `./a.ts`, `./a.js` for `a.ts`, `./dir` for its index
-file), keeping it only when it resolves to the same file. Packages never change, nor do imports already in
+file), keeping it only when the old specifier names that same path (only the prefix changes) and the new
+one resolves to the same file. Packages never change: bare specifiers, those matched only by a catch-all
+`"*"` paths key, and anything resolving into `node_modules` (`"#dep": "dep"` too). Nor do imports already in
 the target style (an alias stays an alias whatever its prefix, a `#` import stays as it is). Imports that do
-not resolve, whose form is unclear (an exact `paths` or `imports` key), that would not resolve back to the
-same file, or whose file would gain errors are left alone and named in the summary. tsconfig.json and
+not resolve, that use an exact (non-wildcard) `paths` or `imports` key, whose form is unclear, that reach
+their file by another path than they name (a folder whose package.json `types` points at a declaration
+file elsewhere), that would not resolve back to the same file, or whose file would gain errors are left
+alone and named in the summary. tsconfig.json and
 package.json are never changed; only TypeScript importers are looked at.
 | `default-to-named` | `--files [--keep globs]` | `export default` of a named function, class, interface or value becomes a named export and importers switch; anonymous defaults, `import()`/namespace/`require`/mock users and name clashes are left alone (named in the summary); JavaScript importers are only scanned syntactically |
 | `infer-return-types` | `--files [--exported-only true\|false]` | adds the inferred return type to functions without one (TS "Infer function return type"), exported ones only unless `false`; types holding an unwritten `any` or `import("...")`, or not in scope, are left alone (named in the summary) |
