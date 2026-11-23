@@ -538,9 +538,9 @@ N", not as an exit code. An interrupted run is `INTERNAL` with exit code 130, 14
 ## Container images
 
 Each tool is one image, `localhost/jig/<tool>:local`, for `typescript` (the typescript actions,
-`rename`, `extract`, …, with TypeScript 6.0.3 bundled; in beta, `duplicate-folder`, `move-file`,
-`rename-files` and `imports-to-*` run on the bundled TypeScript 7.1.0-beta, and refuse a tsconfig whose
-`baseUrl` is not its own folder), `prettier` (`format`, with one pinned
+`rename`, `extract`, …, with TypeScript 6.0.3 bundled), `typescript-beta` (experimental, opt-in: the
+same actions, with `duplicate-folder`, `move-file`, `rename-files` and `imports-to-*` on TypeScript
+7.1.0-beta, which refuse a tsconfig whose `baseUrl` is not its own folder), `prettier` (`format`, with one pinned
 prettier 3) and `codemod-react` (one action per react-codemod transform, see
 [Published codemods](#published-codemods)). Each image states its own name, the `<image>` in its commit
 subjects: `typescript`, `prettier`, `codemod-react`, `fs`. The base is `node:26.13.1-slim`, which runs the TypeScript source directly. The entrypoint is
@@ -827,7 +827,7 @@ subdirectory (nothing in the repo changes) and interrupted; plus one fresh-run v
 
 - TypeScript's "Move to file" does not rewrite re-exports (`export { foo } from "./a"`).
 - References across package boundaries (workspace packages, an `extends` from npm) are not rewritten.
-- Tool versions are fixed (TypeScript 6.0.3 and 7.1.0-beta, one prettier) rather than matched to the repo's own, even
+- Tool versions are fixed (TypeScript 6.0.3, one prettier) rather than matched to the repo's own, even
   when the repo has a `node_modules` committed. Prettier plugins in a config are ignored.
 - jig's own images are built locally (`localhost/jig/...`) and not pushed to a registry yet, so a
   commit made with them verifies only on a machine with the same local image.

@@ -29,10 +29,12 @@ tags:
 - `latest`, for example `fs-v1:latest`: moved on every publish to the newest build of that image name,
   so nobody has to type `-0.2` to be on the newest version.
 
-While the typescript image carries a TypeScript beta (now 7.1.0-beta, for duplicate-folder, move-file,
-rename-files and imports-to-*), its builds are tagged as beta only: `typescript-v1:6.0.3-0.4-beta`
-(the exact build) and `typescript-v1:beta` (moved to the newest beta build). They do not move
-`typescript-v1:6.0.3` or `latest`, which stay on the last build without the beta.
+The experimental `typescript-beta` image (containers/typescript-beta: duplicate-folder, move-file,
+rename-files and imports-to-* on TypeScript 7.1.0-beta) is opt-in only. It is published under the
+TypeScript it experiments with, `typescript-v1:7.1.0-beta-<our minor>.<our patch>` and
+`typescript-v1:7.1.0-beta`, and never moves `typescript-v1:6.0.3` or `latest`. Nothing of TypeScript 7
+goes into the plain typescript image: it does not install it, and without `JIG_TYPESCRIPT=7.1.0-beta`
+(set only by the beta image) the code never loads it.
 
 jig is alpha: breaking changes still ship under the same `-v1` name, with a new minor
 (`6.0.3-0.3`). Only once the owner says the images are stable does a breaking change start a new image

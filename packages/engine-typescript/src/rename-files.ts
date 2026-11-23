@@ -2,9 +2,12 @@ import { basename, dirname } from "node:path";
 import { listFiles, listLines, plural, RefactorError } from "@jig/core";
 import type { Action } from "@jig/core";
 import type { TsEngine } from "./engine.ts";
-import { relocate, withDeclarationFiles } from "./relocate.ts";
 import { byString, list as globList, matchFiles, notHandled, required, unavailable } from "./shared.ts";
 import type { NotHandled } from "./shared.ts";
+
+// The beta image (JIG_TYPESCRIPT=7.1.0-beta) relocates on TypeScript 7.1.0-beta; every other build on TypeScript 6.
+const { relocate, withDeclarationFiles } =
+  process.env.JIG_TYPESCRIPT === "7.1.0-beta" ? await import("./ts7/relocate.ts") : await import("./relocate.ts");
 
 /**
  * rename-files: the TypeScript files matching `--files` whose base name is not in the

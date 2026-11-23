@@ -1,8 +1,11 @@
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type { TsEngine } from "./engine.ts";
-import { relocate, withDeclarationFiles } from "./relocate.ts";
 import { PREFERENCES, list as globList, matchFiles, required } from "./shared.ts";
+
+// The beta image (JIG_TYPESCRIPT=7.1.0-beta) relocates on TypeScript 7.1.0-beta; every other build on TypeScript 6.
+const { relocate, withDeclarationFiles } =
+  process.env.JIG_TYPESCRIPT === "7.1.0-beta" ? await import("./ts7/relocate.ts") : await import("./relocate.ts");
 
 // ---------------------------------------------------------------------------------------------
 

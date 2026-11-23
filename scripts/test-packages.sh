@@ -33,4 +33,7 @@ case "$version" in
 esac
 
 cd "$repo_root"
-exec "$node" --test "$@" 'packages/*/test/*.test.ts'
+"$node" --test "$@" 'packages/*/test/*.test.ts'
+# The typescript tests again as the experimental typescript-beta image runs them, on TypeScript 7.1.0-beta.
+echo "# again with JIG_TYPESCRIPT=7.1.0-beta (the typescript-beta image)"
+JIG_TYPESCRIPT=7.1.0-beta exec "$node" --test "$@" 'packages/engine-typescript/test/*.test.ts'

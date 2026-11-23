@@ -165,7 +165,16 @@ describe("imports-to-* edge cases", () => {
     assert.deepEqual(await readTree(dir), before);
   });
 
-  test("a baseUrl other than the tsconfig's folder is refused: TypeScript 7 no longer resolves through it", async () => {
+  test("paths relative to baseUrl: the alias folder is found through it; a baseUrl import is a package and stays", { skip: process.env.JIG_TYPESCRIPT === "7.1.0-beta" }, async () => {
+    const dir = await workspace(EXAMPLE, {
+      "tsconfig.json": tsconfig({ baseUrl: "./src", paths: { "~/*": ["./*"] } }),
+      "src/x/a.ts": 'import { formatDay } from "../lib/date";\nimport { cents } from "lib/money";\nexport const z = [formatDay, cents];\n',
+    });
+    await toAlias(dir, "src/x/**", "**", "~/");
+    assert.equal((await readTree(dir))["src/x/a.ts"]?.split("\n").slice(0, 2).join("\n"), 'import { formatDay } from "~/lib/date";\nimport { cents } from "lib/money";');
+  });
+
+  test("TypeScript 7.1.0-beta build: a baseUrl other than the tsconfig's folder is refused", { skip: process.env.JIG_TYPESCRIPT !== "7.1.0-beta" }, async () => {
     const dir = await workspace(EXAMPLE, {
       "tsconfig.json": tsconfig({ baseUrl: "./src", paths: { "~/*": ["./*"] } }),
       "src/x/a.ts": 'import { formatDay } from "../lib/date";\nimport { cents } from "lib/money";\nexport const z = [formatDay, cents];\n',

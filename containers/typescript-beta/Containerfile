@@ -1,0 +1,19 @@
+FROM node:26.13.1-slim
+# The experimental typescript image: the typescript image's code, plus TypeScript 7.1.0-beta, which
+# duplicate-folder, move-file, rename-files and imports-to-* run on when JIG_TYPESCRIPT is 7.1.0-beta.
+# The plain typescript image neither installs TypeScript 7 nor sets JIG_TYPESCRIPT.
+WORKDIR /app
+# The image's own manifest links the workspace packages to their folders under /app/packages, so
+# Node loads them by their real paths: it does not strip types from files under node_modules.
+COPY containers/typescript-beta/package.json containers/typescript-beta/package-lock.json ./
+COPY packages/core ./packages/core
+COPY packages/engine-typescript ./packages/engine-typescript
+# npm does not know pnpm's `workspace:` dependencies, and test-utils is a devDependency only (not
+# copied into the image): drop both from the packages' manifests, then install production deps.
+# `npm ci` installs exactly what package-lock.json pins (it fails if the lockfile and manifests drift).
+RUN node -e 'const fs = require("node:fs"); for (const dir of fs.readdirSync("packages")) { const file = `packages/${dir}/package.json`; const pkg = JSON.parse(fs.readFileSync(file, "utf8")); delete pkg.devDependencies; for (const [name, spec] of Object.entries(pkg.dependencies ?? {})) if (spec.startsWith("workspace:")) delete pkg.dependencies[name]; fs.writeFileSync(file, JSON.stringify(pkg, null, 2)); }' \
+ && npm ci --omit=dev --no-audit --no-fund --no-update-notifier \
+ && npm cache clean --force
+ENV JIG_TYPESCRIPT=7.1.0-beta
+WORKDIR /workspace
+ENTRYPOINT ["node", "/app/packages/engine-typescript/src/bin.ts"]

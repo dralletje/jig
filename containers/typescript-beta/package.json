@@ -1,0 +1,9 @@
+{
+  "name": "jig-image-typescript-beta",
+  "private": true,
+  "dependencies": {
+    "@jig/core": "file:packages/core",
+    "@jig/engine-typescript": "file:packages/engine-typescript",
+    "typescript7": "npm:typescript@7.1.0-beta"
+  }
+}
