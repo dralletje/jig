@@ -17,7 +17,6 @@ import { paramsToObjectAction } from "./params.ts";
 import { duplicateFolderAction } from "./relocate.ts";
 import { inferReturnTypesAction } from "./return-types.ts";
 import { renameFilesAction } from "./rename-files.ts";
-import { subpathImportsAction } from "./subpath-imports.ts";
 import { templateStringAction } from "./template-string.ts";
 import { removeUnusedVariableAction } from "./unused-variable.ts";
 
@@ -30,7 +29,6 @@ export const ACTIONS: Action[] = [
   organizeImportsAction,
   removeBarrelsAction,
   addImportExtensionsAction,
-  subpathImportsAction,
   importsToRelativeAction,
   importsToAliasAction,
   importsToSubpathAction,

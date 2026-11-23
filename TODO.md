@@ -28,7 +28,7 @@ are touched. Fits:
 - `infer-return-types`, `remove-console`, `let` → `const`, `==` → `===`,
   optional chaining, `includes`, `forEach` → `for…of`, template strings: per node, so a range is
   natural.
-- Import sweeps (`add-import-extensions`, `subpath-imports`, `namespace-to-named`, `import-type`):
+- Import sweeps (`add-import-extensions`, `namespace-to-named`, `import-type`):
   per import declaration in the range.
 Not a fit: `organize-imports` (one import block), `remove-barrels`, `rename-files`,
 `default-to-named` (file-level by nature).
@@ -65,8 +65,6 @@ Not a fit: `organize-imports` (one import block), `remove-barrels`, `rename-file
 
 What the actions leave alone today (from the code and the README), each worth doing when it comes up:
 
-- `subpath-imports`: `require("@/x")` and `import x = require("@/x")` are not rewritten, and
-  `.js` files importing through the alias are not looked at.
 - `default-to-named`: JavaScript importers are only scanned syntactically (no resolution through
   tsconfig `paths`), and `require()`, `import()`, namespace imports and `vi.mock`/`jest.mock` factories of
   the default are left alone (named in the summary) instead of being rewritten.

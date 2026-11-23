@@ -503,7 +503,7 @@ commits:
 | Kind | Meaning | Actions |
 |---|---|---|
 | `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
-| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
+| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
 The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(prettier format): src/**`),
@@ -673,7 +673,6 @@ type-checked: the resolution check is the safety net.
 | `format` (prettier image) | `--files` | formats the matching files with the repo's own prettier config, or prettier's defaults when there is none or it fails to load; config plugins are ignored |
 | `organize-imports` | `--files` | merges, sorts and drops unused imports (TS `organizeImports`) |
 | `add-import-extensions` | `--files` | relative imports, re-exports and `import("...")` get the real extension (`./a` to `./a.ts`, `./dir` to `./dir/index.ts`), and the tsconfig gets `allowImportingTsExtensions` when needed (it must have `noEmit` or `emitDeclarationOnly`); refuses a file that would gain errors |
-| `subpath-imports` | `--files [--alias @/]` | imports through a tsconfig `paths` alias become Node subpath imports (`#/x`) and the package.json gets `imports`; unresolved or outside-folder specifiers are left alone (named in the summary); `require()`, `import x = require()` and `.js` importers are not handled |
 | `imports-to-relative` | `--files --targets` | alias and subpath imports in `--files` that resolve to a file matching `--targets` (`**` for all) become relative imports (`../lib/date`) resolving to the same file; targets outside the importer's project folder are left alone (named in the summary) |
 | `imports-to-alias` | `--files --targets --alias @/` | relative and subpath imports become imports through the importer's tsconfig `paths` entry `@/*` (one `<folder>/*` target), which must exist (else `INVALID_ARGS`); targets outside that folder are left alone (named) |
 | `imports-to-subpath` | `--files --targets --prefix #/` | relative and alias imports become subpath imports through the nearest package.json's `imports` entry `#/*` (a string `./<folder>/*`), which must exist (else `INVALID_ARGS`); extensionless and folder imports cannot be subpath imports and are left alone (named) |
