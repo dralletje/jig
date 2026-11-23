@@ -11,6 +11,7 @@ function fakeValue(flag: Flag): string {
   if (flag.type === "path" || flag.type === "paths" || flag.type === "globs") return "src/a.ts";
   if (flag.name === "--at") return "src/a.ts:12:20";
   if (flag.name === "--alias") return "@/";
+  if (flag.name === "--prefix") return "#/";
   return "foo";
 }
 
@@ -54,7 +55,7 @@ describe("typescript help", () => {
       help().actions.map((a) => a.name),
       ACTIONS.map((a) => a.id),
     );
-    assert.equal(help().actions.length, 19);
+    assert.equal(help().actions.length, 22);
   });
 
   test("the actions are named without a typescript- prefix", () => {
@@ -69,6 +70,9 @@ describe("typescript help", () => {
         "remove-barrels",
         "add-import-extensions",
         "subpath-imports",
+        "imports-to-relative",
+        "imports-to-alias",
+        "imports-to-subpath",
         "params-to-object",
         "infer-return-types",
         "namespace-to-named",

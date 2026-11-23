@@ -9,6 +9,7 @@ import { defaultToNamedAction } from "./default-to-named.ts";
 import { TsEngine } from "./engine.ts";
 import { addImportExtensionsAction } from "./extensions.ts";
 import { moveFileAction, organizeImportsAction } from "./files.ts";
+import { importsToAliasAction, importsToRelativeAction, importsToSubpathAction } from "./import-style.ts";
 import { importTypeAction, namespaceToNamedAction } from "./imports.ts";
 import { inlineFunctionAction } from "./inline.ts";
 import { liftOutAction } from "./lift.ts";
@@ -28,6 +29,9 @@ export const ACTIONS: Action[] = [
   removeBarrelsAction,
   addImportExtensionsAction,
   subpathImportsAction,
+  importsToRelativeAction,
+  importsToAliasAction,
+  importsToSubpathAction,
   paramsToObjectAction,
   inferReturnTypesAction,
   namespaceToNamedAction,
