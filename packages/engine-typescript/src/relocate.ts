@@ -6,7 +6,7 @@ import type { Action } from "@jig/core";
 import { SyntaxKind } from "typescript7/ast";
 import type * as ast7 from "typescript7/ast";
 import * as is7 from "typescript7/ast/is";
-import { createFileSystemLayer } from "typescript7/fs";
+import { createFileSystemLayer, serverFS } from "typescript7/fs";
 import { API } from "typescript7/sync";
 import type { CompilerOptions, ModuleResolver, Program, ResolutionMode, ResolveModuleNameResult, Snapshot } from "typescript7/sync";
 import type { TsEngine } from "./engine.ts";
@@ -67,6 +67,8 @@ type World = Reader & {
   programs: Map<string, Program>;
   /** Resolutions already asked for, by `resolutionKey`. */
   resolved: Map<string, ResolveModuleNameResult>;
+  /** Absolute folder under the root → the names of the files and folders in it. */
+  listings: Map<string, { files: string[]; directories: string[] }>;
 };
 
 /** A string literal or template without substitutions, as `ts.isStringLiteralLike` checks it. */
@@ -231,15 +233,50 @@ export function withDeclarationFiles(engine: TsEngine, moves: Map<string, string
  * TypeScript 7's compiler for the planning, and stops it again before returning.
  */
 export function relocate(engine: TsEngine, r: Relocation): Relocated {
-  const api = new API({ cwd: engine.repoRoot });
+  // While `listing.world` is set, the compiler lists the folders under the root as that world has them (folders
+  // nobody listed, node_modules among them, are empty), as a tsconfig's include is matched against them. Every
+  // other filesystem call goes to the disk, and snapshots put their layers over that.
+  const listing: Listing = { world: null };
+  const api = new API({
+    cwd: engine.repoRoot,
+    fs: {
+      directoryExists: (folder) => {
+        if (listing.world === null) return serverFS.useOS;
+        const abs = folder.replace(/\/+$/, "");
+        if (abs !== engine.repoRoot && engine.relPath(abs) === abs) return serverFS.useOS;
+        return abs === engine.repoRoot || listing.world.listings.has(abs);
+      },
+      fileExists: serverFS.useOS,
+      readFile: serverFS.useOS,
+      realpath: (path) => {
+        if (listing.world === null) return serverFS.useOS;
+        const abs = path.replace(/\/+$/, "");
+        if (abs !== engine.repoRoot && engine.relPath(abs) === abs) return serverFS.useOS;
+        return serverFS.identity;
+      },
+      stat: serverFS.useOS,
+      writeFile: serverFS.useOS,
+      removeFile: serverFS.useOS,
+      getAccessibleEntries: (folder) => {
+        if (listing.world === null) return serverFS.useOS;
+        const abs = folder.replace(/\/+$/, "");
+        if (abs !== engine.repoRoot && engine.relPath(abs) === abs) return serverFS.useOS;
+        const found = listing.world.listings.get(abs);
+        return { files: found?.files ?? [], directories: found?.directories ?? [], symlinks: [] };
+      },
+    },
+  });
   try {
-    return relocateWith(engine, r, api);
+    return relocateWith(engine, r, api, listing);
   } finally {
     api.close();
   }
 }
 
-function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
+/** Which world the compiler lists the folders under the root of, while set. */
+type Listing = { world: World | null };
+
+function relocateWith(engine: TsEngine, r: Relocation, api: API, worldListing: Listing): Relocated {
   const move = r.mode === "move";
   const sources = [...r.moves.keys()].sort(byString);
   /** New path → old path. */
@@ -312,7 +349,6 @@ function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
   // The files whose references are read: TypeScript and JavaScript sources, declaration files included.
   const importers = move ? listing.filter((f) => /\.(m|c)?[jt]sx?$/.test(f)) : sources.filter((f) => /\.(m|c)?[jt]sx?$/.test(f));
   const movingImporters = importers.filter((f) => r.moves.has(f));
-  const movedSources = sources.filter((f) => /\.(m|c)?[jt]sx?$/.test(f));
 
   // ---- the two worlds: TypeScript 7 snapshots over filesystem layers ----
   // Before: the disk with the engine's overlay on it. After: that, with the copies (or moves) made.
@@ -341,54 +377,35 @@ function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
       [...written].map(([rel, text]): [string, string] => [engine.absPath(rel), text]),
       { removedPaths: [...removed].map((rel) => engine.absPath(rel)) },
     );
-  /** The tsconfigs whose options are read (each importer's, before and after), and whose include is checked. */
-  const beforeProjects = new Set<string>();
-  for (const file of importers) {
-    for (const tsconfig of [tsconfigOf(file), tsconfigOf(newOf(file))]) {
-      if (tsconfig !== null) beforeProjects.add(tsconfig);
-    }
-  }
-  const afterProjects = new Set<string>();
-  for (const file of movedSources) {
-    const tsconfig = tsconfigOf(newOf(file));
-    if (tsconfig !== null) afterProjects.add(tsconfig);
-  }
-  let beforeSnapshot: Snapshot;
-  try {
-    beforeSnapshot = api.createSnapshot({
-      fileSystem: layer(beforeWritten, beforeRemoved),
-      openProjects: [...beforeProjects].map((f) => engine.absPath(f)),
-    });
-  } catch (e) {
-    throw new RefactorError(
-      "REFACTOR_UNAVAILABLE",
-      `TypeScript 7 could not load the projects of ${[...beforeProjects].join(", ") || "the repo root"} ` +
-        `(${(e as Error).message}), so nothing was ${move ? "moved" : "copied"}. Check that these tsconfig.json files are valid, then run again.`,
-    );
-  }
-  const afterSnapshot = api.createSnapshot({
-    fileSystem: layer(afterWritten, afterRemoved),
-    openProjects: [...afterProjects].map((f) => engine.absPath(f)),
-  });
-
   const optionsCache = new Map<string, CompilerOptions>();
-  /** The compiler options of the tsconfig (its errors ignored, as the engine does), or the defaults for none. */
+  /**
+   * The compiler options of the tsconfig (its errors ignored, as the engine does), or the defaults for none. Read
+   * from disk: relocate never changes a tsconfig, and no action writes one before it.
+   */
   const optionsOf = (tsconfig: string | null): CompilerOptions => {
     if (tsconfig === null) return {};
     let options = optionsCache.get(tsconfig);
     if (options === undefined) {
-      options = beforeSnapshot.getConfiguredProject(engine.absPath(tsconfig))?.parsedCommandLine.options ?? {};
+      try {
+        options = api.parseConfigFile(engine.absPath(tsconfig)).options;
+      } catch (e) {
+        throw new RefactorError(
+          "REFACTOR_UNAVAILABLE",
+          `TypeScript 7 could not read ${tsconfig} (${(e as Error).message}), so nothing was ${move ? "moved" : "copied"}. ` +
+            `Fix ${tsconfig}, then run again.`,
+        );
+      }
       optionsCache.set(tsconfig, options);
     }
     return options;
   };
 
   /**
-   * The world of a snapshot, with the files given parsed: one parse-only program per tsconfig (its options, so the
-   * same module format, but nothing resolved, no lib, JavaScript allowed).
+   * The world of a new snapshot over a filesystem layer, with the files given parsed: one parse-only program per
+   * tsconfig (its options, so the same module format, but nothing resolved, no lib, JavaScript allowed).
    */
   const makeWorld = (
-    base: Snapshot,
+    fileSystem: ReturnType<typeof createFileSystemLayer>,
     files: string[],
     read: (rel: string) => string | null,
     parse: { file: string; tsconfig: string | null }[],
@@ -399,8 +416,29 @@ function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
       if (group === undefined) groups.set(item.tsconfig, [engine.absPath(item.file)]);
       else group.push(engine.absPath(item.file));
     }
+    const listings = new Map<string, { files: string[]; directories: string[] }>();
+    const folders = new Set<string>();
+    const listingOf = (folder: string): { files: string[]; directories: string[] } => {
+      const abs = engine.absPath(folder === "." ? "" : folder);
+      let found = listings.get(abs);
+      if (found === undefined) {
+        found = { files: [], directories: [] };
+        listings.set(abs, found);
+      }
+      return found;
+    };
+    for (const file of files) {
+      listingOf(dirname(file)).files.push(basename(file));
+      let folder = dirname(file);
+      while (folder !== "." && !folders.has(folder)) {
+        folders.add(folder);
+        listingOf(dirname(folder)).directories.push(basename(folder));
+        folder = dirname(folder);
+      }
+    }
     const entries = [...groups];
-    const snapshot = base.update({
+    const snapshot = api.createSnapshot({
+      fileSystem,
       createPrograms: entries.map(([tsconfig, rootFiles]) => ({
         rootFiles,
         compilerOptions: { ...optionsOf(tsconfig), allowJs: true, noResolve: true, noLib: true, types: [] },
@@ -423,16 +461,17 @@ function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
       snapshot,
       programs,
       resolved: new Map(),
+      listings,
     };
   };
   const before = makeWorld(
-    beforeSnapshot,
+    layer(beforeWritten, beforeRemoved),
     listing,
     (rel) => engine.read(rel),
     importers.map((file) => ({ file, tsconfig: tsconfigOf(file) })),
   );
   const after = makeWorld(
-    afterSnapshot,
+    layer(afterWritten, afterRemoved),
     [...listing.filter((f) => !(move && r.moves.has(f))), ...origins.keys()].sort(byString),
     (rel) => {
       const origin = origins.get(rel);
@@ -442,11 +481,28 @@ function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
     movingImporters.map((file) => ({ file: newOf(file), tsconfig: tsconfigOf(newOf(file)) })),
   );
 
-  /** The absolute paths of the files the tsconfig's include and files take in, in that world. */
+  const coveredCache = new Map<World, Map<string, Set<string>>>();
+  /**
+   * The absolute paths of the files the tsconfig's include and files take in, in that world: the tsconfig parsed
+   * while the compiler lists the root's folders as the world has them (see `listing` in `relocate`).
+   */
   const covered = (world: World, tsconfig: string): Set<string> => {
-    const project = world.snapshot.getConfiguredProject(engine.absPath(tsconfig));
-    if (project === undefined) throw new Error(`relocate: ${tsconfig} was not opened in this snapshot`);
-    return new Set(project.parsedCommandLine.fileNames);
+    let perWorld = coveredCache.get(world);
+    if (perWorld === undefined) {
+      perWorld = new Map();
+      coveredCache.set(world, perWorld);
+    }
+    let names = perWorld.get(tsconfig);
+    if (names === undefined) {
+      worldListing.world = world;
+      try {
+        names = new Set(api.parseConfigFile(engine.absPath(tsconfig)).fileNames);
+      } finally {
+        worldListing.world = null;
+      }
+      perWorld.set(tsconfig, names);
+    }
+    return names;
   };
 
   const resolvers = new Map<string, ModuleResolver>();
