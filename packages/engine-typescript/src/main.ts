@@ -46,31 +46,24 @@ export function help(): ImageHelp {
   return imageHelp("Refactors TypeScript and JavaScript with the TypeScript language service.", ACTIONS.map(actionHelp));
 }
 
-const FLAGS = [
-  "file",
-  "symbol",
-  "to",
-  "symbols",
-  "in",
-  "files",
-  "kind",
-  "alias",
-  "exported-only",
-  "methods",
-  "at",
-  "case",
-  "keep",
-] as const;
-
-function flags(args: string[]): Record<string, string | undefined> {
+/**
+ * Parses `args` against the flags `action` declares in its help, so a flag of another action is refused
+ * instead of ignored.
+ */
+function flags(action: Action, args: string[]): Record<string, string | undefined> {
+  const names = action.flags.map((f) => f.name.replace(/^--/, ""));
   try {
     const { values } = parseArgs({
       args,
-      options: Object.fromEntries(FLAGS.map((f) => [f, { type: "string" as const }])),
+      options: Object.fromEntries(names.map((f) => [f, { type: "string" as const }])),
     });
     return values as Record<string, string | undefined>;
   } catch (e) {
-    throw new RefactorError("INVALID_ARGS", `${(e as Error).message}. The flags are --${FLAGS.join(", --")}.`);
+    const known = names.length === 0 ? `${action.id} takes no flags` : `${action.id} takes --${names.join(", --")}`;
+    throw new RefactorError(
+      "INVALID_ARGS",
+      `${(e as Error).message}. ${known}; jig <image> ${action.id} --help describes them.`,
+    );
   }
 }
 
@@ -88,7 +81,7 @@ export async function main(argv: string[], root: string): Promise<Report> {
       `Unknown action ${JSON.stringify(id ?? "")}. This image has: ${ACTIONS.map((a) => a.id).join(", ")}.`,
     );
   }
-  const params = action.parseParams(flags(args));
+  const params = action.parseParams(flags(action, args));
   const engine = await TsEngine.load(root);
   const result = await action.run(engine, params);
   await writeChanges(root, engine.changes());

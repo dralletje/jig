@@ -63,10 +63,10 @@ export async function runEntrypoint(
     try {
       answer = await help();
     } catch (e) {
-      console.log(JSON.stringify(failedReport("INTERNAL", `the help crashed: ${e instanceof Error ? e.message : String(e)}`)));
+      await printLine(JSON.stringify(failedReport("INTERNAL", `the help crashed: ${e instanceof Error ? e.message : String(e)}`)));
       process.exit(1);
     }
-    console.log(JSON.stringify(answer));
+    await printLine(JSON.stringify(answer));
     process.exit(0);
   }
   let report: Report;
@@ -78,6 +78,17 @@ export async function runEntrypoint(
         ? failedReport(e.code, e.message)
         : failedReport("INTERNAL", `the action crashed: ${e instanceof Error ? e.message : String(e)}`);
   }
-  console.log(JSON.stringify(report));
+  await printLine(JSON.stringify(report));
   process.exit(report.ok ? 0 : 1);
+}
+
+/**
+ * Writes `line` and a newline to stdout and resolves once it is handed to the system. `process.exit`
+ * right after `console.log` drops what is still queued when stdout is a non-blocking pipe (as under
+ * some Docker setups), which cut help off at 8192 bytes.
+ */
+function printLine(line: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    process.stdout.write(`${line}\n`, (error) => (error ? reject(error) : resolve()));
+  });
 }

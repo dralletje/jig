@@ -371,6 +371,13 @@ describe("main", () => {
     const dir = await workspace("simple");
     assert.equal((await rejects(main(["rename", "--nope", "x"], dir))).code, "INVALID_ARGS");
   });
+
+  test("a flag of another action is INVALID_ARGS, listing this action's own flags", async () => {
+    const dir = await workspace("simple");
+    const error = await rejects(main(["move-file", "--file", "a.ts", "--to", "b.ts", "--symbol", "foo"], dir));
+    assert.equal(error.code, "INVALID_ARGS");
+    assert.match(error.message, /move-file takes --file, --to; jig <image> move-file --help describes them\.$/);
+  });
 });
 
 describe("bin", () => {
