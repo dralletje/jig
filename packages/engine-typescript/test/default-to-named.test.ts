@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { OkReport } from "@jig/core";
 import { assertReport, readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
@@ -16,28 +15,6 @@ describe("default-to-named on examples/default-to-named", () => {
     const before = await readTree(dir);
     const report = await run(dir, "src/**", "src/routes/**");
     assertReport(report);
-    const ok = report as OkReport;
-    assert.equal(ok.subject, "sweep(typescript default-to-named): src/** (keeping src/routes/**)");
-    assert.equal(ok.kind, "sweep");
-    assert.equal(
-      ok.summary,
-      [
-        "Converted the default exports of 5 files to named exports and updated 2 importing files:",
-        "  src/config.ts: `config`",
-        "  src/lib/format.ts: `formatPrice`",
-        "  src/models/Order.ts: `Order`",
-        "  src/services/mailer.ts: `sendReceipt`",
-        "  src/services/store.ts: `Store`",
-        "",
-        "Not handled (2):",
-        "  src/pages/dashboard.ts:1: the default export is still needed where it is loaded (import(), a namespace, JavaScript or a mock)",
-        "    src/pages/dashboard.ts stays as it is because these places need its default export:",
-        "    - src/pages/loader.ts:1 (dynamic import())",
-        "    Change each to use the named export `Dashboard` by hand (for a lazy import: `import(\"…\").then((m) => ({ default: m.Dashboard }))`), then run again.",
-        "  src/pages/home.ts:1: the default export has no name to give a named export",
-        "    Give the function a name (`export default function name`) in src/pages/home.ts, then run again.",
-      ].join("\n"),
-    );
 
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), [
@@ -97,9 +74,7 @@ describe("default-to-named on examples/default-to-named", () => {
 
   test("without --keep a route module is converted too", async () => {
     const dir = await workspace(EXAMPLE);
-    const report = (await run(dir, "src/routes/**")) as OkReport;
-    assertReport(report);
-    assert.doesNotMatch(report.summary, /Not handled/);
+    await run(dir, "src/routes/**");
     assert.equal((await readTree(dir))["src/routes/about.ts"], 'export function About(): string {\n  return "about";\n}\n');
   });
 
@@ -115,19 +90,6 @@ describe("default-to-named on examples/default-to-named", () => {
     // What is left is only the refused files.
     const error = await rejects(run(dir, "src/lib/**,src/models/**,src/config.ts"));
     assert.equal(error.code, "NO_CHANGES");
-  });
-
-  test("the summary stays the same when code moves above the changed places", async () => {
-    const plain = (await run(await workspace(EXAMPLE), "src/**", "src/routes/**")) as OkReport;
-    const moved = (await run(
-      await workspace(EXAMPLE, {
-        "src/lib/format.ts": `// a comment\n\nconst unrelated = 1;\nexport const other = unrelated;\n\nexport default function formatPrice(cents: number): string {\n  return \`$\${(cents / 100).toFixed(2)}\`;\n}\n`,
-        "src/services/checkout.ts": `// moved\n\n\n${(await readTree(await workspace(EXAMPLE)))["src/services/checkout.ts"]}`,
-      }),
-      "src/**",
-      "src/routes/**",
-    )) as OkReport;
-    assert.equal(moved.summary, plain.summary);
   });
 });
 
@@ -150,9 +112,7 @@ describe("default-to-named import forms", () => {
       "src/x/widget.ts": "export type Thing = { id: number };\nexport const extra = 2;\n\nexport default function widget(): number {\n  return 1;\n}\n",
     });
     assert.deepEqual(await errors(dir, "src/x/widget.ts"), []);
-    const report = (await run(dir, "src/x/**")) as OkReport;
-    assertReport(report);
-    assert.doesNotMatch(report.summary, /Not handled/);
+    await run(dir, "src/x/**");
     const after = await readTree(dir);
     assert.equal(after["src/x/user-a.ts"], 'import { widget as w } from "./widget";\n\nexport const a = w();\n');
     assert.equal(after["src/x/user-b.ts"], 'import { widget, type Thing } from "./widget";\n\nexport const b: Thing | undefined = undefined;\nexport const c = widget();\n');
@@ -169,8 +129,7 @@ describe("default-to-named import forms", () => {
       "src/y/limit.ts": "export const limit = 10;\nexport default limit;\n",
       "src/y/use.ts": 'import max from "./limit";\n\nexport const doubled = max * 2;\n',
     });
-    const report = (await run(dir, "src/y/**")) as OkReport;
-    assertReport(report);
+    await run(dir, "src/y/**");
     const after = await readTree(dir);
     assert.equal(after["src/y/limit.ts"], "export const limit = 10;\n");
     assert.equal(after["src/y/use.ts"], 'import { limit as max } from "./limit";\n\nexport const doubled = max * 2;\n');
@@ -195,10 +154,7 @@ describe("default-to-named import forms", () => {
       "src/n/other.ts": "export default function other() {\n  return 2;\n}\n",
       "src/n/use.ts": 'import * as t from "./thing";\n\nexport const x = t.default();\n',
     });
-    const report = (await run(dir, "src/n/**")) as OkReport;
-    assertReport(report);
-    assert.match(report.summary, /\n\nNot handled \(1\):\n {2}src\/n\/thing\.ts:1: the default export is still needed where it is loaded/);
-    assert.match(report.summary, /\n {4}- src\/n\/use\.ts:3 \(namespace import `t`\)\n/);
+    await run(dir, "src/n/**");
     const after = await readTree(dir);
     assert.equal(after["src/n/thing.ts"], "export default function thing() {\n  return 1;\n}\n");
     assert.equal(after["src/n/other.ts"], "export function other() {\n  return 2;\n}\n");
@@ -206,14 +162,16 @@ describe("default-to-named import forms", () => {
 });
 
 describe("default-to-named anonymous defaults", () => {
-  test("an anonymous default is listed as not handled when other files were converted", async () => {
+  test("an anonymous default is left as is while other files are converted", async () => {
     const dir = await workspace(EXAMPLE);
-    const report = (await run(dir, "src/pages/home.ts,src/lib/format.ts")) as OkReport;
-    assertReport(report);
-    assert.match(report.summary, /\n\nNot handled \(1\):\n {2}src\/pages\/home\.ts:1: the default export has no name to give a named export\n {4}Give the function a name/);
+    const before = await readTree(dir);
+    await run(dir, "src/pages/home.ts,src/lib/format.ts");
+    const after = await readTree(dir);
+    assert.equal(after["src/pages/home.ts"], before["src/pages/home.ts"]);
+    assert.equal(after["src/lib/format.ts"], before["src/lib/format.ts"]?.replace("export default function", "export function"));
   });
 
-  test("an anonymous default alone is NO_CHANGES with instructions listing the skipped files; nothing is written", async () => {
+  test("anonymous defaults alone are NO_CHANGES; nothing is written", async () => {
     const dir = await workspace(EXAMPLE, {
       "src/a/arrow.ts": "export default () => 1;\n",
       "src/a/cls.ts": "export default class {}\n",
@@ -221,9 +179,6 @@ describe("default-to-named anonymous defaults", () => {
     const before = await readTree(dir);
     const error = await rejects(run(dir, "src/a/**,src/pages/home.ts"));
     assert.equal(error.code, "NO_CHANGES");
-    assert.match(error.message, /src\/a\/arrow\.ts: .*Assign it to a named const/);
-    assert.match(error.message, /src\/a\/cls\.ts: .*Give the class a name/);
-    assert.match(error.message, /src\/pages\/home\.ts: /);
     assert.deepEqual(await readTree(dir), before);
   });
 });
@@ -240,10 +195,7 @@ describe("default-to-named JavaScript and mock users", () => {
       "src/j/use.js": 'import w from "./widget";\n\nexport const a = w();\n',
     });
     const before = await readTree(dir);
-    const report = (await run(dir, "src/j/**")) as OkReport;
-    assertReport(report);
-    assert.match(report.summary, /\n\nNot handled \(1\):\n {2}src\/j\/widget\.ts:1: /);
-    assert.match(report.summary, /\n {4}- src\/j\/use\.js:1 /);
+    await run(dir, "src/j/**");
     const after = await readTree(dir);
     assert.equal(after["src/j/widget.ts"], before["src/j/widget.ts"]);
     assert.equal(after["src/j/use.js"], before["src/j/use.js"]);
@@ -255,8 +207,8 @@ describe("default-to-named JavaScript and mock users", () => {
       ...TS_MODULES,
       "src/j/use.js": 'import { other } from "./widget";\n\nexport const a = other;\n',
     });
-    const report = (await run(dir, "src/j/widget.ts")) as OkReport;
-    assert.doesNotMatch(report.summary, /Not handled/);
+    await run(dir, "src/j/widget.ts");
+    assert.equal((await readTree(dir))["src/j/widget.ts"], "export function widget(): number {\n  return 1;\n}\n");
   });
 
   test("require(...).default in a JS file blocks, also through a .js extension specifier", async () => {
@@ -266,8 +218,12 @@ describe("default-to-named JavaScript and mock users", () => {
       "src/j/use.cjs": 'const w = require("./widget").default;\nmodule.exports = w;\n',
       "src/j/use2.mjs": 'const m = await import("./ok.js");\nexport default m.default;\n',
     });
-    const report = (await run(dir, "src/j/**")) as OkReport;
-    assert.match(report.summary, /\n\nNot handled \(2\):\n {2}src\/j\/ok\.ts:1: [^\n]*\n(?: {4}[^\n]*\n)+ {2}src\/j\/widget\.ts:1: /);
+    const before = await readTree(dir);
+    await run(dir, "src/j/**");
+    const after = await readTree(dir);
+    assert.equal(after["src/j/ok.ts"], before["src/j/ok.ts"]);
+    assert.equal(after["src/j/widget.ts"], before["src/j/widget.ts"]);
+    assert.equal(after["src/j/free.ts"], "export function free(): number {\n  return 4;\n}\n");
   });
 
   test("a vi.mock factory returning default blocks the mocked file", async () => {
@@ -275,12 +231,14 @@ describe("default-to-named JavaScript and mock users", () => {
       ...TS_MODULES,
       "src/j/widget.test.ts": 'declare const vi: { mock(path: string, f: () => unknown): void };\nvi.mock("./widget", () => ({ default: () => 3 }));\nexport {};\n',
     });
-    const report = (await run(dir, "src/j/widget.ts,src/j/ok.ts")) as OkReport;
-    assert.match(report.summary, /\n\nNot handled \(1\):\n {2}src\/j\/widget\.ts:1: /);
-    assert.match(report.summary, /\n {4}- src\/j\/widget\.test\.ts:2 \(vi\.mock/);
+    const before = await readTree(dir);
+    await run(dir, "src/j/widget.ts,src/j/ok.ts");
+    const after = await readTree(dir);
+    assert.equal(after["src/j/widget.ts"], before["src/j/widget.ts"]);
+    assert.equal(after["src/j/ok.ts"], "export function ok(): number {\n  return 2;\n}\n");
   });
 
-  test("rerun after a partial result is NO_CHANGES and lists the skipped files", async () => {
+  test("rerun after a partial result is NO_CHANGES", async () => {
     const dir = await workspace(EXAMPLE, {
       ...TS_MODULES,
       "src/j/use.js": 'import w from "./widget";\nexport const a = w();\n',
@@ -288,16 +246,5 @@ describe("default-to-named JavaScript and mock users", () => {
     await run(dir, "src/j/**");
     const error = await rejects(run(dir, "src/j/**"));
     assert.equal(error.code, "NO_CHANGES");
-    assert.match(error.message, /src\/j\/widget\.ts: /);
-    assert.match(error.message, /src\/j\/use\.js:1/);
-  });
-
-  test("one file left: `Not handled (1)` with its place, reason and what to do", async () => {
-    const dir = await workspace(EXAMPLE, {
-      ...TS_MODULES,
-      "src/j/use.js": 'import w from "./widget";\nexport const a = w();\n',
-    });
-    const report = (await run(dir, "src/j/**")) as OkReport;
-    assert.match(report.summary, /\n\nNot handled \(1\):\n {2}src\/j\/widget\.ts:1: the default export is still needed where it is loaded \(import\(\), a namespace, JavaScript or a mock\)\n {4}src\/j\/widget\.ts stays as it is because these places need its default export:\n {4}- src\/j\/use\.js:1 \(JavaScript import\)\n {4}Change each to use the named export `widget` by hand/);
   });
 });

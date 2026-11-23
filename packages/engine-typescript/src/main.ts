@@ -17,7 +17,6 @@ import { paramsToObjectAction } from "./params.ts";
 import { duplicateFolderAction } from "./relocate.ts";
 import { inferReturnTypesAction } from "./return-types.ts";
 import { renameFilesAction } from "./rename-files.ts";
-import { subpathImportsAction } from "./subpath-imports.ts";
 import { templateStringAction } from "./template-string.ts";
 import { removeUnusedVariableAction } from "./unused-variable.ts";
 
@@ -30,7 +29,6 @@ export const ACTIONS: Action[] = [
   organizeImportsAction,
   removeBarrelsAction,
   addImportExtensionsAction,
-  subpathImportsAction,
   importsToRelativeAction,
   importsToAliasAction,
   importsToSubpathAction,
@@ -49,7 +47,11 @@ export const ACTIONS: Action[] = [
 
 /** What the image prints for `--help`: its actions, their summaries and flags. */
 export function help(): ImageHelp {
-  return imageHelp("Refactors TypeScript and JavaScript with the TypeScript language service.", ACTIONS.map(actionHelp));
+  return imageHelp(
+    "Refactors TypeScript and JavaScript with the TypeScript language service (6.0.3). Beta: duplicate-folder, move-file, " +
+      "rename-files and imports-to-* run on TypeScript 7.1.0-beta.",
+    ACTIONS.map(actionHelp),
+  );
 }
 
 /**

@@ -503,7 +503,7 @@ commits:
 | Kind | Meaning | Actions |
 |---|---|---|
 | `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
-| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
+| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
 The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(prettier format): src/**`),
@@ -538,7 +538,9 @@ N", not as an exit code. An interrupted run is `INTERNAL` with exit code 130, 14
 ## Container images
 
 Each tool is one image, `localhost/jig/<tool>:local`, for `typescript` (the typescript actions,
-`rename`, `extract`, …, with TypeScript 6.0.3 bundled), `prettier` (`format`, with one pinned
+`rename`, `extract`, …, with TypeScript 6.0.3 bundled; in beta, `duplicate-folder`, `move-file`,
+`rename-files` and `imports-to-*` run on the bundled TypeScript 7.1.0-beta, and refuse a tsconfig whose
+`baseUrl` is not its own folder), `prettier` (`format`, with one pinned
 prettier 3) and `codemod-react` (one action per react-codemod transform, see
 [Published codemods](#published-codemods)). Each image states its own name, the `<image>` in its commit
 subjects: `typescript`, `prettier`, `codemod-react`, `fs`. The base is `node:26.13.1-slim`, which runs the TypeScript source directly. The entrypoint is
@@ -673,7 +675,6 @@ type-checked: the resolution check is the safety net.
 | `format` (prettier image) | `--files` | formats the matching files with the repo's own prettier config, or prettier's defaults when there is none or it fails to load; config plugins are ignored |
 | `organize-imports` | `--files` | merges, sorts and drops unused imports (TS `organizeImports`) |
 | `add-import-extensions` | `--files` | relative imports, re-exports and `import("...")` get the real extension (`./a` to `./a.ts`, `./dir` to `./dir/index.ts`), and the tsconfig gets `allowImportingTsExtensions` when needed (it must have `noEmit` or `emitDeclarationOnly`); refuses a file that would gain errors |
-| `subpath-imports` | `--files [--alias @/]` | imports through a tsconfig `paths` alias become Node subpath imports (`#/x`) and the package.json gets `imports`; unresolved or outside-folder specifiers are left alone (named in the summary); `require()`, `import x = require()` and `.js` importers are not handled |
 | `imports-to-relative` | `--files --targets` | alias and subpath imports in `--files` that resolve to a file matching `--targets` (`**` for all) become relative imports (`../lib/date`) resolving to the same file; targets outside the importer's project folder are left alone (named in the summary) |
 | `imports-to-alias` | `--files --targets --alias @/` | relative and subpath imports become imports through the importer's tsconfig `paths` entry `@/*` (one `<folder>/*` target), which must exist (else `INVALID_ARGS`); targets outside that folder are left alone (named) |
 | `imports-to-subpath` | `--files --targets --prefix #/` | relative and alias imports become subpath imports through the nearest package.json's `imports` entry `#/*` (a string `./<folder>/*`), which must exist (else `INVALID_ARGS`); extensionless and folder imports cannot be subpath imports and are left alone (named) |
@@ -826,7 +827,7 @@ subdirectory (nothing in the repo changes) and interrupted; plus one fresh-run v
 
 - TypeScript's "Move to file" does not rewrite re-exports (`export { foo } from "./a"`).
 - References across package boundaries (workspace packages, an `extends` from npm) are not rewritten.
-- Tool versions are fixed (TypeScript 6.0.3, one prettier) rather than matched to the repo's own, even
+- Tool versions are fixed (TypeScript 6.0.3 and 7.1.0-beta, one prettier) rather than matched to the repo's own, even
   when the repo has a `node_modules` committed. Prettier plugins in a config are ignored.
 - jig's own images are built locally (`localhost/jig/...`) and not pushed to a registry yet, so a
   commit made with them verifies only on a machine with the same local image.

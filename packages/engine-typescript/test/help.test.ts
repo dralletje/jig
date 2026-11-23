@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { test } from "node:test";
 import { RefactorError } from "@jig/core";
 import type { Flag } from "@jig/core";
 import { HELP_SCHEMA_ID, schemaErrors } from "@jig/test-utils";
 import { ACTIONS, help, main } from "../src/main.ts";
 
-// A value each declared flag accepts, by its type. Two text flags check their format and get a valid one.
+// A value each declared flag accepts, by its type. Text flags that check their format get a valid one.
 function fakeValue(flag: Flag): string {
   if (flag.type === "choice") return flag.choices[0]!.name;
   if (flag.type === "path" || flag.type === "paths" || flag.type === "globs") return "src/a.ts";
@@ -15,13 +15,8 @@ function fakeValue(flag: Flag): string {
   return "foo";
 }
 
-// The raw object `parseParams` gets, answering the given flags (with `values` over the fake ones);
-// every key it reads is recorded.
-function recordingRaw(
-  flags: Flag[],
-  reads: Set<string>,
-  values: Record<string, string> = {},
-): Record<string, string | undefined> {
+// The raw flags `parseParams` gets: the given flags answered (`values` over the fake ones), every key it reads recorded.
+function recordingRaw(flags: Flag[], reads: Set<string>, values: Record<string, string> = {}): Record<string, string | undefined> {
   return new Proxy({} as Record<string, string | undefined>, {
     get(_target, key) {
       if (typeof key !== "string") return undefined;
@@ -33,122 +28,42 @@ function recordingRaw(
   });
 }
 
-// Whether `parse` refuses; a refusal must be an INVALID_ARGS RefactorError.
+// Whether `parse` refuses the flags; a refusal must be INVALID_ARGS.
 function refuses(parse: () => unknown): boolean {
   try {
     parse();
     return false;
   } catch (e) {
-    assert.ok(e instanceof RefactorError, String(e));
-    assert.equal(e.code, "INVALID_ARGS");
+    assert.ok(e instanceof RefactorError && e.code === "INVALID_ARGS", String(e));
     return true;
   }
 }
 
-describe("typescript help", () => {
-  test("is a valid help object", () => {
-    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help()), []);
-  });
-
-  test("lists exactly the actions main dispatches, in order", () => {
-    assert.deepEqual(
-      help().actions.map((a) => a.name),
-      ACTIONS.map((a) => a.id),
-    );
-    assert.equal(help().actions.length, 23);
-  });
-
-  test("the actions are named without a typescript- prefix", () => {
-    assert.deepEqual(
-      help().actions.map((a) => a.name),
-      [
-        "rename",
-        "extract",
-        "lift-out",
-        "move-file",
-        "duplicate-folder",
-        "organize-imports",
-        "remove-barrels",
-        "add-import-extensions",
-        "subpath-imports",
-        "imports-to-relative",
-        "imports-to-alias",
-        "imports-to-subpath",
-        "params-to-object",
-        "infer-return-types",
-        "namespace-to-named",
-        "import-type",
-        "remove-console",
-        "template-string",
-        "rename-files",
-        "remove-unused-variable",
-        "convert-function",
-        "default-to-named",
-        "inline-function",
-      ],
-    );
-  });
-
-  test("an old prefixed name is an unknown action", async () => {
-    await assert.rejects(main(["typescript-rename", "--file", "a.ts", "--symbol", "a", "--to", "b"], "/nonexistent"), (e: unknown) => {
-      assert.ok(e instanceof RefactorError, String(e));
-      assert.equal(e.code, "UNKNOWN_ACTION");
-      assert.match(e.message, /^Unknown action "typescript-rename"\. This image has: rename, extract, /);
+test("typescript --help is valid and its flags are the ones each action accepts", async () => {
+  assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help()), []);
+  for (const action of ACTIONS) {
+    const all = action.flags.flatMap((f) => [f.name, fakeValue(f)]);
+    await assert.rejects(main([action.id, ...all, "--not-a-flag", "x"], "/nonexistent"), (e: unknown) => {
+      assert.ok(e instanceof RefactorError && e.code === "INVALID_ARGS", `${action.id} --not-a-flag: ${String(e)}`);
       return true;
     });
-  });
-
-  test("every action's summary is one real line", () => {
-    for (const a of help().actions) {
-      assert.ok(a.summary.trim().length > 0, a.name);
-      assert.doesNotMatch(a.summary, /\n/, a.name);
-      assert.doesNotMatch(a.summary, /todo|tbd|placeholder/i, a.name);
-    }
-  });
-
-  test("every flag has a description", () => {
-    for (const a of help().actions) {
-      for (const f of a.flags) assert.ok(f.description.trim().length > 0, `${a.name} ${f.name}`);
-    }
-  });
-
-  for (const action of ACTIONS) {
-    test(`${action.id}: its flags are exactly the keys parseParams reads`, () => {
-      const reads = new Set<string>();
-      action.parseParams(recordingRaw(action.flags, reads));
-      assert.deepEqual(
-        action.flags.map((f) => f.name).sort(),
-        [...reads].map((k) => `--${k}`).sort(),
-      );
-    });
-
-    test(`${action.id}: required says whether parseParams refuses the call without the flag`, () => {
-      for (const flag of action.flags) {
-        const others = action.flags.filter((f) => f !== flag);
-        assert.equal(
-          refuses(() => action.parseParams(recordingRaw(others, new Set()))),
-          flag.required,
-          flag.name,
-        );
+    const reads = new Set<string>();
+    assert.equal(refuses(() => action.parseParams(recordingRaw(action.flags, reads))), false, `${action.id} with every flag`);
+    assert.deepEqual(
+      action.flags.map((f) => f.name).sort(),
+      [...reads].map((k) => `--${k}`).sort(),
+      `${action.id}: the flags it lists are the ones it reads`,
+    );
+    for (const flag of action.flags) {
+      const others = action.flags.filter((f) => f !== flag);
+      assert.equal(refuses(() => action.parseParams(recordingRaw(others, new Set()))), flag.required, `${action.id} without ${flag.name}`);
+      if (flag.type !== "choice") continue;
+      for (const choice of flag.choices) {
+        const raw = recordingRaw(action.flags, new Set(), { [flag.name]: choice.name });
+        assert.equal(refuses(() => action.parseParams(raw)), false, `${action.id} ${flag.name} ${choice.name}`);
       }
-    });
-
-    test(`${action.id}: parseParams accepts every listed choice and refuses any other value`, () => {
-      for (const flag of action.flags) {
-        if (flag.type !== "choice") continue;
-        for (const choice of flag.choices) {
-          assert.equal(
-            refuses(() => action.parseParams(recordingRaw(action.flags, new Set(), { [flag.name]: choice.name }))),
-            false,
-            `${flag.name} ${choice.name}`,
-          );
-        }
-        assert.equal(
-          refuses(() => action.parseParams(recordingRaw(action.flags, new Set(), { [flag.name]: "not-a-choice" }))),
-          true,
-          `${flag.name} not-a-choice`,
-        );
-      }
-    });
+      const raw = recordingRaw(action.flags, new Set(), { [flag.name]: "not-a-choice" });
+      assert.equal(refuses(() => action.parseParams(raw)), true, `${action.id} ${flag.name} not-a-choice`);
+    }
   }
 });

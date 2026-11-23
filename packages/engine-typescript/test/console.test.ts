@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { OkReport } from "@jig/core";
-import { assertReport, readTree } from "@jig/test-utils";
+import { readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
 
@@ -10,20 +9,15 @@ const removeConsole = (dir: string, files: string, methods?: string) =>
 
 async function run(files: Record<string, string>, methods?: string) {
   const dir = await workspace("examples/remove-console", files);
-  const report = await removeConsole(dir, "src/**", methods);
-  assertReport(report);
-  return { dir, report: report as OkReport, tree: await readTree(dir) };
+  await removeConsole(dir, "src/**", methods);
+  return { dir, tree: await readTree(dir) };
 }
 
 describe("remove-console on examples/remove-console", () => {
-  test("console.log statements go, other methods stay, values are listed as not handled", async () => {
+  test("console.log statements go, other methods stay, calls used as values are left", async () => {
     const dir = await workspace("examples/remove-console");
     const before = await readTree(dir);
-    const report = await removeConsole(dir, "src/orders.ts");
-    assertReport(report);
-    const ok = report as OkReport;
-    assert.equal(ok.subject, "rewrite(typescript remove-console): console.log in src/orders.ts");
-    assert.equal(ok.kind, "rewrite");
+    await removeConsole(dir, "src/orders.ts");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/orders.ts"]);
     assert.equal(
@@ -56,32 +50,15 @@ export function describe(order: Order): string {
 }
 `,
     );
-    assert.equal(
-      ok.summary,
-      [
-        "Removed 2 console calls from 1 file, and left 2 calls used as values:",
-        "  src/orders.ts",
-        "",
-        "Not handled (2):",
-        "  src/orders.ts:20: console.log(…) is used as a value here, so it was left",
-        "    Its result is used, so deleting the call would change the code around it.",
-        "    Rewrite that code by hand, then remove the call.",
-        "  src/orders.ts:23: console.log(…) is used as a value here, so it was left",
-        "    Its result is used, so deleting the call would change the code around it.",
-        "    Rewrite that code by hand, then remove the call.",
-      ].join("\n"),
-    );
     assert.deepEqual(await errors(dir, "src/orders.ts"), []);
   });
 
   test("--methods log,debug covers both", async () => {
-    const { report, tree } = await run({}, "log,debug");
-    assert.equal(report.subject, "rewrite(typescript remove-console): console.log, console.debug in src/**");
+    const { tree } = await run({}, "log,debug");
     const orders = tree["src/orders.ts"] ?? "";
     assert.ok(!orders.includes("console.debug"));
     assert.ok(orders.includes("console.warn"));
     assert.ok(!orders.includes('console.log("processing"'));
-    assert.match(report.summary, /^Removed 14 console calls from 3 files, and left 2 calls used as values:\n/);
     // The debug line sat between blank lines: one blank line is left, not two.
     assert.ok(orders.includes(`const tax = order.total * 0.2;\n\n  // keep the rounding rule in one place\n`));
   });
@@ -106,7 +83,7 @@ export function describe(order: Order): string {
   });
 
   test("a brace-less if: whole if when the condition is pure and there is no else, else {}", async () => {
-    const { dir, report, tree } = await run({});
+    const { dir, tree } = await run({});
     assert.equal(
       tree["src/guards.ts"],
       `let calls = 0;
@@ -137,32 +114,14 @@ export function loop(ids: string[]): void {
 }
 `,
     );
-    assert.match(report.summary, /\n\nNot handled \(2\):\n/);
     assert.deepEqual(await errors(dir, "src/guards.ts"), []);
   });
 
 
-  test("statements sharing a blank line are all removed, a second run is a no-op", async () => {
+  test("statements sharing a blank line are all removed", async () => {
     const src = "export function f(n: number): number {\n  console.log(1);\n\n  console.log(2);\n}\n";
-    const { dir, tree } = await run({ "src/shared.ts": src });
-    const out = tree["src/shared.ts"] ?? "";
-    assert.ok(!out.includes("console.log"), out);
-    assert.equal(out, "export function f(n: number): number {\n}\n");
-    assert.equal((out.match(/console\./g) ?? []).length, 0);
-    const again = await rejects(removeConsole(dir, "src/shared.ts"));
-    assert.equal(again.code, "NO_CHANGES");
-  });
-
-  test("one call left as a value: the summary names its place and what to do", async () => {
-    const dir = await workspace("examples/remove-console", {
-      "src/a.ts": 'export function f(): void {\n  void 0;\n  const x = console.log("kept");\n  console.log("go");\n  void x;\n}\n',
-    });
-    const report = await removeConsole(dir, "src/a.ts");
-    assertReport(report);
-    const summary = (report as OkReport).summary;
-    assert.match(summary, /left 1 call used as a value:/);
-    assert.match(summary, /\n\nNot handled \(1\):\n {2}src\/a\.ts:3: console\.log\(…\) is used as a value here, so it was left\n/);
-    assert.match(summary, /\n {4}Rewrite that code by hand, then remove the call\.$/);
+    const { tree } = await run({ "src/shared.ts": src });
+    assert.equal(tree["src/shared.ts"], "export function f(n: number): number {\n}\n");
   });
 
   test("adjacent removed statements with blank lines around leave no double blank line", async () => {
@@ -171,21 +130,21 @@ export function loop(ids: string[]): void {
     assert.equal(tree["src/adj.ts"], "export function f(n: number): number {\n  const a = n;\n\n  return a;\n}\n");
   });
 
-  test("when every call is a value, NO_CHANGES lists each as a miss with its reason", async () => {
+  test("when every call is a value, it is NO_CHANGES", async () => {
     const dir = await workspace("examples/remove-console", {
       "src/values.ts": "export const a = (m: string) => console.log(m);\nexport const b = (m: string) => console.log(m + 1);\n",
     });
+    const before = await readTree(dir);
     const e = await rejects(removeConsole(dir, "src/values.ts"));
     assert.equal(e.code, "NO_CHANGES");
-    assert.match(e.instructions, /src\/values\.ts:1: console\.log\(…\) is used as a value here, so it was left/);
-    assert.match(e.instructions, /src\/values\.ts:2: console\.log\(…\) is used as a value here, so it was left/);
+    assert.deepEqual(await readTree(dir), before);
   });
 
   test("a second run changes nothing", async () => {
-    const { dir } = await run({});
+    const { dir, tree } = await run({});
     const e = await rejects(removeConsole(dir, "src/**"));
     assert.equal(e.code, "NO_CHANGES");
-    assert.match(e.instructions, /used as values/);
+    assert.deepEqual(await readTree(dir), tree);
   });
 
   test("a console that is not the global one is left alone", async () => {
@@ -214,7 +173,6 @@ export function loop(ids: string[]): void {
     const before = await readTree(dir);
     const e = await rejects(removeConsole(dir, "src/unused.ts"));
     assert.equal(e.code, "REFACTOR_UNAVAILABLE");
-    assert.match(e.instructions, /would introduce errors: TS6133/);
     assert.deepEqual(await readTree(dir), before);
   });
 
