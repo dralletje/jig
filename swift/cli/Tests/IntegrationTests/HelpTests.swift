@@ -83,6 +83,46 @@ struct HelpTests {
     #expect(ran.json["notes"] == nil)
   }
 
+  @Test("<fs> --help lists the flags each action accepts", .timeLimit(.minutes(10)))
+  func fsHelpMatchesActions() throws {
+    // A run of every action that works on the fs fixture: its flags are the ones the help must list.
+    let working: [String: [String]] = [
+      "copy": ["--from", "src/old", "--to", "src/new"],
+      "move": ["--from", "src/old", "--to", "src/new"],
+      "remove": ["--paths", "src/old"],
+      "remove-matching": ["--files", "src/old/*.txt"],
+      "unwrap": ["--folder", "src/old"],
+      "wrap": ["--paths", "src/old", "--into", "src/box"],
+    ]
+    let ran = try jig([FS, "--help"], cwd: try temp.make("jig-hcwd-"))
+    expectHelp(ran, image: FS)
+    guard case .array(let actions)? = ran.json["actions"] else {
+      Issue.record("no actions in \(ran.stdout)")
+      return
+    }
+    #expect(Set(actionNames(ran.json)) == Set(working.keys))
+    for action in actions {
+      guard case .string(let name)? = action["name"], let args = working[name],
+        case .array(let flags)? = action["flags"]
+      else { continue }
+      let listed: [String] = flags.compactMap { flag in
+        if case .string(let flagName)? = flag["name"] { return flagName }
+        return nil
+      }
+      let given = stride(from: 0, to: args.count, by: 2).map { args[$0] }
+      #expect(Set(listed) == Set(given), "\(name)")
+      _ = try runImage(repo: try temp.fixture("fs"), image: FS, args: [name] + args)
+      let dir = try temp.fixture("fs")
+      #expect(try failImage(repo: dir, image: FS, args: [name] + args + ["--not-a-flag", "x"]).code == "INVALID_ARGS", "\(name)")
+      for flag in flags {
+        guard case .string(let flagName)? = flag["name"], let at = args.firstIndex(of: flagName) else { continue }
+        let without = Array(args[..<at]) + Array(args[(at + 2)...])
+        let refused = (try? failImage(repo: dir, image: FS, args: [name] + without))?.code == "INVALID_ARGS"
+        #expect(refused == (flag["required"] == true), "\(name) without \(flagName)")
+      }
+    }
+  }
+
   @Test("<fs> alone is the same as --help", .timeLimit(.minutes(2)))
   func fsAlone() throws {
     let cwd = try temp.make("jig-hcwd-")
