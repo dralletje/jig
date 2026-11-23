@@ -46,10 +46,6 @@ export type Relocated = {
   rewritten: { file: string; imports: number }[];
 };
 
-/** The files whose references are read: TypeScript and JavaScript sources, declaration files included. */
-const SOURCE = /\.(m|c)?[jt]sx?$/;
-const JAVASCRIPT = /\.(m|c)?jsx?$/;
-
 /** `ts.matchFiles`: how TypeScript applies a tsconfig's include and exclude to a listing. Not in the public typings. */
 type MatchFiles = (
   path: string,
@@ -199,9 +195,11 @@ function declarationCompanions(file: string): { path: string; declares: boolean;
   if (m !== null) return [{ path: at(`${m[1]}.cjs`), declares: false, stem: `${m[1]}` }];
   m = /^(.+)\.d\.([^.]+)\.ts$/.exec(name);
   if (m !== null) {
+    const extension = m[2];
+    if (extension === undefined) return [];
     // foo.d.js.ts is not how a JavaScript file is declared: TypeScript looks for foo.d.ts.
-    if (/^(m|c)?[jt]sx?$/.test(m[2] as string)) return [];
-    return [{ path: at(`${m[1]}.${m[2]}`), declares: false, stem: `${m[1]}` }];
+    if (/^(m|c)?[jt]sx?$/.test(extension)) return [];
+    return [{ path: at(`${m[1]}.${extension}`), declares: false, stem: `${m[1]}` }];
   }
   m = /^(.+)\.jsx?$/.exec(name);
   if (m !== null) return [{ path: at(`${m[1]}.d.ts`), declares: true, stem: `${m[1]}` }];
@@ -470,7 +468,8 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
 
   const problems: NotHandled[] = [];
   const planned: { file: string; text: string; imports: number }[] = [];
-  const importers = move ? listing.filter((f) => SOURCE.test(f)) : sources.filter((f) => SOURCE.test(f));
+  // The files whose references are read: TypeScript and JavaScript sources, declaration files included.
+  const importers = move ? listing.filter((f) => /\.(m|c)?[jt]sx?$/.test(f)) : sources.filter((f) => /\.(m|c)?[jt]sx?$/.test(f));
 
   for (const file of importers) {
     const text = engine.read(file);
@@ -489,7 +488,7 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
 
     const format = t.getImpliedNodeFormatForFile(fromAbs, cacheFor(before, tsconfig).getPackageJsonInfoCache(), before.host, options);
     const sf = t.createSourceFile(fromAbs, text, { languageVersion: t.ScriptTarget.Latest, impliedNodeFormat: format }, true);
-    const literals = [...importSpecifiers(t, sf), ...(JAVASCRIPT.test(file) ? jsDocSpecifiers(t, sf) : [])];
+    const literals = [...importSpecifiers(t, sf), ...(/\.(m|c)?jsx?$/.test(file) ? jsDocSpecifiers(t, sf) : [])];
     // The resolution mode after the change: the same file, parsed as the format its new place implies.
     const newFormat = moving
       ? t.getImpliedNodeFormatForFile(newAbs, cacheFor(after, newTsconfig).getPackageJsonInfoCache(), after.host, newOptions)
@@ -497,7 +496,7 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
     const newSf =
       newFormat === format ? sf : t.createSourceFile(newAbs, text, { languageVersion: t.ScriptTarget.Latest, impliedNodeFormat: newFormat }, true);
     const newLiterals =
-      newSf === sf ? literals : [...importSpecifiers(t, newSf), ...(JAVASCRIPT.test(file) ? jsDocSpecifiers(t, newSf) : [])];
+      newSf === sf ? literals : [...importSpecifiers(t, newSf), ...(/\.(m|c)?jsx?$/.test(file) ? jsDocSpecifiers(t, newSf) : [])];
 
     const edits: Edit[] = [];
     literals.forEach((literal, index) => {
@@ -615,7 +614,15 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
           if (specifier.endsWith("/") && !written.endsWith("/")) written = `${written}/`;
           candidate = written;
         } else if (style === "alias") {
-          const key = bestWildcardKey(Object.keys(options.paths ?? {}), specifier) as string;
+          const key = bestWildcardKey(Object.keys(options.paths ?? {}), specifier);
+          if (key === undefined) {
+            problem(
+              start,
+              `cannot tell which paths alias of ${tsconfig ?? "the repo root"} ${quoted} uses`,
+              `Import ${target} in ${file} by a relative path (imports-to-relative), then run again.`,
+            );
+            return;
+          }
           const targets = newOptions.paths?.[key];
           const where = newTsconfig ?? "the repo root (no tsconfig.json above it)";
           if (targets === undefined) {
@@ -649,7 +656,16 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
           }
           candidate = written;
         } else {
-          const key = bestWildcardKey(Object.keys(importsOf(before, nearestPackageJson(before, file) as string) ?? {}), specifier) as string;
+          const oldPackageJson = nearestPackageJson(before, file);
+          const key = oldPackageJson === null ? undefined : bestWildcardKey(Object.keys(importsOf(before, oldPackageJson) ?? {}), specifier);
+          if (key === undefined) {
+            problem(
+              start,
+              `cannot tell which package.json imports key ${quoted} uses`,
+              `Import ${target} in ${file} by a relative path (imports-to-relative), then run again.`,
+            );
+            return;
+          }
           const packageJson = nearestPackageJson(after, newFile);
           const value = packageJson === null ? undefined : importsOf(after, packageJson)?.[key];
           const where = packageJson ?? "no package.json";
@@ -797,7 +813,7 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
 
   // A moved source file must stay in the include/files of a tsconfig, as it was.
   for (const file of sources) {
-    if (!SOURCE.test(file)) continue;
+    if (!/\.(m|c)?[jt]sx?$/.test(file)) continue;
     const tsconfig = tsconfigOf(file);
     if (tsconfig === null || !covered(before, tsconfig).has(engine.absPath(file))) continue;
     const newFile = newOf(file);
