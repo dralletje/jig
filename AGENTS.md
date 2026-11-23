@@ -29,8 +29,9 @@ tags:
 - `latest`, for example `fs-v1:latest`: moved on every publish to the newest build of that image name,
   so nobody has to type `-0.2` to be on the newest version.
 
-A breaking change on our side starts a new image name (`typescript-v2`), so nobody is moved across it
-by a tag. Steps:
+jig is alpha: breaking changes still ship under the same `-v1` name, with a new minor
+(`6.0.3-0.3`). Only once the owner says the images are stable does a breaking change start a new image
+name (`typescript-v2`), so nobody is moved across it by a tag. Steps:
 1. Build from a clean `main` with `sh scripts/build-images.sh`.
 2. Log in with a throwaway Docker config, so the token is not kept:
    `DOCKER_CONFIG=<temp dir>`, then `gh auth token | docker login ghcr.io -u dralletje --password-stdin`.

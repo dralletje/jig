@@ -28,6 +28,59 @@ dist/jig --repo <repo> localhost/jig/fs:local move --from src/old --to src/new
 #   every action, its flags and its limits: see "Actions" below, or ask the image (see "Help")
 ```
 
+## Using jig in your project
+
+jig is alpha: actions, flags and formats can still change between releases.
+
+### Download
+
+A static Linux binary (x86-64) is attached to each [release](https://github.com/dralletje/jig/releases).
+It needs `git`, and `docker` (the default sandbox) or `rootlesskit`:
+
+```sh
+curl -fsSL -o ~/.local/bin/jig https://github.com/dralletje/jig/releases/latest/download/jig
+chmod +x ~/.local/bin/jig
+```
+
+### For your agent
+
+Two snippets to paste into your project's `AGENTS.md` (or `CLAUDE.md`). The first tells an agent how to get
+jig, the second how to use it.
+
+````markdown
+## jig: installing
+
+If `jig` is not on PATH, download it (static Linux x86-64 binary, needs git and docker):
+
+    curl -fsSL -o ~/.local/bin/jig https://github.com/dralletje/jig/releases/latest/download/jig
+    chmod +x ~/.local/bin/jig
+````
+
+````markdown
+## jig: mechanical refactors as reproducible commits
+
+For a refactor one of these images covers, use `jig` instead of editing by hand: it runs the image on a
+clean export of HEAD and commits the result as one commit that `jig verify` can replay.
+
+Images (leave the tag off for the newest build):
+- `ghcr.io/dralletje/jig/typescript-v1`: TypeScript refactors (rename, move-file, extract, organize-imports, …)
+- `ghcr.io/dralletje/jig/prettier-v1`: prettier `format`
+- `ghcr.io/dralletje/jig/codemod-react-v1`: react-codemod, one action per transform
+- `ghcr.io/dralletje/jig/fs-v1`: copy, move, remove, remove-matching, wrap, unwrap
+
+How to use it:
+- `jig <image>` lists the image's actions; `jig <image> <action> --help` gives an action's flags. Both
+  print JSON when piped. Ask before guessing flags.
+- Run: `jig [--repo <path>] [--message <text>] <image> <action> <flags...>`. jig's own options go
+  before the image; everything after it goes to the image.
+- The working tree must be clean: commit or stash first.
+- jig prints one JSON object. Check `ok`. On success it has `commit`, `subject` and `filesChanged`;
+  on failure `code` and `instructions`: follow the instructions. `NO_CHANGES` means nothing matched.
+- jig does not typecheck or test: run the project's checks after each jig commit.
+- `jig verify <commit-or-range>` replays jig commits and checks they still produce the same tree.
+- If it is unclear which action fits, run the candidates: a failed run commits nothing.
+````
+
 ## Building the binary
 
 The host binary is Swift (Foundation), in the Swift packages under
