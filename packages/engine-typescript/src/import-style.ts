@@ -1,9 +1,25 @@
-import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { RefactorError, listLines, matchesAnyGlob, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
 import type { TsEngine } from "./engine.ts";
-import { diagnostics, list as globList, introduced, matchFiles, notHandled, unavailable } from "./shared.ts";
+import {
+  diagnostics,
+  list as globList,
+  importSpecifiers,
+  importsOf,
+  introduced,
+  matchFiles,
+  namedPaths,
+  nearestPackageJson,
+  notHandled,
+  outside,
+  slashed,
+  spelledPath,
+  styleOf,
+  unavailable,
+  usesExactKey,
+} from "./shared.ts";
 import type { NotHandled } from "./shared.ts";
 
 /**
@@ -34,152 +50,8 @@ import type { NotHandled } from "./shared.ts";
 /** One specifier rewrite, replacing the text at `start`…`end` (the quotes included). */
 type Edit = { start: number; end: number; text: string };
 
-/** How a specifier is written. `package` is everything that is not one of the three styles. */
-type Style = "relative" | "alias" | "subpath" | "package";
-
 /** For a path the new specifier should name (a file, a file without extension, or a folder): the specifier, or why it cannot be written. */
 type Spelling = { specifier: string } | { miss: string; instructions: string };
-
-/** The specifier literals of every import form in the file. */
-function importSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteralLike[] {
-  const out: ts.StringLiteralLike[] = [];
-  const visit = (node: ts.Node): void => {
-    if ((t.isImportDeclaration(node) || t.isExportDeclaration(node)) && node.moduleSpecifier) {
-      if (t.isStringLiteral(node.moduleSpecifier)) out.push(node.moduleSpecifier);
-    } else if (t.isImportEqualsDeclaration(node) && t.isExternalModuleReference(node.moduleReference)) {
-      if (t.isStringLiteral(node.moduleReference.expression)) out.push(node.moduleReference.expression);
-    } else if (t.isCallExpression(node) && node.expression.kind === t.SyntaxKind.ImportKeyword) {
-      const [first] = node.arguments;
-      if (first && t.isStringLiteralLike(first)) out.push(first);
-    } else if (
-      t.isCallExpression(node) &&
-      t.isIdentifier(node.expression) &&
-      node.expression.text === "require" &&
-      node.arguments.length === 1
-    ) {
-      const [first] = node.arguments;
-      if (first && t.isStringLiteralLike(first)) out.push(first);
-    } else if (t.isImportTypeNode(node) && t.isLiteralTypeNode(node.argument) && t.isStringLiteral(node.argument.literal)) {
-      out.push(node.argument.literal);
-    }
-    t.forEachChild(node, visit);
-  };
-  visit(sf);
-  return out;
-}
-
-/** Whether a `paths` key (`@/*`, or an exact `@config`) matches the specifier. */
-function matchesPathsKey(key: string, specifier: string): boolean {
-  const star = key.indexOf("*");
-  if (star === -1) return specifier === key;
-  const before = key.slice(0, star);
-  const after = key.slice(star + 1);
-  return specifier.length >= before.length + after.length && specifier.startsWith(before) && specifier.endsWith(after);
-}
-
-/** The wildcard key of `keys` that matches the specifier with the longest part before its `*`, as TypeScript and Node pick it. */
-function bestWildcardKey(keys: string[], specifier: string): string | undefined {
-  let best: string | undefined;
-  for (const key of keys) {
-    if (!key.includes("*") || !matchesPathsKey(key, specifier)) continue;
-    if (best === undefined || key.indexOf("*") > best.indexOf("*")) best = key;
-  }
-  return best;
-}
-
-/**
- * How the specifier is written. A bare specifier that only a catch-all `"*"` paths key matches is a
- * package, not an alias.
- */
-function styleOf(specifier: string, options: ts.CompilerOptions): Style {
-  if (/^\.\.?(\/|$)/.test(specifier)) return "relative";
-  if (specifier.startsWith("#")) return "subpath";
-  if (Object.keys(options.paths ?? {}).some((key) => key !== "*" && matchesPathsKey(key, specifier))) return "alias";
-  return "package";
-}
-
-/** The nearest package.json at or above the file, root-relative: the one Node and TypeScript read "imports" from. */
-function nearestPackageJson(engine: TsEngine, file: string): string | null {
-  let folder = dirname(engine.relPath(file));
-  while (true) {
-    const candidate = folder === "." ? "package.json" : `${folder}/package.json`;
-    if (engine.read(candidate) !== null) return candidate;
-    if (folder === ".") return null;
-    folder = dirname(folder);
-  }
-}
-
-/** The `imports` object of a package.json, or null when it has none or is not valid JSON. */
-function importsOf(engine: TsEngine, packageJson: string): Record<string, unknown> | null {
-  let json: unknown;
-  try {
-    json = JSON.parse(engine.read(packageJson) ?? "");
-  } catch {
-    return null;
-  }
-  const imports = json !== null && typeof json === "object" ? (json as Record<string, unknown>).imports : undefined;
-  return imports !== null && typeof imports === "object" ? (imports as Record<string, unknown>) : null;
-}
-
-/** Whether an alias or subpath specifier uses an exact (non-wildcard) key of the tsconfig paths or the package.json imports. */
-function usesExactKey(engine: TsEngine, file: string, specifier: string, style: Style, options: ts.CompilerOptions): boolean {
-  if (style === "alias") return Object.keys(options.paths ?? {}).some((key) => !key.includes("*") && key === specifier);
-  if (style !== "subpath") return false;
-  const packageJson = nearestPackageJson(engine, file);
-  const imports = packageJson === null ? null : importsOf(engine, packageJson);
-  return imports !== null && !specifier.includes("*") && Object.hasOwn(imports, specifier);
-}
-
-/**
- * The absolute paths the old specifier names, before any file lookup: the relative path from the importer,
- * or the alias's / subpath's wildcard key with its `*` filled in. Null when that cannot be told.
- */
-function namedPaths(engine: TsEngine, file: string, specifier: string, style: Style, options: ts.CompilerOptions): string[] | null {
-  if (style === "relative") return [resolve(dirname(engine.absPath(file)), specifier)];
-  if (style === "alias") {
-    const key = bestWildcardKey(Object.keys(options.paths ?? {}), specifier);
-    const base = options.baseUrl ?? options.pathsBasePath;
-    if (key === undefined || typeof base !== "string") return null;
-    const star = specifier.slice(key.indexOf("*"), specifier.length - (key.length - key.indexOf("*") - 1));
-    return (options.paths?.[key] ?? []).map((target) => resolve(base, target.replace("*", star)));
-  }
-  if (style === "subpath") {
-    const packageJson = nearestPackageJson(engine, file);
-    const imports = packageJson === null ? null : importsOf(engine, packageJson);
-    if (packageJson === null || imports === null) return null;
-    const key = bestWildcardKey(Object.keys(imports), specifier);
-    const value = key === undefined ? undefined : imports[key];
-    if (key === undefined || typeof value !== "string" || !value.startsWith("./")) return null;
-    const star = specifier.slice(key.indexOf("*"), specifier.length - (key.length - key.indexOf("*") - 1));
-    return [resolve(engine.absPath(dirname(packageJson)), value.replace("*", star))];
-  }
-  return null;
-}
-
-/** A file name without its extension; `.d.ts`, `.d.mts` and `.d.cts` count as one extension. */
-function stem(name: string): string {
-  const declaration = /\.d\.[mc]?ts$/.exec(name);
-  if (declaration) return name.slice(0, declaration.index);
-  const ext = extname(name);
-  return ext === "" ? name : name.slice(0, -ext.length);
-}
-
-/**
- * The absolute path the new specifier names, in the form the old `specifier` names its resolved `target`:
- * the file itself, the file without its extension, the file with the specifier's extension (`./a.js` for
- * `a.ts`), or the folder of an index file. Null when the form cannot be told (an exact `paths` key).
- */
-function spelledPath(specifier: string, target: string): string | null {
-  const last = specifier.replace(/\/+$/, "").split("/").at(-1) ?? "";
-  const file = basename(target);
-  const folder = dirname(target);
-  if (last === file) return target;
-  if (last === stem(file)) return join(folder, stem(file));
-  const ext = extname(last);
-  if (ext !== "" && last.slice(0, -ext.length) === stem(file)) return join(folder, `${stem(file)}${ext}`);
-  if (stem(file) === "index") return folder;
-  return null;
-}
 
 /** Module resolution that reads files the way the engine does (its overlay, and exact-case names on disk). */
 function resolutionHost(engine: TsEngine): ts.ModuleResolutionHost {
@@ -192,15 +64,6 @@ function resolutionHost(engine: TsEngine): ts.ModuleResolutionHost {
     realpath: (p) => t.sys.realpath?.(p) ?? p,
     getCurrentDirectory: () => engine.repoRoot,
   };
-}
-
-/** `/`-separated relative path. */
-function slashed(path: string): string {
-  return path.split(sep).join("/");
-}
-
-function outside(path: string): boolean {
-  return path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path);
 }
 
 /** What `sweepImports` needs to know about the target style. */
