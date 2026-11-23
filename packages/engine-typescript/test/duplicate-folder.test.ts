@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
@@ -213,6 +213,48 @@ describe("duplicate-folder", () => {
       const err = await rejects(main(["duplicate-folder", "--from", "src/empty", "--to", "src/else"], dir));
       assert.equal(err.code, "INVALID_ARGS");
       assert.match(err.message, /No file is under --from src\/empty/);
+    });
+
+    test("symlinks and node_modules folders under --from are INVALID_ARGS, listed", async () => {
+      const dir = await workspace("examples/duplicate-folder", {
+        "src/feature/node_modules/dep/index.js": "module.exports = 1;\n",
+        "src/feature/sub/deeper/node_modules/x.js": "",
+      });
+      await symlink("../shared.ts", join(dir, "src/feature/linked.ts"));
+      await symlink("../../user.ts", join(dir, "src/feature/sub/user-link.ts"));
+      await symlink("..", join(dir, "src/feature/sub/up"));
+      const before = await readTree(dir);
+      const err = await rejects(main(["duplicate-folder", ...FEATURE], dir));
+      assert.equal(err.code, "INVALID_ARGS");
+      assert.equal(
+        err.message,
+        "--from src/feature holds symlinks or node_modules folders, which duplicate-folder does not copy:\n" +
+          "  src/feature/linked.ts (symlink)\n" +
+          "  src/feature/node_modules (node_modules folder)\n" +
+          "  src/feature/sub/deeper/node_modules (node_modules folder)\n" +
+          "  src/feature/sub/up (symlink)\n" +
+          "  src/feature/sub/user-link.ts (symlink)\n" +
+          "Remove them from src/feature, or copy the folder by hand, then run again.",
+      );
+      assert.deepEqual(await readTree(dir), before);
+      assert.equal((await readdir(join(dir, "src"))).includes("deep"), false);
+    });
+
+    test("a long list of symlinks is cut after ten", async () => {
+      const dir = await workspace("examples/duplicate-folder");
+      for (let i = 0; i < 13; i++) await symlink("../shared.ts", join(dir, `src/feature/link${String(i).padStart(2, "0")}.ts`));
+      const err = await rejects(main(["duplicate-folder", ...FEATURE], dir));
+      assert.equal(err.code, "INVALID_ARGS");
+      contains(err.message, "  src/feature/link09.ts (symlink)\n  … and 3 more\n");
+      lacks(err.message, "link10");
+    });
+
+    test("a --from that is itself a symlink is INVALID_ARGS", async () => {
+      const dir = await workspace("examples/duplicate-folder");
+      await symlink("feature", join(dir, "src/feature-link"));
+      const err = await rejects(main(["duplicate-folder", "--from", "src/feature-link", "--to", "src/else"], dir));
+      assert.equal(err.code, "INVALID_ARGS");
+      contains(err.message, "src/feature-link (symlink)");
     });
 
     test("a --from that is a file is INVALID_ARGS", async () => {

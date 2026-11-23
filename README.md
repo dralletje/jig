@@ -645,7 +645,8 @@ extension form stays (`./a`, `./a.ts`, `./a.js`, `./dir`, and `./theme.css` for 
 A `new URL` path is relative to its file (`./x`, `../x`, or a bare `x`, which stays without `./`) and names
 the file exactly; other schemes (`https:`, `data:`) and absolute paths are left alone. Packages never change
 (one that does not resolve is skipped). For `duplicate-folder`, `INVALID_ARGS` refuses a `--from` with no
-file under it (missing or empty; symlinks and `node_modules` are not counted) or that is a file, a `--to`
+file under it (missing or empty), that is a file, or that is or holds a symlink (file or folder) or a
+`node_modules` folder (all listed: remove them, or copy by hand), a `--to`
 that already exists (file or folder) or lies under a file, a `--to` inside `--from` or equal to it, a path
 outside the repo, a folder holding a `tsconfig*.json`, `jsconfig.json` or `package.json`, and a `--to` in
 another package than `--from` (another nearest package.json, or none where `--from` has one). For

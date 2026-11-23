@@ -1,4 +1,5 @@
-import { lstatSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, statSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
@@ -903,12 +904,42 @@ export const duplicateFolderAction: Action<FolderParams, TsEngine> = {
         `--from ${from} is a file, not a folder. Pass the folder to copy as --from (move-file moves a single file).`,
       );
     }
+    // Symlinks and node_modules folders are not copied, and leaving them out silently would make a copy that differs.
+    const uncopied: string[] = [];
+    if (lstatSync(engine.absPath(from), { throwIfNoEntry: false })?.isSymbolicLink() === true) {
+      uncopied.push(`${from} (symlink)`);
+    }
+    const walk = (folder: string): void => {
+      let entries: Dirent[];
+      try {
+        entries = readdirSync(engine.absPath(folder), { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of [...entries].sort((a, b) => byString(a.name, b.name))) {
+        const path = `${folder}/${entry.name}`;
+        if (entry.isSymbolicLink()) {
+          uncopied.push(`${path} (symlink)`);
+        } else if (entry.isDirectory() && entry.name === "node_modules") {
+          uncopied.push(`${path} (node_modules folder)`);
+        } else if (entry.isDirectory()) {
+          walk(path);
+        }
+      }
+    };
+    if (uncopied.length === 0) walk(from);
+    if (uncopied.length > 0) {
+      throw new RefactorError(
+        "INVALID_ARGS",
+        `--from ${from} holds symlinks or node_modules folders, which duplicate-folder does not copy:\n` +
+          `${listLines(uncopied, 10)}\nRemove them from ${from}, or copy the folder by hand, then run again.`,
+      );
+    }
     const files = engine.listFiles().filter((f) => f.startsWith(`${from}/`));
     if (files.length === 0) {
       throw new RefactorError(
         "INVALID_ARGS",
-        `No file is under --from ${from}: it does not exist or is empty (symlinks and node_modules are not counted). ` +
-          `Pass a folder with files in it, relative to the repo root.`,
+        `No file is under --from ${from}: it does not exist or is empty. Pass a folder with files in it, relative to the repo root.`,
       );
     }
     // Parents first, nearest last: a path under a file cannot be looked at (ENOTDIR).
