@@ -1,5 +1,11 @@
 # move-files and duplicate-files
 
+> **Replaced (2026-11-23, at the owner's request):** `move-files` and `duplicate-files` were dropped in
+> favour of one action, `duplicate-folder --from <folder> --to <folder>`, which copies every file under
+> `--from` to a new folder `--to` (it must not exist, and must not be inside `--from`). There are no
+> pattern-based actions any more. The relocate core below is unchanged and still backs `duplicate-folder`,
+> `move-file` and `rename-files`; the `--files` parts of this document describe the removed actions.
+
 ## Why
 
 The owner wants to copy or move a folder (more generally, a set of files picked by a pattern) and have

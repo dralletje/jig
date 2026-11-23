@@ -14,7 +14,7 @@ import { importTypeAction, namespaceToNamedAction } from "./imports.ts";
 import { inlineFunctionAction } from "./inline.ts";
 import { liftOutAction } from "./lift.ts";
 import { paramsToObjectAction } from "./params.ts";
-import { duplicateFilesAction, moveFilesAction } from "./relocate.ts";
+import { duplicateFolderAction } from "./relocate.ts";
 import { inferReturnTypesAction } from "./return-types.ts";
 import { renameFilesAction } from "./rename-files.ts";
 import { subpathImportsAction } from "./subpath-imports.ts";
@@ -26,8 +26,7 @@ export const ACTIONS: Action[] = [
   extractAction,
   liftOutAction,
   moveFileAction,
-  moveFilesAction,
-  duplicateFilesAction,
+  duplicateFolderAction,
   organizeImportsAction,
   removeBarrelsAction,
   addImportExtensionsAction,

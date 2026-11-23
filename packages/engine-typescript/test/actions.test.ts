@@ -306,7 +306,7 @@ describe("move-file", () => {
   });
 
   test("move-file keeps each import's extension form in a file that mixes them", async () => {
-    const dir = await workspace("examples/move-files", {
+    const dir = await workspace("examples/duplicate-folder", {
       "src/other.ts": "export const other = 2;\n",
       "src/lib/sub/b.ts": "export const b = 3;\n",
       "src/lib/a.ts": 'import { shared } from "../shared";\nimport { other } from "../other.ts";\nimport { b } from "./sub/b";\n\nexport const a = shared + other + b;\n',
@@ -321,7 +321,7 @@ describe("move-file", () => {
   });
 
   test("refuses to move a file without its declaration file", async () => {
-    const dir = await workspace("examples/move-files", {
+    const dir = await workspace("examples/duplicate-folder", {
       "src/lib/plain.js": "export const p = 1;\n",
       "src/lib/plain.d.ts": "export declare const p: number;\n",
     });

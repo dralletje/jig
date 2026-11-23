@@ -55,7 +55,7 @@ describe("typescript help", () => {
       help().actions.map((a) => a.name),
       ACTIONS.map((a) => a.id),
     );
-    assert.equal(help().actions.length, 24);
+    assert.equal(help().actions.length, 23);
   });
 
   test("the actions are named without a typescript- prefix", () => {
@@ -66,8 +66,7 @@ describe("typescript help", () => {
         "extract",
         "lift-out",
         "move-file",
-        "move-files",
-        "duplicate-files",
+        "duplicate-folder",
         "organize-imports",
         "remove-barrels",
         "add-import-extensions",

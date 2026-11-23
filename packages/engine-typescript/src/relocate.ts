@@ -1,12 +1,12 @@
+import { lstatSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { RefactorError, listLines, matchesAnyGlob, plural } from "@jig/core";
+import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
 import type { TsEngine } from "./engine.ts";
 import {
   bestWildcardKey,
   byString,
-  list as globList,
   importSpecifiers,
   importsOf,
   matchesPathsKey,
@@ -22,7 +22,7 @@ import {
 import type { NotHandled, Reader, Style } from "./shared.ts";
 
 /**
- * The relocate core, shared by move-files, duplicate-files, move-file and rename-files: a group of files
+ * The relocate core, shared by duplicate-folder, move-file and rename-files: a group of files
  * goes to new paths (moved, or copied), and every import that has to follow is rewritten.
  *
  * Without a program or a language service: each importer is parsed on its own (`ts.createSourceFile`), and
@@ -757,48 +757,9 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
   };
 }
 
-// ---- move-files and duplicate-files ----
+// ---- duplicate-folder ----
 
-export type GroupParams = { files: string[]; from: string; to: string };
-
-/** The old → new paths `--files`, `--from` and `--to` pick, or INVALID_ARGS. */
-function group(engine: TsEngine, p: GroupParams): { from: string; to: string; moves: Map<string, string> } {
-  const from = engine.relPath(p.from);
-  const to = engine.relPath(p.to);
-  for (const [flag, path] of [
-    ["--from", from],
-    ["--to", to],
-  ] as const) {
-    if (path === ".." || path.startsWith("../") || isAbsolute(path)) {
-      throw new RefactorError("INVALID_ARGS", `${flag} ${path} is outside the repo. Pass a folder relative to the repo root.`);
-    }
-  }
-  if (from === to) {
-    throw new RefactorError("INVALID_ARGS", `--from and --to are both ${from}. Pass the folder the files go to as --to.`);
-  }
-  const matches = engine.listFiles().filter((f) => matchesAnyGlob(f, p.files));
-  if (matches.length === 0) {
-    throw new RefactorError(
-      "INVALID_ARGS",
-      `No file matches ${p.files.join(", ")}. Globs are matched against the repo's files from the root (for example "src/old/**").`,
-    );
-  }
-  const under = (f: string): boolean => from === "." || f.startsWith(`${from}/`);
-  const strays = matches.filter((f) => !under(f));
-  if (strays.length > 0) {
-    throw new RefactorError(
-      "INVALID_ARGS",
-      `${strays.slice(0, 5).join(", ")}${strays.length > 5 ? ` and ${strays.length - 5} more` : ""} ${strays.length === 1 ? "matches" : "match"} --files but ${strays.length === 1 ? "is" : "are"} not under --from ${from}. ` +
-        `Every file --files matches must be under --from: narrow --files or pass a wider --from, then run again.`,
-    );
-  }
-  const moves = new Map<string, string>();
-  for (const f of matches) {
-    const rest = from === "." ? f : f.slice(from.length + 1);
-    moves.set(f, to === "." ? rest : `${to}/${rest}`);
-  }
-  return { from, to, moves };
-}
+export type FolderParams = { from: string; to: string };
 
 /** `Rewrote 3 imports in 2 files:` and the files, or a line saying none was. */
 function rewrittenLines(done: Relocated): string {
@@ -810,49 +771,75 @@ function rewrittenLines(done: Relocated): string {
   );
 }
 
-export const moveFilesAction: Action<GroupParams, TsEngine> = {
-  id: "move-files",
+export const duplicateFolderAction: Action<FolderParams, TsEngine> = {
+  id: "duplicate-folder",
   kind: "refactor",
-  summary: "Moves the files matching a pattern from one folder to another; every import of and in them follows.",
+  summary: "Copies a folder to a new folder; the copies' imports are adjusted to their new place.",
   flags: [
     {
-      name: "--files",
-      type: "globs",
+      name: "--from",
+      type: "path",
       required: true,
-      description: "The files to move, as comma-separated globs from the repo root (any type: .ts, .css, images). Every match must be under --from.",
+      description: "The folder to copy. Every file under it is copied byte for byte (any type: .ts, .css, images): src/old/x/y.ts is copied to <to>/x/y.ts.",
     },
-    { name: "--from", type: "path", required: true, description: "The folder the files are in: src/old/x.ts goes to <to>/x.ts." },
-    { name: "--to", type: "path", required: true, description: "The folder they go to. No file may exist at a new path." },
+    { name: "--to", type: "path", required: true, description: "The new folder the copies go to. It must not exist yet, and must not be inside --from." },
   ],
-  parseParams: (raw) => ({ files: globList(raw, "files"), from: required(raw, "from"), to: required(raw, "to") }),
-  describe: (p) => `${p.files.join(", ")} from ${p.from} to ${p.to}`,
+  parseParams: (raw) => ({ from: required(raw, "from"), to: required(raw, "to") }),
+  describe: (p) => `${p.from} to ${p.to}`,
 
   async run(engine, p) {
-    const { from, to, moves } = group(engine, p);
-    const done = relocate(engine, { mode: "move", moves });
-    return { summary: `Moved ${plural(done.files.length, "file")} from ${from} to ${to}.\n${rewrittenLines(done)}` };
-  },
-};
-
-export const duplicateFilesAction: Action<GroupParams, TsEngine> = {
-  id: "duplicate-files",
-  kind: "refactor",
-  summary: "Copies the files matching a pattern from one folder to another; the copies' imports are adjusted to their new place.",
-  flags: [
-    {
-      name: "--files",
-      type: "globs",
-      required: true,
-      description: "The files to copy, as comma-separated globs from the repo root (any type: .ts, .css, images). Every match must be under --from.",
-    },
-    { name: "--from", type: "path", required: true, description: "The folder the files are in: src/old/x.ts is copied to <to>/x.ts." },
-    { name: "--to", type: "path", required: true, description: "The folder the copies go to. No file may exist at a new path." },
-  ],
-  parseParams: (raw) => ({ files: globList(raw, "files"), from: required(raw, "from"), to: required(raw, "to") }),
-  describe: (p) => `${p.files.join(", ")} from ${p.from} to ${p.to}`,
-
-  async run(engine, p) {
-    const { from, to, moves } = group(engine, p);
+    const from = slashed(relative(engine.repoRoot, resolve(engine.repoRoot, p.from))) || ".";
+    const to = slashed(relative(engine.repoRoot, resolve(engine.repoRoot, p.to))) || ".";
+    if (from === ".." || from.startsWith("../") || isAbsolute(from)) {
+      throw new RefactorError("INVALID_ARGS", `--from ${p.from} is outside the repo. Pass a folder relative to the repo root.`);
+    }
+    if (to === ".." || to.startsWith("../") || isAbsolute(to)) {
+      throw new RefactorError("INVALID_ARGS", `--to ${p.to} is outside the repo. Pass a folder relative to the repo root.`);
+    }
+    if (from === to) {
+      throw new RefactorError("INVALID_ARGS", `--from and --to are both ${from}. Pass the new folder the copy goes to as --to.`);
+    }
+    if (from === "." || to.startsWith(`${from}/`)) {
+      throw new RefactorError(
+        "INVALID_ARGS",
+        `--to ${to} is inside --from ${from}, so the copy would be copied into itself. Pass a --to outside ${from}, then run again.`,
+      );
+    }
+    if (lstatSync(engine.absPath(from), { throwIfNoEntry: false })?.isFile() === true) {
+      throw new RefactorError(
+        "INVALID_ARGS",
+        `--from ${from} is a file, not a folder. Pass the folder to copy as --from (move-file moves a single file).`,
+      );
+    }
+    const files = engine.listFiles().filter((f) => f.startsWith(`${from}/`));
+    if (files.length === 0) {
+      throw new RefactorError(
+        "INVALID_ARGS",
+        `No file is under --from ${from}: it does not exist or is empty (symlinks and node_modules are not counted). ` +
+          `Pass a folder with files in it, relative to the repo root.`,
+      );
+    }
+    // Parents first, nearest last: a path under a file cannot be looked at (ENOTDIR).
+    const parents: string[] = [];
+    for (let folder = dirname(to); folder !== "."; folder = dirname(folder)) parents.unshift(folder);
+    for (const folder of parents) {
+      if (statSync(engine.absPath(folder), { throwIfNoEntry: false })?.isDirectory() === false) {
+        throw new RefactorError("INVALID_ARGS", `--to ${to} is under ${folder}, which is a file. Pass a --to whose parent folders are folders.`);
+      }
+    }
+    if (lstatSync(engine.absPath(to), { throwIfNoEntry: false }) !== undefined) {
+      throw new RefactorError("INVALID_ARGS", `--to ${to} already exists. The copy goes to a new folder: pass a --to that does not exist yet.`);
+    }
+    const configs = files.filter((f) => /^tsconfig.*\.json$/.test(basename(f)) || basename(f) === "jsconfig.json" || basename(f) === "package.json");
+    if (configs.length > 0) {
+      throw new RefactorError(
+        "INVALID_ARGS",
+        `${configs.join(", ")} ${configs.length === 1 ? "is" : "are"} under --from ${from}. Copying a tsconfig, jsconfig or package.json changes how ` +
+          `everything under it resolves, so it is not done. Copy the folder by hand, or move ${configs.length === 1 ? "it" : "them"} out of ${from} first, then run again.`,
+      );
+    }
+    const moves = new Map<string, string>();
+    for (const f of files) moves.set(f, `${to}/${f.slice(from.length + 1)}`);
     const done = relocate(engine, { mode: "duplicate", moves });
     return {
       summary:
@@ -861,3 +848,4 @@ export const duplicateFilesAction: Action<GroupParams, TsEngine> = {
     };
   },
 };
+

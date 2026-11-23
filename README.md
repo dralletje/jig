@@ -502,7 +502,7 @@ commits:
 
 | Kind | Meaning | Actions |
 |---|---|---|
-| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `move-files`, `duplicate-files`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
+| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
 | `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
@@ -625,9 +625,8 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 | `rename` | `--file --symbol --to [--kind]` | renames a top-level declaration and all its references in the project; top-level only, no references across packages |
 | `extract` | `--file --symbols a,b --to [--kind]` | moves top-level declarations to another file (TS "Move to file"), imports follow; refuses `import.meta`, re-exports not rewritten |
 | `lift-out` | `--file --in --symbol [--to]` | lifts a nested function or `const` to module level, with the locals it uses ([details](#lift-out)); refuses parameters, `let`/`var`, side effects, name clashes |
-| `move-file` | `--file --to` | moves or renames a file, rewriting the imports of and in it as `move-files` does (a group of one file); `--to` must be free |
-| `move-files` | `--files --from --to` | moves the files `--files` matches (any type: `.ts`, `.css`, images) from the folder `--from` to the same place under `--to` (`src/old/x/y.ts` to `<to>/x/y.ts`); imports between them, from them and to them follow, each in its own style and extension form; files are moved byte for byte |
-| `duplicate-files` | `--files --from --to` | copies them the same way; the copies' imports of each other point at the copies, their other imports are adjusted to the new place, and files outside the copies still import the originals |
+| `move-file` | `--file --to` | moves or renames a file, rewriting the imports of and in it (the core described below, with a group of one file); `--to` must be free |
+| `duplicate-folder` | `--from --to` | copies every file under the folder `--from` (any type: `.ts`, `.css`, images, declaration files) byte for byte to the same place under the new folder `--to` (`src/old/x/y.ts` to `<to>/x/y.ts`); the copies' imports of each other point at the copies, their other imports are adjusted to the new place, each in its own style and extension form, and files outside the copies still import the originals |
 | `remove-barrels` | `--files` | imports through a barrel (an `index.ts` that only re-exports) come from the defining module, barrels nothing imports any more are deleted; a barrel imported by non-TypeScript files stays, other packages' barrels are left, re-export cycles are refused |
 | `params-to-object` | `--file --symbol` | a top-level function's positional parameters become one destructured object, every call passes an object (TS "Convert parameters to destructured object"); refuses overloads, no/rest/destructured parameters and uses that are not calls |
 | `inline-function` | `--file --symbol [--at]` | unpacks calls of a top-level function or arrow `const`. With `--at`, only that call (the declaration stays); without, every call, and the declaration goes. All or nothing; same module only, no generics, async, generators, recursion, `this`, early returns, optional/rest/default parameters; comments inside the body are not carried over |
@@ -635,7 +634,7 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 | `remove-unused-variable` | `--at` | removes the unused `const`/`let`/`var` or destructured element at the name; refuses parameters, catch/loop variables, exports, side-effecting initializers, and destructuring that could run code |
 | `convert-function` | `--at --to arrow\|function` | converts a function declaration or expression to a `const` arrow function, or the reverse; refuses `this`/`arguments`/generators/`new`/default exports, and uses before the `const` (only the same file is checked for hoisting) |
 
-`move-files`, `duplicate-files`, `move-file` and `rename-files` share one core. It reads every reference
+`duplicate-folder`, `move-file` and `rename-files` share one core. It reads every reference
 without building a program (`import`/`export … from`, `import()`, `require()`, `import x = require()`,
 `import("…")` types, `/// <reference path>`, JSDoc `@import` and `import("…")` types in JavaScript, and
 `new URL("…", import.meta.url)` with a plain string), resolves it with TypeScript under the importer's
@@ -644,10 +643,12 @@ relative, an alias keeps its `paths` key, a subpath import keeps its package.jso
 extension form stays (`./a`, `./a.ts`, `./a.js`, `./dir`); the new specifier must resolve to the new place.
 A `new URL` path is relative to its file (`./x`, `../x`, or a bare `x`, which stays without `./`) and names
 the file exactly; other schemes (`https:`, `data:`) and absolute paths are left alone. Packages never change
-(one that does not resolve is skipped). Every match of `--files` must be under `--from`, and `INVALID_ARGS`
-refuses no match, a match outside `--from`, `--from` equal to `--to`, a new path that already exists, a
-group holding a `tsconfig*.json`, `jsconfig.json` or `package.json`, and a group holding a file but not its
-declaration file, or the reverse (`foo.js`/`foo.jsx` and `foo.d.ts`, `foo.mjs` and `foo.d.mts`, `foo.cjs`
+(one that does not resolve is skipped). For `duplicate-folder`, `INVALID_ARGS` refuses a `--from` with no
+file under it (missing or empty; symlinks and `node_modules` are not counted) or that is a file, a `--to`
+that already exists (file or folder) or lies under a file, a `--to` inside `--from` or equal to it, a path
+outside the repo, and a folder holding a `tsconfig*.json`, `jsconfig.json` or `package.json`. For
+`move-file` and `rename-files` it refuses a new path that already exists, those config files, and a file
+moved without its declaration file, or the reverse (`foo.js`/`foo.jsx` and `foo.d.ts`, `foo.mjs` and `foo.d.mts`, `foo.cjs`
 and `foo.d.cts`, `foo.css` and `foo.d.css.ts`; a `.ts` file has none). Any reference that cannot follow
 refuses the whole action (`REFACTOR_UNAVAILABLE`, nothing written, every problem listed with its file and
 line): one that does not resolve, a package-style specifier (bare name, `baseUrl`, workspace package) or an
@@ -700,7 +701,7 @@ package.json are never changed; only TypeScript importers are looked at.
 
 The fs image (`localhost/jig/fs:local`) changes the shape of the folder tree. Every command is a
 `rewrite`: jig cannot promise that moving or removing files keeps a project working. It moves bytes
-only; imports are not updated (that is `move-file`, `move-files` and `duplicate-files`).
+only; imports are not updated (that is `move-file` and `duplicate-folder`).
 
 | Command | Flags | What it does; limits |
 |---|---|---|
