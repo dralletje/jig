@@ -149,7 +149,80 @@ describe("move-files", () => {
     contains(files["src/other.ts"], 'from "#app/deep/feature2/c"');
   });
 
+  test("new URL(path, import.meta.url) follows the move, keeping its spelling", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/feature/worker.ts":
+        'export const logo = new URL("./logo.png", import.meta.url);\n' +
+        "export const shared = new URL(`../shared.ts`, import.meta.url);\n" +
+        'export const bare = new URL("sub/b.ts", import.meta.url);\n',
+      "src/assets.ts":
+        'export const logo = new URL("./feature/logo.png", import.meta.url);\n' +
+        'export const styles = new URL("feature/styles.css", import.meta.url);\n' +
+        'export const here = new URL(".", import.meta.url);\n' +
+        'export const missing = new URL("./missing.png", import.meta.url);\n' +
+        'export const web = new URL("https://example.com/feature/logo.png", import.meta.url);\n' +
+        'export const data = new URL("data:text/plain,feature/logo.png", import.meta.url);\n' +
+        'export const absolute = new URL("/feature/logo.png", import.meta.url);\n' +
+        'export const otherBase = new URL("./feature/logo.png", "file:///x/");\n',
+    });
+    await main(["move-files", ...FEATURE], dir);
+    const files = await readTree(dir);
+    assert.equal(
+      files["src/deep/feature2/worker.ts"],
+      'export const logo = new URL("./logo.png", import.meta.url);\n' +
+        "export const shared = new URL(`../../shared.ts`, import.meta.url);\n" +
+        'export const bare = new URL("sub/b.ts", import.meta.url);\n',
+    );
+    assert.equal(
+      files["src/assets.ts"],
+      'export const logo = new URL("./deep/feature2/logo.png", import.meta.url);\n' +
+        'export const styles = new URL("deep/feature2/styles.css", import.meta.url);\n' +
+        'export const here = new URL(".", import.meta.url);\n' +
+        'export const missing = new URL("./missing.png", import.meta.url);\n' +
+        'export const web = new URL("https://example.com/feature/logo.png", import.meta.url);\n' +
+        'export const data = new URL("data:text/plain,feature/logo.png", import.meta.url);\n' +
+        'export const absolute = new URL("/feature/logo.png", import.meta.url);\n' +
+        'export const otherBase = new URL("./feature/logo.png", "file:///x/");\n',
+    );
+  });
+
+  test("a file moving away from what its URL names gets a path that climbs out", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/feature/worker.ts": 'export const shared = new URL("shared.ts", import.meta.url);\n',
+      "src/feature/shared.ts": "export {};\n",
+    });
+    await main(["move-files", "--files", "src/feature/worker.ts", "--from", "src/feature", "--to", "src/deep"], dir);
+    const files = await readTree(dir);
+    assert.equal(files["src/deep/worker.ts"], 'export const shared = new URL("../feature/shared.ts", import.meta.url);\n');
+  });
+
   describe("refusals", () => {
+    test("a URL that would need to change but names no file refuses, naming it", async () => {
+      const dir = await workspace("examples/move-files", {
+        "src/feature/worker.ts": 'export const missing = new URL("./missing.wasm", import.meta.url);\n',
+        "src/assets.ts": 'export const folder = new URL("./feature/", import.meta.url);\n',
+      });
+      const before = await readTree(dir);
+      const err = await rejects(main(["move-files", ...FEATURE], dir));
+      assert.equal(err.code, "REFACTOR_UNAVAILABLE");
+      assert.match(err.message, /src\/feature\/worker\.ts:1: new URL\("\.\/missing\.wasm", import\.meta\.url\) does not name a file/);
+      assert.match(err.message, /src\/assets\.ts:1: new URL\("\.\/feature\/", import\.meta\.url\) names a folder whose files all move/);
+      assert.deepEqual(await readTree(dir), before);
+    });
+
+    test("a URL with a query or hash that would need to change refuses", async () => {
+      const dir = await workspace("examples/move-files", {
+        "src/feature/worker.ts": 'export const shared = new URL("../shared.ts#x", import.meta.url);\n',
+        "src/assets.ts": 'export const logo = new URL("./feature/logo.png?url", import.meta.url);\n',
+      });
+      const before = await readTree(dir);
+      const err = await rejects(main(["move-files", ...FEATURE], dir));
+      assert.equal(err.code, "REFACTOR_UNAVAILABLE");
+      assert.match(err.message, /src\/feature\/worker\.ts:1: new URL\("\.\.\/shared\.ts#x", import\.meta\.url\) has a query or hash/);
+      assert.match(err.message, /src\/assets\.ts:1: new URL\("\.\/feature\/logo\.png\?url", import\.meta\.url\) has a query or hash/);
+      assert.deepEqual(await readTree(dir), before);
+    });
+
     test("no match is INVALID_ARGS", async () => {
       const dir = await workspace("examples/move-files");
       const err = await rejects(main(["move-files", "--files", "src/nothing/**", "--from", "src/nothing", "--to", "src/else"], dir));
@@ -290,5 +363,20 @@ describe("duplicate-files", () => {
     assert.match(report.summary, /^Copied 5 files from src\/feature to src\/deep\/feature2\./);
     contains(report.summary, "Files outside the copies still import the originals.");
     assert.deepEqual(await errors(dir, "src/user.ts"), []);
+  });
+
+  test("a copy's URLs point at the copies in the group and at the originals outside it", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/feature/worker.ts":
+        'export const logo = new URL("./logo.png", import.meta.url);\nexport const shared = new URL("../shared.ts", import.meta.url);\n',
+      "src/assets.ts": 'export const logo = new URL("./feature/logo.png", import.meta.url);\n',
+    });
+    await main(["duplicate-files", ...FEATURE], dir);
+    const files = await readTree(dir);
+    assert.equal(
+      files["src/deep/feature2/worker.ts"],
+      'export const logo = new URL("./logo.png", import.meta.url);\nexport const shared = new URL("../../shared.ts", import.meta.url);\n',
+    );
+    assert.equal(files["src/assets.ts"], 'export const logo = new URL("./feature/logo.png", import.meta.url);\n');
   });
 });

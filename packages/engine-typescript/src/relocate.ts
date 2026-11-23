@@ -151,6 +151,31 @@ function jsDocSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteral
   return out;
 }
 
+/** The first argument of each `new URL("…", import.meta.url)`: a plain string (no substitutions), with exactly `import.meta.url` as the base. */
+function urlSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteralLike[] {
+  const out: ts.StringLiteralLike[] = [];
+  const visit = (node: ts.Node): void => {
+    if (t.isNewExpression(node) && t.isIdentifier(node.expression) && node.expression.text === "URL" && node.arguments?.length === 2) {
+      const [first, second] = node.arguments;
+      if (
+        first !== undefined &&
+        second !== undefined &&
+        t.isStringLiteralLike(first) &&
+        t.isPropertyAccessExpression(second) &&
+        t.isMetaProperty(second.expression) &&
+        second.expression.keywordToken === t.SyntaxKind.ImportKeyword &&
+        second.expression.name.text === "meta" &&
+        second.name.text === "url"
+      ) {
+        out.push(first);
+      }
+    }
+    t.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
 /** Plans everything, refuses (REFACTOR_UNAVAILABLE) on any doubtful reference, then applies to the engine. */
 export function relocate(engine: TsEngine, r: Relocation): Relocated {
   const t = engine.ts;
@@ -542,6 +567,68 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
         continue;
       }
       edits.push({ start: reference.pos, end: reference.end, text: candidate });
+    }
+
+    // `new URL("…", import.meta.url)`: a path relative to the file (`./x`, `../x`, or a bare `x`), naming the file
+    // exactly. Another scheme (`https:`, `data:`) or an absolute path is not a reference to a file here, and is left alone.
+    for (const literal of urlSpecifiers(t, sf)) {
+      const url = literal.text;
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) || url.startsWith("/") || url.startsWith("\\")) continue;
+      const start = literal.getStart(sf);
+      const shown = `new URL(${JSON.stringify(url)}, import.meta.url)`;
+      const cut = url.search(/[?#]/);
+      const path = cut === -1 ? url : url.slice(0, cut);
+      const found = resolve(dirname(fromAbs), path);
+      const target = engine.relPath(found);
+      const inside = target !== found && target !== ".." && !target.startsWith("../");
+      const isFile = inside && before.exists(target);
+      const targetMoves = isFile && r.moves.has(target);
+      // A folder URL (`./assets/`) of a file that stays has to change when the folder goes: every file in it moves.
+      const inFolder = inside && !isFile ? listing.filter((f) => target === "" || target === "." || f.startsWith(`${target}/`)) : [];
+      const folderMoves = move && inFolder.length > 0 && inFolder.every((f) => r.moves.has(f));
+      if (!moving && !targetMoves && !folderMoves) continue;
+      if (cut !== -1) {
+        problem(
+          start,
+          `${shown} has a query or hash`,
+          `jig does not rewrite a URL with a query or hash yet. Change it in ${file} by hand, or move the files by hand, then run again.`,
+        );
+        continue;
+      }
+      if (path.includes("%")) {
+        problem(start, `${shown} has a percent-escape`, `jig does not decode URLs yet. Change it in ${file} by hand, or move the files by hand, then run again.`);
+        continue;
+      }
+      if (!isFile) {
+        if (inFolder.length > 0) {
+          problem(
+            start,
+            moving ? `${shown} names a folder, not a file` : `${shown} names a folder whose files all move`,
+            `jig rewrites a URL only when it names a file. Change it in ${file} to name a file, or move the files by hand, then run again.`,
+          );
+        } else {
+          problem(start, `${shown} does not name a file`, `Fix or remove the URL in ${file}, then run again.`);
+        }
+        continue;
+      }
+      const newTarget = newOf(target);
+      let candidate = slashed(relative(dirname(newAbs), engine.absPath(newTarget)));
+      if (/^\.\.?\//.test(path) && !candidate.startsWith("../")) candidate = `./${candidate}`;
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate) || /[?#%]/.test(candidate)) {
+        problem(start, `${JSON.stringify(candidate)}, the new path to ${newTarget}, cannot be written as a URL`, `Change ${shown} in ${file} by hand, then run again.`);
+        continue;
+      }
+      if (resolve(dirname(newAbs), candidate) !== engine.absPath(newTarget) || !after.exists(newTarget)) {
+        problem(start, `${JSON.stringify(candidate)} would not name ${newTarget} from ${newFile}`, `Change ${shown} in ${file} by hand, then run again.`);
+        continue;
+      }
+      if (candidate === url) continue;
+      const quote = sf.text.charAt(start);
+      if (candidate.includes(quote) || candidate.includes("\\") || (quote === "`" && candidate.includes("${"))) {
+        problem(start, `${JSON.stringify(candidate)} cannot be written inside ${quote} quotes`, `Change the quotes of ${shown} in ${file} by hand, then run again.`);
+        continue;
+      }
+      edits.push({ start: start + 1, end: literal.getEnd() - 1, text: candidate });
     }
 
     if (edits.length > 0) {
