@@ -134,7 +134,7 @@ struct HelpTests {
 
   @Test(
     "every other image answers --help", .timeLimit(.minutes(3)),
-    arguments: [(TS, 19), (PRETTIER, 1), (CODEMOD, 14)])
+    arguments: [(TS, 22), (PRETTIER, 1), (CODEMOD, 14)])
   func otherImages(image: String, actions: Int) throws {
     let ran = try jig([image, "--help"], cwd: try temp.make("jig-hcwd-"))
     expectHelp(ran, image: image)
