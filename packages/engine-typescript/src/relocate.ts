@@ -286,8 +286,9 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
   if (configs.length > 0) {
     throw new RefactorError(
       "INVALID_ARGS",
-      `The files to ${move ? "move" : "copy"} include ${configs.join(", ")}. Moving a tsconfig, jsconfig or package.json changes how ` +
-        `everything under it resolves, so it is not done. Leave ${configs.length === 1 ? "it" : "them"} out of --files, then run again.`,
+      `${configs.join(", ")} would ${move ? "move" : "be copied"}. jig does not ${move ? "move" : "copy"} a tsconfig, jsconfig or package.json, ` +
+        `as that changes how everything under it resolves. ${move ? "Move" : "Copy"} ${configs.length === 1 ? "it" : "them"} by hand` +
+        (sources.length > configs.length ? `, and run jig again on the other files.` : "."),
     );
   }
   const listing = engine.listFiles();
@@ -301,22 +302,23 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
       if (declarationCompanions(newOf(file)).some((c) => c.path === companion.path)) continue;
       strays.push(
         companion.declares
-          ? `${file} is in --files, but its declaration file ${companion.path} is not`
-          : `${file} is in --files, but ${companion.path}, the file it declares, is not`,
+          ? `${file} would ${move ? "move" : "be copied"}, but its declaration file ${companion.path} would not`
+          : `${file} would ${move ? "move" : "be copied"}, but ${companion.path}, the file it declares, would not`,
       );
     }
   }
   if (strays.length > 0) {
     throw new RefactorError(
       "INVALID_ARGS",
-      `A file and its declaration file ${move ? "move" : "are copied"} together:\n${listLines(strays)}\nInclude both in --files, then run again.`,
+      `A file and its declaration file ${move ? "move" : "are copied"} together:\n${listLines(strays)}\n` +
+        `${move ? "Move" : "Copy"} these files by hand, then run again.`,
     );
   }
   const taken = sources.map(newOf).filter((to) => engine.read(to) !== null || engine.existsOnDisk(to));
   if (taken.length > 0) {
     throw new RefactorError(
       "INVALID_ARGS",
-      `${taken.join(", ")} already ${taken.length === 1 ? "exists" : "exist"}. Pick another --to, or move ${taken.length === 1 ? "that file" : "those files"} away first.`,
+      `${taken.join(", ")} already ${taken.length === 1 ? "exists" : "exist"}. Move or remove ${taken.length === 1 ? "that file" : "those files"} first, then run again.`,
     );
   }
 
@@ -801,7 +803,7 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
         newTsconfig === null
           ? `${tsconfig} includes ${file}, but no tsconfig.json is above ${newFile}`
           : `${tsconfig} includes ${file}, but ${newTsconfig} would not include ${newFile}`,
-      instructions: `Pick a --to that ${newTsconfig ?? tsconfig} includes, or change its include, then run again.`,
+      instructions: `Pick a new place that ${newTsconfig ?? tsconfig} includes, or change its include, then run again.`,
     });
   }
 

@@ -377,6 +377,30 @@ describe("move-file", () => {
     assert.deepEqual(await readTree(dir), before);
   });
 
+  test("refuses to leave a second declared file behind, in move-file's words", async () => {
+    const dir = await workspace("examples/duplicate-folder", {
+      "src/lib/plain.js": "export const p = 1;\n",
+      "src/lib/plain.jsx": "export const p = 1;\n",
+      "src/lib/plain.d.ts": "export declare const p: number;\n",
+    });
+    const before = await readTree(dir);
+    const err = await rejects(main(["move-file", "--file", "src/lib/plain.jsx", "--to", "src/lib2/bar.jsx"], dir));
+    assert.equal(err.code, "INVALID_ARGS");
+    contains(err.message, "src/lib/plain.d.ts would move, but src/lib/plain.js, the file it declares, would not");
+    lacks(err.message, "--files");
+    assert.deepEqual(await readTree(dir), before);
+  });
+
+  test("refuses to move a tsconfig, in move-file's words", async () => {
+    const dir = await workspace("simple");
+    const before = await readTree(dir);
+    const err = await rejects(main(["move-file", "--file", "tsconfig.json", "--to", "sub/tsconfig.json"], dir));
+    assert.equal(err.code, "INVALID_ARGS");
+    contains(err.message, "Move it by hand");
+    lacks(err.message, "--files");
+    assert.deepEqual(await readTree(dir), before);
+  });
+
   test("refuses an extension change its declaration file could not follow", async () => {
     const dir = await workspace("examples/duplicate-folder", PLAIN);
     const before = await readTree(dir);
