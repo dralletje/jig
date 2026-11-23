@@ -179,26 +179,36 @@ async function sweepImports(engine: TsEngine, files: string[], targets: string[]
     if (found.edits.length > 0) planned.push({ file, edits: found.edits, before: diagnostics(engine, file) });
   }
 
-  const done: Planned[] = [];
+  // Write every planned file, then check them all at once: one program rebuild instead of one per file.
+  // A file that gained errors is put back, and the rest checked again, until no file gains any.
+  const originals = new Map<string, string>();
   for (const item of planned) {
-    const { file, edits } = item;
-    const original = engine.read(file) ?? "";
+    const original = engine.read(item.file) ?? "";
+    originals.set(item.file, original);
     let text = original;
-    for (const edit of [...edits].sort((a, b) => b.start - a.start)) text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
-    engine.write(file, text);
-    const errors = introduced(item.before, diagnostics(engine, file));
-    if (errors.length === 0) {
-      done.push(item);
-      continue;
+    for (const edit of [...item.edits].sort((a, b) => b.start - a.start)) text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
+    engine.write(item.file, text);
+  }
+  let done: Planned[] = planned;
+  while (done.length > 0) {
+    const failed: { item: Planned; errors: string[] }[] = [];
+    for (const item of done) {
+      const errors = introduced(item.before, diagnostics(engine, item.file));
+      if (errors.length > 0) failed.push({ item, errors });
     }
-    engine.write(file, original);
-    const { path, line } = engine.locationAt(file, edits[0]?.start ?? 0);
-    misses.push({
-      path,
-      line,
-      reason: `rewriting its imports would introduce errors: ${errors.join("; ")}`,
-      instructions: `Fix the imports of ${file} by hand, or leave the file as it is.`,
-    });
+    if (failed.length === 0) break;
+    for (const { item, errors } of failed) {
+      // Located in the original text, so the line is the one the edit is on.
+      engine.write(item.file, originals.get(item.file) ?? "");
+      const { path, line } = engine.locationAt(item.file, item.edits[0]?.start ?? 0);
+      misses.push({
+        path,
+        line,
+        reason: `rewriting its imports would introduce errors: ${errors.join("; ")}`,
+        instructions: `Fix the imports of ${item.file} by hand, or leave the file as it is.`,
+      });
+    }
+    done = done.filter((item) => !failed.some((f) => f.item === item));
   }
 
   if (done.length === 0) {
