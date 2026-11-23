@@ -7,7 +7,7 @@ public let configFile = ".jig.json"
 public struct Config: Equatable, Sendable {
   public var coAuthor: String
 
-  public static let `default` = Config(coAuthor: "codemodder <codemodder@users.noreply.github.com>")
+  public static let `default` = Config(coAuthor: "jig <jig@dral.dev>")
 }
 
 private func invalid(_ message: String) -> RefactorError {

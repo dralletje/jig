@@ -31,7 +31,7 @@ private func invalidArgs(_ text: String) throws -> RefactorError {
 @Test func configDefaultsWithoutFile() throws {
   let dir = try repo(withConfig: nil)
   defer { try? FileManager.default.removeItem(at: dir) }
-  #expect(try loadConfig(repo: dir).coAuthor == "codemodder <codemodder@users.noreply.github.com>")
+  #expect(try loadConfig(repo: dir).coAuthor == "jig <jig@dral.dev>")
 }
 
 @Test func configReadsCoAuthor() throws {
@@ -43,7 +43,7 @@ private func invalidArgs(_ text: String) throws -> RefactorError {
 @Test func configEmptyObjectIsDefault() throws {
   let dir = try repo(withConfig: "{}")
   defer { try? FileManager.default.removeItem(at: dir) }
-  #expect(try loadConfig(repo: dir).coAuthor == "codemodder <codemodder@users.noreply.github.com>")
+  #expect(try loadConfig(repo: dir).coAuthor == "jig <jig@dral.dev>")
 }
 
 @Test func configRejectsUnknownKey() throws {

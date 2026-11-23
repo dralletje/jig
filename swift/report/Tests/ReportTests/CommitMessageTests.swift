@@ -35,7 +35,7 @@ import Testing
 
 @Test func commitMessageIsSubjectSummaryAndTrailers() {
   let report = Report(kind: .sweep, subject: "sweep(prettier format): x", summary: "Formatted.")
-  let coAuthor = "codemodder <codemodder@users.noreply.github.com>"
+  let coAuthor = "jig <jig@dral.dev>"
   let text = commitMessage(report: report, message: nil, image: "i@sha256:…", args: [], coAuthor: coAuthor)
   #expect(
     text

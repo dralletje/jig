@@ -43,7 +43,7 @@ struct RunTests {
       trailers.map { line in String(line.prefix(while: { $0 != ":" })) }
         == ["Refactor-Command", "Refactor-Kind", "Co-Authored-By"])
     #expect(trailers[1] == "Refactor-Kind: refactor")
-    #expect(trailers[2] == "Co-Authored-By: codemodder <codemodder@users.noreply.github.com>")
+    #expect(trailers[2] == "Co-Authored-By: jig <jig@dral.dev>")
     #expect(lines.dropLast(3).last == "")
     #expect(!body.contains("Refactor-Status") && !body.contains("Refactor-Effect"))
     #expect(try readTree(dir)["a.ts"]?.contains("export function bar()") == true)
@@ -63,7 +63,7 @@ struct RunTests {
     #expect(result.summary.hasPrefix("Formatted 1 file with prettier "))
     #expect(
       body.trimmingCharacters(in: .newlines)
-        .hasSuffix("\nRefactor-Kind: sweep\nCo-Authored-By: codemodder <codemodder@users.noreply.github.com>"))
+        .hasSuffix("\nRefactor-Kind: sweep\nCo-Authored-By: jig <jig@dral.dev>"))
     #expect(try status(dir) == "")
   }
 
@@ -184,7 +184,7 @@ struct RunTests {
         """ + "\n\nRefactor-Command: "))
     #expect(
       body.trimmingCharacters(in: .newlines)
-        .hasSuffix("\nRefactor-Kind: rewrite\nCo-Authored-By: codemodder <codemodder@users.noreply.github.com>"))
+        .hasSuffix("\nRefactor-Kind: rewrite\nCo-Authored-By: jig <jig@dral.dev>"))
     #expect(try status(dir) == "")
   }
 

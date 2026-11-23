@@ -1,7 +1,7 @@
 # jig
 
 Run a mechanical refactor as a container image on a clean copy of the repo, and commit the result as a
-**reproducible** commit co-authored by `codemodder`. Built for AI agents: one JSON object on stdout,
+**reproducible** commit co-authored by `jig <jig@dral.dev>`. Built for AI agents: one JSON object on stdout,
 stable error codes.
 
 ```sh
@@ -225,7 +225,7 @@ Renamed `foo` to `bar` in a.ts (9 places in 4 files).
 
 Refactor-Command: {"args":["rename","--file","a.ts","--symbol","foo","--to","bar"],"image":"localhost/jig/typescript:local@sha256:<id>"}
 Refactor-Kind: refactor
-Co-Authored-By: codemodder <codemodder@users.noreply.github.com>
+Co-Authored-By: jig <jig@dral.dev>
 ```
 
 The message is the subject, a blank line, then the summary. The subject comes from the image, and names
@@ -516,7 +516,7 @@ git log --grep '^Refactor-Kind: rewrite'
 ## Config: `.jig.json` (optional)
 
 ```json
-{ "coAuthor": "codemodder <codemodder@users.noreply.github.com>" }
+{ "coAuthor": "jig <jig@dral.dev>" }
 ```
 
 `coAuthor` is the only key. Any other key is an `INVALID_ARGS` error rather than being silently ignored.
