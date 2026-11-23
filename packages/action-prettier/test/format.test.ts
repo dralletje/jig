@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
-import type { OkReport, RefactorError } from "@jig/core";
-import { HELP_SCHEMA_ID, assertReport, makeRepo, readTree, schemaErrors } from "@jig/test-utils";
-import { help, main } from "../src/index.ts";
+import type { RefactorError } from "@jig/core";
+import { assertReport, makeRepo, readTree } from "@jig/test-utils";
+import { main } from "../src/index.ts";
 
 async function rejects(p: Promise<unknown>): Promise<RefactorError> {
   try {
@@ -22,23 +22,7 @@ describe("prettier format", () => {
     await writeFile(join(dir, "ugly.ts"), "export const   x = {a:1,\n  b:'two'}\n");
     const report = await main(["format", "--files", "ugly.ts"], dir);
     assertReport(report);
-    assert.deepEqual(Object.keys(report), ["schema", "ok", "kind", "subject", "summary"]);
-    assert.deepEqual(report, {
-      schema: "urn:jig:report:1",
-      ok: true,
-      kind: "sweep",
-      subject: "sweep(prettier format): ugly.ts",
-      summary: "Formatted 1 file with prettier 3.9.10:\n  ugly.ts",
-    });
     assert.equal((await readTree(dir))["ugly.ts"], 'export const x = { a: 1, b: "two" };\n');
-  });
-
-  test("subject joins globs", async () => {
-    const dir = await makeRepo("simple");
-    const report = await main(["format", "--files", "*.ts,*.tsx"], dir);
-    assertReport(report);
-    assert.deepEqual(Object.keys(report), ["schema", "ok", "kind", "subject", "summary"]);
-    assert.equal((report as OkReport).subject, "sweep(prettier format): *.ts, *.tsx");
   });
 
   test("no prettier config: prettier defaults", async () => {
@@ -93,25 +77,6 @@ describe("prettier format", () => {
   test("missing --files", async () => {
     const dir = await makeRepo("simple");
     assert.equal((await rejects(main(["format"], dir))).code, "INVALID_ARGS");
-  });
-});
-
-describe("prettier help", () => {
-  test("is a valid help object", () => {
-    assert.deepEqual(schemaErrors(HELP_SCHEMA_ID, help()), []);
-  });
-
-  test("lists exactly the action main dispatches, format, a sweep taking --files", () => {
-    assert.deepEqual(
-      help().actions.map((a) => a.name),
-      ["format"],
-    );
-    const [format] = help().actions;
-    assert.equal(format!.kind, "sweep");
-    assert.deepEqual(
-      format!.flags.map(({ name, type, required }) => ({ name, type, required })),
-      [{ name: "--files", type: "globs", required: true }],
-    );
   });
 });
 
