@@ -377,7 +377,14 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
     }
     return options;
   };
-  const matchFiles = (t as unknown as { matchFiles: MatchFiles }).matchFiles;
+  const matchFiles = (t as unknown as { matchFiles: MatchFiles | undefined }).matchFiles;
+  if (typeof matchFiles !== "function") {
+    throw new RefactorError(
+      "REFACTOR_UNAVAILABLE",
+      `TypeScript ${t.version} lacks ts.matchFiles, the internal jig uses to check a tsconfig's include and files, so nothing was ` +
+        `${move ? "moved" : "copied"}. The typescript image needs updating to a jig that supports this TypeScript version.`,
+    );
+  }
   const coveredCache = new Map<World, Map<string, Set<string>>>();
   /** The absolute paths of the files the tsconfig's include and files take in, in that world. */
   const covered = (world: World, tsconfig: string): Set<string> => {
