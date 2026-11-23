@@ -34,6 +34,11 @@ export class TsEngine implements Engine {
   private readonly files: string[];
   /** Root-relative path → content (`null` = deleted). Shared by every project's host. */
   private readonly overlay = new Map<string, string | null>();
+  /**
+   * Root-relative path → the file on disk whose bytes it gets: copies made with `copyFile`. The overlay
+   * holds their text for reading; `changes()` gives the bytes. A `write` to the path ends the copy.
+   */
+  private readonly copies = new Map<string, string>();
   /** Root-relative path → script version, bumped on every write. */
   private readonly versions = new Map<string, number>();
   /** Files that exist only in the overlay, and files on disk the overlay deletes. */
@@ -150,6 +155,7 @@ export class TsEngine implements Engine {
   write(file: string, content: string | null): void {
     const rel = this.relPath(file);
     this.overlay.set(rel, content);
+    this.copies.delete(rel);
     this.versions.set(rel, (this.versions.get(rel) ?? 0) + 1);
     this.writes++;
     const onDisk = this.existsOnDisk(rel);
@@ -160,6 +166,21 @@ export class TsEngine implements Engine {
     else this.created.delete(rel);
     if (deleted) this.deleted.add(rel);
     else this.deleted.delete(rel);
+  }
+
+  /**
+   * `to` gets `from`'s content. When `from` is unchanged on disk, `to` gets its bytes exactly as they are
+   * there (an image, a file that is not UTF-8), while `read(to)` gives its text; a later `write(to, …)`
+   * replaces the copy. Moving a file is `copyFile(a, b)` then `write(a, null)`.
+   */
+  copyFile(from: string, to: string): void {
+    const source = this.relPath(from);
+    const target = this.relPath(to);
+    const text = this.read(source);
+    if (text === null) throw new Error(`copyFile: there is no file ${source}`);
+    const bytesFrom = this.copies.get(source) ?? (this.overlay.has(source) ? null : source);
+    this.write(target, text);
+    if (bytesFrom !== null) this.copies.set(target, bytesFrom);
   }
 
   applyTextChanges(changes: readonly ts.FileTextChanges[]): void {
@@ -182,6 +203,14 @@ export class TsEngine implements Engine {
     const out: FileChange[] = [];
     for (const [path, after] of this.overlay) {
       const before = this.readDisk(path);
+      const bytesFrom = this.copies.get(path);
+      if (bytesFrom !== undefined) {
+        // A pure copy: the source's bytes as on disk, never through a string.
+        const bytes = new Uint8Array(readFileSync(join(this.repoRoot, bytesFrom)));
+        const old = this.existsOnDisk(path) ? readFileSync(join(this.repoRoot, path)) : null;
+        if (old === null || !old.equals(bytes)) out.push({ path, before, after: bytes });
+        continue;
+      }
       if (before !== after) out.push({ path, before, after });
     }
     return out.sort((a, b) => byString(a.path, b.path));

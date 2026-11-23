@@ -16,11 +16,14 @@ export interface Decl {
   end: number;
 }
 
-/** One file's difference between disk and the engine's overlay. `null` = file absent. */
+/**
+ * One file's difference between disk and the engine's overlay. `null` = file absent. `after` is bytes
+ * for a file copied as it is (an image, a file that is not UTF-8), never decoded to text.
+ */
 export interface FileChange {
   path: string;
   before: string | null;
-  after: string | null;
+  after: string | Uint8Array | null;
 }
 
 /**

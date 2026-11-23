@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { RefactorError } from "@jig/core";
+import { RefactorError, writeChanges } from "@jig/core";
 import { makeRepo } from "@jig/test-utils";
 import { TsEngine } from "../src/index.ts";
 import type { Project } from "../src/index.ts";
@@ -172,6 +173,30 @@ describe("TsEngine", () => {
     ]);
     assert.equal(engine.read("a.ts"), original.replace("function foo", "function bar").replace("function helper", "function h"));
     assert.equal(engine.read("made.ts"), "export {};\n");
+  });
+
+  test("copyFile keeps bytes that are not UTF-8", async () => {
+    const dir = await makeRepo("simple");
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00]);
+    await writeFile(join(dir, "img.png"), bytes);
+    const engine = await TsEngine.load(dir);
+    engine.copyFile("img.png", "x/img.png");
+    engine.write("img.png", null);
+    assert.equal(engine.read("img.png"), null);
+    assert.notEqual(engine.read("x/img.png"), null);
+    await writeChanges(dir, engine.changes());
+    assert.deepEqual(readFileSync(join(dir, "x/img.png")), bytes);
+    assert.equal(existsSync(join(dir, "img.png")), false);
+  });
+
+  test("a copied text file can be rewritten, and joins its project", async () => {
+    const engine = await load("simple");
+    const b = engine.read("b.ts") ?? "";
+    engine.copyFile("b.ts", "copy/b.ts");
+    assert.equal(engine.read("copy/b.ts"), b);
+    assert.equal(contains(engine, engine.project("a.ts"), "copy/b.ts"), true);
+    engine.write("copy/b.ts", `${b}export const more = 1;\n`);
+    assert.deepEqual(engine.changes(), [{ path: "copy/b.ts", before: null, after: `${b}export const more = 1;\n` }]);
   });
 });
 
