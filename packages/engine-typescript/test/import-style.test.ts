@@ -135,7 +135,7 @@ describe("imports-to-relative", () => {
     assert.equal((await readTree(dir))["app/src/a.ts"], 'import { s } from "@shared/s.ts";\nimport { b } from "./b.ts";\nexport const a = [s, b];\n');
   });
 
-  test("an import that does not resolve is left alone and named; an exact paths key's form is unclear and named", async () => {
+  test("an import that does not resolve is left alone and named; an import through an exact paths key is named", async () => {
     const base = (await readTree(await workspace(EXAMPLE)))["tsconfig.json"] ?? "";
     const dir = await workspace(EXAMPLE, {
       "tsconfig.json": base.replace('"@/*": ["./src/*"]', '"@/*": ["./src/*"],\n      "@money": ["./src/lib/money.ts"]'),
@@ -144,7 +144,7 @@ describe("imports-to-relative", () => {
     const report = await ok(toRelative(dir, "src/extra/**", "**"));
     assert.match(report.summary, /^Rewrote 1 import to relative imports in 1 file:/);
     assert.match(report.summary, /\n\nNot handled \(2\):\n {2}src\/extra\/use\.ts:1: "@\/lib\/nope\.ts" does not resolve\n/);
-    assert.match(report.summary, /\n {2}src\/extra\/use\.ts:2: cannot tell whether "@money" names src\/lib\/money\.ts with or without its extension, or by its folder\n/);
+    assert.match(report.summary, /\n {2}src\/extra\/use\.ts:2: "@money" uses an exact tsconfig paths key\n {4}An import through an exact \(non-wildcard\) key is left as it is\./);
     assert.match((await readTree(dir))["src/extra/use.ts"] ?? "", /from "@money";\nimport \{ formatDay \} from "\.\.\/lib\/date\.ts";/);
   });
 
@@ -162,6 +162,107 @@ describe("imports-to-relative", () => {
     const error = await rejects(main(["imports-to-relative", "--files", "src/**"], dir));
     assert.equal(error.code, "INVALID_ARGS");
     assert.match(error.message, /Missing --targets/);
+  });
+});
+
+describe("imports-to-* edge cases", () => {
+  const tsconfig = (extra: object) =>
+    `${JSON.stringify({ compilerOptions: { module: "esnext", moduleResolution: "bundler", strict: true, noEmit: true, allowImportingTsExtensions: true, types: [], ...extra } }, null, 2)}\n`;
+
+  test("a package reached through a catch-all \"*\" paths key is a package: never rewritten into node_modules", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "tsconfig.json": tsconfig({ baseUrl: ".", paths: { "*": ["./types/*"], "@/*": ["./src/*"] } }),
+      "node_modules/@types/dep/index.d.ts": "export declare const x: number;\n",
+      "node_modules/@types/dep/package.json": '{ "name": "@types/dep", "types": "index.d.ts" }\n',
+      "node_modules/dep/package.json": '{ "name": "dep", "main": "index.js" }\n',
+      "node_modules/dep/index.js": "exports.x = 1;\n",
+      "src/x/a.ts": 'import { x } from "dep";\nimport { formatDay } from "@/lib/date";\nexport const z = [x, formatDay];\n',
+    });
+    const report = await ok(toRelative(dir, "src/x/**", "**"));
+    assert.equal(report.summary, "Rewrote 1 import to relative imports in 1 file:\n  src/x/a.ts");
+    assert.equal((await readTree(dir))["src/x/a.ts"], 'import { x } from "dep";\nimport { formatDay } from "../lib/date";\nexport const z = [x, formatDay];\n');
+  });
+
+  test("a subpath key mapped to a package (\"#dep\": \"dep\") is a package: untouched and not named", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "package.json": '{ "type": "module", "imports": { "#/*": "./src/*", "#dep": "dep" } }\n',
+      "node_modules/dep/package.json": '{ "name": "dep", "types": "index.d.ts" }\n',
+      "node_modules/dep/index.d.ts": "export declare const x: number;\n",
+      "src/x/a.ts": 'import { x } from "#dep";\nimport { cents } from "#/lib/money.ts";\nexport const z = [x, cents];\n',
+    });
+    const report = await ok(toRelative(dir, "src/x/**", "**"));
+    assert.equal(report.summary, "Rewrote 1 import to relative imports in 1 file:\n  src/x/a.ts");
+    assert.equal((await readTree(dir))["src/x/a.ts"]?.split("\n").slice(0, 2).join("\n"), 'import { x } from "#dep";\nimport { cents } from "../lib/money.ts";');
+  });
+
+  test("a folder whose package.json points TypeScript at a declaration file elsewhere is left alone and named", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "src/vendor/thing/package.json": '{ "types": "dist/index.d.ts", "main": "lib/index.js" }\n',
+      "src/vendor/thing/dist/index.d.ts": "export declare const t: number;\n",
+      "src/vendor/thing/lib/index.js": "exports.t = 1;\n",
+      "src/x/a.ts": 'import { t } from "../vendor/thing";\nexport const z = t;\n',
+    });
+    const before = await readTree(dir);
+    const error = await rejects(toAlias(dir, "src/x/**", "**"));
+    assert.equal(error.code, "NO_CHANGES");
+    assert.match(error.message, /\nsrc\/x\/a\.ts:1: "\.\.\/vendor\/thing" resolves to src\/vendor\/thing\/dist\/index\.d\.ts by another path than it names\. /);
+    assert.deepEqual(await readTree(dir), before);
+  });
+
+  test("an exact subpath key to an index file is left alone and named, whatever its target", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "package.json": '{ "type": "module", "imports": { "#/*": "./src/*", "#config": "./src/config/index.ts" } }\n',
+      "src/config/index.ts": "export const c = 1;\n",
+      "src/x/a.ts": 'import { c } from "#config";\nexport const z = c;\n',
+    });
+    const error = await rejects(toRelative(dir, "src/x/**", "**"));
+    assert.equal(error.code, "NO_CHANGES");
+    assert.match(error.message, /\nsrc\/x\/a\.ts:1: "#config" uses an exact package\.json imports key\. /);
+  });
+
+  test("paths relative to baseUrl: the alias folder is found through it; a baseUrl import is a package and stays", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "tsconfig.json": tsconfig({ baseUrl: "./src", paths: { "~/*": ["./*"] } }),
+      "src/x/a.ts": 'import { formatDay } from "../lib/date";\nimport { cents } from "lib/money";\nexport const z = [formatDay, cents];\n',
+    });
+    const report = await ok(toAlias(dir, "src/x/**", "**", "~/"));
+    assert.equal(report.summary, "Rewrote 1 import to `~/` imports in 1 file:\n  src/x/a.ts");
+    assert.equal((await readTree(dir))["src/x/a.ts"]?.split("\n").slice(0, 2).join("\n"), 'import { formatDay } from "~/lib/date";\nimport { cents } from "lib/money";');
+  });
+
+  test("a template-literal import(), .js for .ts, .mjs for .mts and an extensionless .tsx keep their form and quotes", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "tsconfig.json": tsconfig({ jsx: "react-jsx", paths: { "@/*": ["./src/*"] } }),
+      "src/lib/m.mts": "export const m = 1;\n",
+      "src/lib/c.tsx": "export const c = 1;\n",
+      "src/x/a.ts": "const l = import(`../lib/date.js`);\nimport { m } from \"../lib/m.mjs\";\nimport { c } from '../lib/c';\nexport const z = [l, m, c];\n",
+    });
+    const report = await ok(toAlias(dir, "src/x/**", "**"));
+    assert.doesNotMatch(report.summary, /Not handled/);
+    assert.equal(
+      (await readTree(dir))["src/x/a.ts"],
+      "const l = import(`@/lib/date.js`);\nimport { m } from \"@/lib/m.mjs\";\nimport { c } from '@/lib/c';\nexport const z = [l, m, c];\n",
+    );
+  });
+
+  test("imports-to-subpath uses the nearest package.json's imports, not the root's", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "packages/inner/package.json": '{ "name": "inner", "type": "module", "imports": { "#/*": "./src/*" } }\n',
+      "packages/inner/src/util.ts": "export const u = 1;\n",
+      "packages/inner/src/deep/use.ts": 'import { u } from "../util.ts";\nexport const z = u;\n',
+    });
+    const report = await ok(toSubpath(dir, "packages/inner/**", "**"));
+    assert.equal(report.summary, "Rewrote 1 import to `#/` subpath imports in 1 file:\n  packages/inner/src/deep/use.ts");
+    assert.equal((await readTree(dir))["packages/inner/src/deep/use.ts"], 'import { u } from "#/util.ts";\nexport const z = u;\n');
+  });
+
+  test("a relative path to a sibling whose name starts with \"..\" gets \"./\"", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "src/x/..foo.ts": "export const f = 1;\n",
+      "src/x/a.ts": 'import { f } from "@/x/..foo.ts";\nexport const z = f;\n',
+    });
+    await ok(toRelative(dir, "src/x/a.ts", "**"));
+    assert.equal((await readTree(dir))["src/x/a.ts"], 'import { f } from "./..foo.ts";\nexport const z = f;\n');
   });
 });
 

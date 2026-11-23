@@ -15,12 +15,16 @@ import type { NotHandled } from "./shared.ts";
  * Specifiers come from `import`/`export … from` (type-only too), `import()`, `import x = require()`,
  * `require()` and `import("…")` types. Each is resolved with TypeScript's module resolution under the
  * importing file's project. The style of a specifier: relative (`./`, `../`), subpath (`#…`), alias (a
- * `paths` key of the project matches it), else a package, which never changes. A specifier already in the
- * target style is left as it is (an alias stays an alias, whatever its prefix).
+ * `paths` key of the project other than a catch-all `"*"` matches it), else a package, which never changes;
+ * neither does anything that resolves into `node_modules` or as an external library. A specifier already in
+ * the target style is left as it is (an alias stays an alias, whatever its prefix). One through an exact
+ * (non-wildcard) `paths` or `imports` key is left alone and named.
  *
  * The new specifier keeps the old one's extension form: the file name (`./a.ts`), the name without its
  * extension (`./a`), a JavaScript extension for a TypeScript file (`./a.js`), or a folder for its index file
- * (`./lib`). It must resolve to the same file, or the import is left alone and named in the summary, as are
+ * (`./lib`). The old specifier must name that same path (only its prefix changes: a folder whose package.json
+ * points TypeScript at a declaration file elsewhere does not qualify), and the new one must resolve to the
+ * same file, or the import is left alone and named in the summary, as are
  * imports that do not resolve, whose form is unclear, that point outside the alias/prefix folder (or, for
  * relative imports, outside the importer's project folder), and files that would gain errors.
  *
@@ -73,11 +77,83 @@ function matchesPathsKey(key: string, specifier: string): boolean {
   return specifier.length >= before.length + after.length && specifier.startsWith(before) && specifier.endsWith(after);
 }
 
+/** The wildcard key of `keys` that matches the specifier with the longest part before its `*`, as TypeScript and Node pick it. */
+function bestWildcardKey(keys: string[], specifier: string): string | undefined {
+  let best: string | undefined;
+  for (const key of keys) {
+    if (!key.includes("*") || !matchesPathsKey(key, specifier)) continue;
+    if (best === undefined || key.indexOf("*") > best.indexOf("*")) best = key;
+  }
+  return best;
+}
+
+/**
+ * How the specifier is written. A bare specifier that only a catch-all `"*"` paths key matches is a
+ * package, not an alias.
+ */
 function styleOf(specifier: string, options: ts.CompilerOptions): Style {
   if (/^\.\.?(\/|$)/.test(specifier)) return "relative";
   if (specifier.startsWith("#")) return "subpath";
-  if (Object.keys(options.paths ?? {}).some((key) => matchesPathsKey(key, specifier))) return "alias";
+  if (Object.keys(options.paths ?? {}).some((key) => key !== "*" && matchesPathsKey(key, specifier))) return "alias";
   return "package";
+}
+
+/** The nearest package.json at or above the file, root-relative: the one Node and TypeScript read "imports" from. */
+function nearestPackageJson(engine: TsEngine, file: string): string | null {
+  let folder = dirname(engine.relPath(file));
+  while (true) {
+    const candidate = folder === "." ? "package.json" : `${folder}/package.json`;
+    if (engine.read(candidate) !== null) return candidate;
+    if (folder === ".") return null;
+    folder = dirname(folder);
+  }
+}
+
+/** The `imports` object of a package.json, or null when it has none or is not valid JSON. */
+function importsOf(engine: TsEngine, packageJson: string): Record<string, unknown> | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(engine.read(packageJson) ?? "");
+  } catch {
+    return null;
+  }
+  const imports = json !== null && typeof json === "object" ? (json as Record<string, unknown>).imports : undefined;
+  return imports !== null && typeof imports === "object" ? (imports as Record<string, unknown>) : null;
+}
+
+/** Whether an alias or subpath specifier uses an exact (non-wildcard) key of the tsconfig paths or the package.json imports. */
+function usesExactKey(engine: TsEngine, file: string, specifier: string, style: Style, options: ts.CompilerOptions): boolean {
+  if (style === "alias") return Object.keys(options.paths ?? {}).some((key) => !key.includes("*") && key === specifier);
+  if (style !== "subpath") return false;
+  const packageJson = nearestPackageJson(engine, file);
+  const imports = packageJson === null ? null : importsOf(engine, packageJson);
+  return imports !== null && !specifier.includes("*") && Object.hasOwn(imports, specifier);
+}
+
+/**
+ * The absolute paths the old specifier names, before any file lookup: the relative path from the importer,
+ * or the alias's / subpath's wildcard key with its `*` filled in. Null when that cannot be told.
+ */
+function namedPaths(engine: TsEngine, file: string, specifier: string, style: Style, options: ts.CompilerOptions): string[] | null {
+  if (style === "relative") return [resolve(dirname(engine.absPath(file)), specifier)];
+  if (style === "alias") {
+    const key = bestWildcardKey(Object.keys(options.paths ?? {}), specifier);
+    const base = options.baseUrl ?? options.pathsBasePath;
+    if (key === undefined || typeof base !== "string") return null;
+    const star = specifier.slice(key.indexOf("*"), specifier.length - (key.length - key.indexOf("*") - 1));
+    return (options.paths?.[key] ?? []).map((target) => resolve(base, target.replace("*", star)));
+  }
+  if (style === "subpath") {
+    const packageJson = nearestPackageJson(engine, file);
+    const imports = packageJson === null ? null : importsOf(engine, packageJson);
+    if (packageJson === null || imports === null) return null;
+    const key = bestWildcardKey(Object.keys(imports), specifier);
+    const value = key === undefined ? undefined : imports[key];
+    if (key === undefined || typeof value !== "string" || !value.startsWith("./")) return null;
+    const star = specifier.slice(key.indexOf("*"), specifier.length - (key.length - key.indexOf("*") - 1));
+    return [resolve(engine.absPath(dirname(packageJson)), value.replace("*", star))];
+  }
+  return null;
 }
 
 /** A file name without its extension; `.d.ts`, `.d.mts` and `.d.cts` count as one extension. */
@@ -164,18 +240,39 @@ function planFile(engine: TsEngine, file: string, targets: string[], to: TargetS
     const mode = t.getModeForUsageLocation(sf, specifier, options);
     const resolveName = (name: string): string | undefined =>
       t.resolveModuleName(name, from, options, host, undefined, undefined, mode).resolvedModule?.resolvedFileName;
-    const target = resolveName(specifier.text);
-    if (target === undefined) {
+    const resolvedModule = t.resolveModuleName(specifier.text, from, options, host, undefined, undefined, mode).resolvedModule;
+    if (resolvedModule === undefined) {
       miss(`${quoted} does not resolve`, `Fix or remove the import of ${quoted} in ${file}, or leave it as it is.`);
       continue;
     }
+    const target = resolvedModule.resolvedFileName;
+    // A package reached through a key (`"*"` paths, `"#dep": "dep"`): packages never change.
+    if (resolvedModule.isExternalLibraryImport === true || target.split(sep).includes("node_modules")) continue;
     const targetRel = engine.relPath(target);
     if (targetRel === target || !matchesAnyGlob(targetRel, targets)) continue;
+    if (usesExactKey(engine, file, specifier.text, style, options)) {
+      miss(
+        `${quoted} uses an exact ${style === "alias" ? "tsconfig paths" : "package.json imports"} key`,
+        `An import through an exact (non-wildcard) key is left as it is. Change the import of ${targetRel} in ${file} by hand if it should change.`,
+      );
+      continue;
+    }
     const path = spelledPath(specifier.text, target);
     if (path === null) {
       miss(
         `cannot tell whether ${quoted} names ${targetRel} with or without its extension, or by its folder`,
         `Write the import of ${targetRel} in ${file} as a path to the file by hand, or leave it as it is.`,
+      );
+      continue;
+    }
+    // The new specifier names `path`; the old one must name it too, so only the prefix changes. TypeScript can
+    // reach a file by another path (a package.json "types", a declaration file) than the runtime would.
+    const named = namedPaths(engine, file, specifier.text, style, options);
+    if (named === null || !named.includes(path)) {
+      miss(
+        `${quoted} resolves to ${targetRel} by another path than it names`,
+        `TypeScript reaches ${targetRel} through a package.json or a declaration file, so another spelling could resolve to ` +
+          `something else at runtime. Leave the import in ${file} as it is, or change it by hand.`,
       );
       continue;
     }
@@ -455,15 +552,7 @@ export const importsToSubpathAction: Action<ImportsToSubpathParams, TsEngine> = 
         "Subpath imports name files exactly (no extension is added, no index file is found), and need moduleResolution " +
         "\"bundler\", \"node16\" or \"nodenext\". ",
       writerFor: (file) => {
-        // The nearest package.json at or above the file: the one Node and TypeScript read "imports" from.
-        let folder = dirname(engine.relPath(file));
-        let packageJson: string | null = null;
-        while (packageJson === null) {
-          const candidate = folder === "." ? "package.json" : `${folder}/package.json`;
-          if (engine.read(candidate) !== null) packageJson = candidate;
-          else if (folder === ".") break;
-          else folder = dirname(folder);
-        }
+        const packageJson = nearestPackageJson(engine, file);
         if (packageJson === null) {
           throw new RefactorError(
             "INVALID_ARGS",
@@ -473,14 +562,12 @@ export const importsToSubpathAction: Action<ImportsToSubpathParams, TsEngine> = 
         }
         let prefixFolder = folders.get(packageJson);
         if (prefixFolder === undefined) {
-          let json: unknown;
           try {
-            json = JSON.parse(engine.read(packageJson) ?? "");
+            JSON.parse(engine.read(packageJson) ?? "");
           } catch {
             return unavailable(`${packageJson} is not valid JSON. Fix it, then run again.`);
           }
-          const imports = json !== null && typeof json === "object" ? (json as Record<string, unknown>).imports : undefined;
-          const value = imports !== null && typeof imports === "object" ? (imports as Record<string, unknown>)[key] : undefined;
+          const value = importsOf(engine, packageJson)?.[key];
           if (value === undefined) {
             throw new RefactorError(
               "INVALID_ARGS",
