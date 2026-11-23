@@ -1,0 +1,8 @@
+{
+  "name": "move-files-example",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  }
+}

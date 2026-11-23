@@ -146,6 +146,11 @@ export class TsEngine implements Engine {
     return rel !== null && [...this.created].some((f) => f.startsWith(`${rel}/`));
   }
 
+  /** Every file as the overlay sees it, root-relative and sorted: the files on disk when loaded, plus created, minus deleted. */
+  listFiles(): string[] {
+    return [...new Set([...this.files, ...this.created])].filter((f) => !this.deleted.has(f)).sort(byString);
+  }
+
   read(file: string): string | null {
     const rel = this.relPath(file);
     if (this.overlay.has(rel)) return this.overlay.get(rel) ?? null;
