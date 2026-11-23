@@ -2,7 +2,7 @@ import { basename, dirname } from "node:path";
 import { listFiles, listLines, plural, RefactorError } from "@jig/core";
 import type { Action } from "@jig/core";
 import type { TsEngine } from "./engine.ts";
-import { applyFileMove } from "./files.ts";
+import { relocate } from "./relocate.ts";
 import { byString, list as globList, matchFiles, notHandled, required, unavailable } from "./shared.ts";
 import type { NotHandled } from "./shared.ts";
 
@@ -147,10 +147,10 @@ export const renameFilesAction: Action<RenameFilesParams, TsEngine> = {
             : "."),
       );
     }
-    for (const { from, to } of renames) {
+    for (const { from } of renames) {
       if (engine.read(from) === null) unavailable(`${from} cannot be read. Run again on a clean checkout.`);
-      applyFileMove(engine, from, to);
     }
+    relocate(engine, { mode: "move", moves: new Map(renames.map((r) => [r.from, r.to])) });
     const touched = new Set(renames.flatMap((r) => [r.from, r.to]));
     const others = engine.changes().filter((c) => !touched.has(c.path)).length;
     const sorted = [...renames].sort((a, b) => byString(a.from, b.from));

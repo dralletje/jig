@@ -1,25 +1,10 @@
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type { TsEngine } from "./engine.ts";
+import { relocate } from "./relocate.ts";
 import { PREFERENCES, list as globList, matchFiles, required } from "./shared.ts";
 
 // ---------------------------------------------------------------------------------------------
-
-/**
- * Moves `from` to `to` in the engine: the importers' (and the file's own) relative imports and paths
- * aliases are rewritten with the language service's `getEditsForFileRename`, then the content moves.
- * The caller checks that `from` exists and `to` is free.
- */
-export function applyFileMove(engine: TsEngine, from: string, to: string): void {
-  const format = engine.ts.getDefaultFormatCodeSettings("\n");
-  const edits = engine
-    .project(from)
-    .service.getEditsForFileRename(engine.absPath(from), engine.absPath(to), format, PREFERENCES);
-  // Edits may target the moved file itself (its own relative imports): apply, then move.
-  engine.applyTextChanges(edits);
-  engine.write(to, engine.read(from));
-  engine.write(from, null);
-}
 
 export type MoveFileParams = { file: string; to: string };
 
@@ -44,7 +29,7 @@ export const moveFileAction: Action<MoveFileParams, TsEngine> = {
     if (engine.read(to) !== null || engine.existsOnDisk(to)) {
       throw new RefactorError("REFACTOR_UNAVAILABLE", `${to} already exists. Pick another --to, or move that file away first.`);
     }
-    applyFileMove(engine, from, to);
+    relocate(engine, { mode: "move", moves: new Map([[from, to]]) });
     const others = engine.changes().filter((c) => c.path !== from && c.path !== to).length;
     return {
       summary:

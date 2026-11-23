@@ -258,8 +258,16 @@ describe("lift-out", () => {
 });
 
 describe("move-file", () => {
+  // simple's tsconfig includes only top-level files, and a file is not moved out of its tsconfig's include.
+  const SIMPLE_EVERYWHERE = {
+    "tsconfig.json": JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, jsx: "preserve", module: "esnext", moduleResolution: "bundler", target: "esnext", skipLibCheck: true, types: [] },
+      include: ["**/*.ts", "**/*.tsx"],
+    }),
+  };
+
   test("moves a file, rewriting its own relative imports", async () => {
-    const dir = await workspace("simple");
+    const dir = await workspace("simple", SIMPLE_EVERYWHERE);
     const report = (await main(["move-file", "--file", "b.ts", "--to", "sub/b.ts"], dir)) as OkReport;
     assertReport(report);
     assert.equal(report.subject, "refactor(typescript move-file): b.ts → sub/b.ts");
@@ -269,8 +277,17 @@ describe("move-file", () => {
     contains(files["sub/b.ts"], 'from "../a"');
   });
 
-  test("importers follow a moved module", async () => {
+  test("refuses to move a file out of its tsconfig's include", async () => {
     const dir = await workspace("simple");
+    const before = await readTree(dir);
+    const err = await rejects(main(["move-file", "--file", "b.ts", "--to", "sub/b.ts"], dir));
+    assert.equal(err.code, "REFACTOR_UNAVAILABLE");
+    contains(err.message, "b.ts:1: tsconfig.json includes b.ts, but tsconfig.json would not include sub/b.ts");
+    assert.deepEqual(await readTree(dir), before);
+  });
+
+  test("importers follow a moved module", async () => {
+    const dir = await workspace("simple", SIMPLE_EVERYWHERE);
     await main(["move-file", "--file", "a.ts", "--to", "lib/a.ts"], dir);
     const files = await readTree(dir);
     assert.equal(files["a.ts"], undefined);
@@ -286,6 +303,21 @@ describe("move-file", () => {
     const files = await readTree(dir);
     assert.equal(files["src/lib/util.ts"], "export function util() {}\n");
     contains(files["src/main.ts"], 'from "@/lib/util"');
+  });
+
+  test("move-file keeps each import's extension form in a file that mixes them", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/other.ts": "export const other = 2;\n",
+      "src/lib/sub/b.ts": "export const b = 3;\n",
+      "src/lib/a.ts": 'import { shared } from "../shared";\nimport { other } from "../other.ts";\nimport { b } from "./sub/b";\n\nexport const a = shared + other + b;\n',
+    });
+    await main(["move-file", "--file", "src/lib/a.ts", "--to", "src/lib/deep/a.ts"], dir);
+    const files = await readTree(dir);
+    assert.equal(files["src/lib/a.ts"], undefined);
+    assert.equal(
+      files["src/lib/deep/a.ts"],
+      'import { shared } from "../../shared";\nimport { other } from "../../other.ts";\nimport { b } from "../sub/b";\n\nexport const a = shared + other + b;\n',
+    );
   });
 
   test("refuses an existing target", async () => {
