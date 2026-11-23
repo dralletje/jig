@@ -71,6 +71,58 @@ describe("duplicate-folder", () => {
     assert.equal(files["src/deep/feature2/theme.d.css.ts"], "declare const styles: Record<string, string>;\nexport default styles;\n");
   });
 
+  test("a typed CSS module (theme.d.css.ts) inside the folder is imported as the CSS file in the copy", async () => {
+    const dir = await workspace("examples/duplicate-folder", {
+      "src/feature/theme.css": ".a {}\n",
+      "src/feature/theme.d.css.ts": "declare const styles: Record<string, string>;\nexport default styles;\n",
+      "src/feature/themed.ts": 'import styles from "./theme.css";\nexport const s = styles;\n',
+    });
+    await main(["duplicate-folder", ...FEATURE], dir);
+    const files = await readTree(dir);
+    assert.equal(files["src/deep/feature2/themed.ts"], 'import styles from "./theme.css";\nexport const s = styles;\n');
+    assert.deepEqual(await errors(dir, "src/deep/feature2/themed.ts"), []);
+  });
+
+  test("a copy's import of a typed CSS module outside the folder follows it", async () => {
+    const dir = await workspace("examples/duplicate-folder", {
+      "src/theme.css": ".a {}\n",
+      "src/theme.d.css.ts": "declare const styles: Record<string, string>;\nexport default styles;\n",
+      "src/feature/themed.ts": 'import styles from "../theme.css";\nimport aliased from "@/theme.css";\nexport const s = [styles, aliased];\n',
+    });
+    await main(["duplicate-folder", ...FEATURE], dir);
+    const files = await readTree(dir);
+    assert.equal(
+      files["src/deep/feature2/themed.ts"],
+      'import styles from "../../theme.css";\nimport aliased from "@/theme.css";\nexport const s = [styles, aliased];\n',
+    );
+    assert.deepEqual(await errors(dir, "src/deep/feature2/themed.ts"), []);
+  });
+
+  test("a copy into another package (another nearest package.json) is INVALID_ARGS", async () => {
+    const dir = await workspace("examples/duplicate-folder", {
+      "src/other/package.json": '{ "name": "other", "private": true }\n',
+      "src/other/inner/keep.ts": "export {};\n",
+    });
+    const before = await readTree(dir);
+    const into = await rejects(main(["duplicate-folder", "--from", "src/feature", "--to", "src/other/feature"], dir));
+    assert.equal(into.code, "INVALID_ARGS");
+    assert.match(into.message, /--from src\/feature is in the package of package\.json, but --to src\/other\/feature is in the package of src\/other\/package\.json/);
+    const out = await rejects(main(["duplicate-folder", "--from", "src/other/inner", "--to", "src/inner"], dir));
+    assert.equal(out.code, "INVALID_ARGS");
+    assert.match(out.message, /--from src\/other\/inner is in the package of src\/other\/package\.json, but --to src\/inner is in the package of package\.json/);
+    assert.deepEqual(await readTree(dir), before);
+  });
+
+  test("a copy within the same package (same nearest package.json) is allowed", async () => {
+    const dir = await workspace("examples/duplicate-folder", {
+      "src/pkg/package.json": '{ "name": "pkg", "private": true }\n',
+      "src/pkg/lib/a.ts": "export const a = 1;\n",
+    });
+    await main(["duplicate-folder", "--from", "src/pkg/lib", "--to", "src/pkg/lib2"], dir);
+    const files = await readTree(dir);
+    assert.equal(files["src/pkg/lib2/a.ts"], "export const a = 1;\n");
+  });
+
   test("a copy's JSDoc imports and triple-slash references follow it", async () => {
     const dir = await workspace("examples/duplicate-folder", {
       "src/feature/tool.js":

@@ -640,13 +640,15 @@ without building a program (`import`/`export … from`, `import()`, `require()`,
 `new URL("…", import.meta.url)` with a plain string), resolves it with TypeScript under the importer's
 nearest tsconfig, and touches it only when the importer or its target moves. A relative import stays
 relative, an alias keeps its `paths` key, a subpath import keeps its package.json `imports` key, and the
-extension form stays (`./a`, `./a.ts`, `./a.js`, `./dir`); the new specifier must resolve to the new place.
+extension form stays (`./a`, `./a.ts`, `./a.js`, `./dir`, and `./theme.css` for a typed CSS module
+`theme.d.css.ts`); the new specifier must resolve to the new place.
 A `new URL` path is relative to its file (`./x`, `../x`, or a bare `x`, which stays without `./`) and names
 the file exactly; other schemes (`https:`, `data:`) and absolute paths are left alone. Packages never change
 (one that does not resolve is skipped). For `duplicate-folder`, `INVALID_ARGS` refuses a `--from` with no
 file under it (missing or empty; symlinks and `node_modules` are not counted) or that is a file, a `--to`
 that already exists (file or folder) or lies under a file, a `--to` inside `--from` or equal to it, a path
-outside the repo, and a folder holding a `tsconfig*.json`, `jsconfig.json` or `package.json`. For
+outside the repo, a folder holding a `tsconfig*.json`, `jsconfig.json` or `package.json`, and a `--to` in
+another package than `--from` (another nearest package.json, or none where `--from` has one). For
 `move-file` and `rename-files` it refuses a new path that already exists, those config files, and a file
 moved without its declaration file, or the reverse (`foo.js`/`foo.jsx` and `foo.d.ts`, `foo.mjs` and `foo.d.mts`, `foo.cjs`
 and `foo.d.cts`, `foo.css` and `foo.d.css.ts`; a `.ts` file has none). Any reference that cannot follow

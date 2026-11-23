@@ -528,6 +528,9 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
             return;
           }
           newPath = dirname(newTargetAbs);
+        } else if (path !== null && /\.d\.[^.]+\.ts$/.test(basename(found)) && !basename(path).startsWith(stem(basename(found)))) {
+          // `theme.d.css.ts` named as `theme.css` (spelledPath's declared file): the declared file at the new place.
+          newPath = join(dirname(newTargetAbs), basename(newTargetAbs).replace(/\.d\.([^.]+)\.ts$/, ".$1"));
         } else {
           newPath = join(dirname(newTargetAbs), stem(basename(newTargetAbs)) + basename(path).slice(stem(basename(found)).length));
         }
@@ -836,6 +839,17 @@ export const duplicateFolderAction: Action<FolderParams, TsEngine> = {
         "INVALID_ARGS",
         `${configs.join(", ")} ${configs.length === 1 ? "is" : "are"} under --from ${from}. Copying a tsconfig, jsconfig or package.json changes how ` +
           `everything under it resolves, so it is not done. Copy the folder by hand, or move ${configs.length === 1 ? "it" : "them"} out of ${from} first, then run again.`,
+      );
+    }
+    // The nearest package.json at or above each folder (a file name inside it, as nearestPackageJson takes a file).
+    const fromPackage = nearestPackageJson(engine, `${from}/x`);
+    const toPackage = nearestPackageJson(engine, `${to}/x`);
+    if (fromPackage !== toPackage) {
+      throw new RefactorError(
+        "INVALID_ARGS",
+        `--from ${from} is in the package of ${fromPackage ?? "no package.json"}, but --to ${to} is in the package of ${toPackage ?? "no package.json"}. ` +
+          `A copy into another package would import across packages without being a dependency. Pass a --to in the same package as ${from}, ` +
+          `or copy the folder by hand.`,
       );
     }
     const moves = new Map<string, string>();

@@ -233,13 +233,20 @@ export function stem(name: string): string {
 /**
  * The absolute path the new specifier names, in the form the old `specifier` names its resolved `target`:
  * the file itself, the file without its extension, the file with the specifier's extension (`./a.js` for
- * `a.ts`), or the folder of an index file. Null when the form cannot be told (an exact `paths` key).
+ * `a.ts`), the folder of an index file, or the file a `<name>.d.<ext>.ts` declares (`./theme.css` for
+ * `theme.d.css.ts`). Null when the form cannot be told (an exact `paths` key).
  */
 export function spelledPath(specifier: string, target: string): string | null {
   const last = specifier.replace(/\/+$/, "").split("/").at(-1) ?? "";
   const file = basename(target);
   const folder = dirname(target);
   if (last === file) return target;
+  // allowArbitraryExtensions: `theme.d.css.ts` declares `theme.css`, and imports name the CSS file.
+  const declared = /^(.+)\.d\.([^.]+)\.ts$/.exec(file);
+  if (declared && !["ts", "mts", "cts", "tsx", "js", "mjs", "cjs", "jsx"].includes(declared[2] ?? "")) {
+    const declaredFile = `${declared[1]}.${declared[2]}`;
+    if (last === declaredFile) return join(folder, declaredFile);
+  }
   if (last === stem(file)) return join(folder, stem(file));
   const ext = extname(last);
   if (ext !== "" && last.slice(0, -ext.length) === stem(file)) return join(folder, `${stem(file)}${ext}`);
