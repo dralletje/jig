@@ -176,6 +176,40 @@ function urlSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteralLi
   return out;
 }
 
+/**
+ * The declaration file of a file, or the files a declaration file declares, in the same folder (whether they exist
+ * or not). `declares` is true when the companion is the declaration file. foo.js and foo.jsx ↔ foo.d.ts, foo.mjs ↔
+ * foo.d.mts, foo.cjs ↔ foo.d.cts, and any other extension ↔ foo.d.<ext>.ts (allowArbitraryExtensions). A .ts, .tsx,
+ * .mts or .cts file has none.
+ */
+function declarationCompanions(file: string): { path: string; declares: boolean }[] {
+  const folder = dirname(file);
+  const at = (name: string): string => (folder === "." ? name : `${folder}/${name}`);
+  const name = basename(file);
+  let m = /^(.+)\.d\.ts$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.js`), declares: false }, { path: at(`${m[1]}.jsx`), declares: false }];
+  m = /^(.+)\.d\.mts$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.mjs`), declares: false }];
+  m = /^(.+)\.d\.cts$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.cjs`), declares: false }];
+  m = /^(.+)\.d\.([^.]+)\.ts$/.exec(name);
+  if (m !== null) {
+    // foo.d.js.ts is not how a JavaScript file is declared: TypeScript looks for foo.d.ts.
+    if (/^(m|c)?[jt]sx?$/.test(m[2] as string)) return [];
+    return [{ path: at(`${m[1]}.${m[2]}`), declares: false }];
+  }
+  m = /^(.+)\.jsx?$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.d.ts`), declares: true }];
+  m = /^(.+)\.mjs$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.d.mts`), declares: true }];
+  m = /^(.+)\.cjs$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.d.cts`), declares: true }];
+  if (/\.(m|c)?tsx?$/.test(name)) return [];
+  m = /^(.+)\.([^.]+)$/.exec(name);
+  if (m !== null) return [{ path: at(`${m[1]}.d.${m[2]}.ts`), declares: true }];
+  return [];
+}
+
 /** Plans everything, refuses (REFACTOR_UNAVAILABLE) on any doubtful reference, then applies to the engine. */
 export function relocate(engine: TsEngine, r: Relocation): Relocated {
   const t = engine.ts;
@@ -194,6 +228,26 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
         `everything under it resolves, so it is not done. Leave ${configs.length === 1 ? "it" : "them"} out of --files, then run again.`,
     );
   }
+  const listing = engine.listFiles();
+  const listed = new Set(listing);
+  // A file and its declaration file go together: the one left behind would declare nothing, or the file would lose its types.
+  const strays: string[] = [];
+  for (const file of sources) {
+    for (const companion of declarationCompanions(file)) {
+      if (!listed.has(companion.path) || r.moves.has(companion.path)) continue;
+      strays.push(
+        companion.declares
+          ? `${file} is in --files, but its declaration file ${companion.path} is not`
+          : `${file} is in --files, but ${companion.path}, the file it declares, is not`,
+      );
+    }
+  }
+  if (strays.length > 0) {
+    throw new RefactorError(
+      "INVALID_ARGS",
+      `A file and its declaration file ${move ? "move" : "are copied"} together:\n${listLines(strays)}\nInclude both in --files, then run again.`,
+    );
+  }
   const taken = sources.map(newOf).filter((to) => engine.read(to) !== null || engine.existsOnDisk(to));
   if (taken.length > 0) {
     throw new RefactorError(
@@ -202,7 +256,6 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
     );
   }
 
-  const listing = engine.listFiles();
   const before = makeWorld(engine, listing, (rel) => engine.read(rel));
   const after = makeWorld(
     engine,

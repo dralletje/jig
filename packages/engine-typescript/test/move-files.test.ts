@@ -127,6 +127,26 @@ describe("move-files", () => {
     assert.equal(files["src/media/use.ts"], 'import "@/media/logo.svg";\n\nexport {};\n');
   });
 
+  test("a file and its declaration file move together; a .ts file has no declaration companion", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/lib/plain.js": "export const p = 1;\n",
+      "src/lib/plain.d.ts": "export declare const p: number;\n",
+      "src/lib/theme.css": ".a {}\n",
+      "src/lib/theme.d.css.ts": "declare const styles: Record<string, string>;\nexport default styles;\n",
+      "src/lib/real.ts": "export const r = 1;\n",
+      "src/lib/real.d.ts": "export declare const r: number;\n",
+      "src/lib/alone.js": "export const a = 1;\n",
+    });
+    await main(["move-files", "--files", "src/lib/plain.*,src/lib/theme.*,src/lib/real.ts,src/lib/alone.js", "--from", "src/lib", "--to", "src/lib2"], dir);
+    const files = await readTree(dir);
+    assert.deepEqual(
+      Object.keys(files)
+        .filter((f) => f.startsWith("src/lib"))
+        .sort(),
+      ["src/lib/real.d.ts", "src/lib2/alone.js", "src/lib2/plain.d.ts", "src/lib2/plain.js", "src/lib2/real.ts", "src/lib2/theme.css", "src/lib2/theme.d.css.ts"],
+    );
+  });
+
   test("a tsconfig paths key starting with # is an alias, not a subpath import", async () => {
     const dir = await workspace("examples/move-files", {
       "tsconfig.json": JSON.stringify({
@@ -256,6 +276,33 @@ describe("move-files", () => {
       await main(["move-files", ...FEATURE], dir);
       const files = await readTree(dir);
       assert.equal(files["src/icons.ts"], 'import "./shared.ts?raw";\n\nexport {};\n');
+    });
+
+    test("a file without its declaration file, or a declaration file without its file, is INVALID_ARGS, naming both", async () => {
+      const dir = await workspace("examples/move-files", {
+        "src/lib/plain.js": "export const p = 1;\n",
+        "src/lib/plain.d.ts": "export declare const p: number;\n",
+        "src/lib/esm.mjs": "export const e = 1;\n",
+        "src/lib/esm.d.mts": "export declare const e: number;\n",
+        "src/lib/common.cjs": "exports.c = 1;\n",
+        "src/lib/common.d.cts": "export declare const c: number;\n",
+        "src/lib/view.jsx": "export const v = 1;\n",
+        "src/lib/view.d.ts": "export declare const v: number;\n",
+        "src/lib/theme.css": ".a {}\n",
+        "src/lib/theme.d.css.ts": "declare const styles: Record<string, string>;\nexport default styles;\n",
+      });
+      const before = await readTree(dir);
+      const err = await rejects(
+        main(["move-files", "--files", "src/lib/*.js,src/lib/*.d.mts,src/lib/*.cjs,src/lib/*.jsx,src/lib/*.css", "--from", "src/lib", "--to", "src/lib2"], dir),
+      );
+      assert.equal(err.code, "INVALID_ARGS");
+      contains(err.message, "src/lib/plain.js is in --files, but its declaration file src/lib/plain.d.ts is not");
+      contains(err.message, "src/lib/esm.d.mts is in --files, but src/lib/esm.mjs, the file it declares, is not");
+      contains(err.message, "src/lib/common.cjs is in --files, but its declaration file src/lib/common.d.cts is not");
+      contains(err.message, "src/lib/view.jsx is in --files, but its declaration file src/lib/view.d.ts is not");
+      contains(err.message, "src/lib/theme.css is in --files, but its declaration file src/lib/theme.d.css.ts is not");
+      contains(err.message, "Include both in --files, then run again.");
+      assert.deepEqual(await readTree(dir), before);
     });
 
     test("no match is INVALID_ARGS", async () => {

@@ -320,6 +320,18 @@ describe("move-file", () => {
     );
   });
 
+  test("refuses to move a file without its declaration file", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/lib/plain.js": "export const p = 1;\n",
+      "src/lib/plain.d.ts": "export declare const p: number;\n",
+    });
+    const before = await readTree(dir);
+    const err = await rejects(main(["move-file", "--file", "src/lib/plain.js", "--to", "src/lib2/plain.js"], dir));
+    assert.equal(err.code, "INVALID_ARGS");
+    contains(err.message, "src/lib/plain.js is in --files, but its declaration file src/lib/plain.d.ts is not");
+    assert.deepEqual(await readTree(dir), before);
+  });
+
   test("refuses an existing target", async () => {
     const dir = await workspace("simple");
     const err = await rejects(main(["move-file", "--file", "b.ts", "--to", "a.ts"], dir));
