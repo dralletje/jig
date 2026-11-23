@@ -637,20 +637,27 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 
 `move-files`, `duplicate-files`, `move-file` and `rename-files` share one core. It reads every reference
 without building a program (`import`/`export … from`, `import()`, `require()`, `import x = require()`,
-`import("…")` types, `/// <reference path>`, and JSDoc `@import` and `import("…")` types in JavaScript),
-resolves it with TypeScript under the importer's nearest tsconfig, and touches it only when the importer or
-its target moves. A relative import stays relative, an alias keeps its `paths` key, a subpath import keeps
-its package.json `imports` key, and the extension form stays (`./a`, `./a.ts`, `./a.js`, `./dir`); the new
-specifier must resolve to the new place. Packages never change (one that does not resolve is skipped).
-Every match of `--files` must be under `--from`, and `INVALID_ARGS` refuses no match, a match outside
-`--from`, `--from` equal to `--to`, a new path that already exists, and a group holding a `tsconfig*.json`,
-`jsconfig.json` or `package.json`. Any reference that cannot follow refuses the whole action
-(`REFACTOR_UNAVAILABLE`, nothing written, every problem listed with its file and line): one that does not
-resolve, a package-style specifier (bare name, `baseUrl`, workspace package) or an exact `paths`/`imports`
-key that reaches a moved file, one that reaches its file by another path than it names, a new place outside
-the alias's or subpath's folder (or a project without that key), a new specifier that would not resolve,
-and a moved source file that would leave the `include`/`files` of its tsconfig. tsconfig.json and
-package.json are never edited, and nothing is type-checked: the resolution check is the safety net.
+`import("…")` types, `/// <reference path>`, JSDoc `@import` and `import("…")` types in JavaScript, and
+`new URL("…", import.meta.url)` with a plain string), resolves it with TypeScript under the importer's
+nearest tsconfig, and touches it only when the importer or its target moves. A relative import stays
+relative, an alias keeps its `paths` key, a subpath import keeps its package.json `imports` key, and the
+extension form stays (`./a`, `./a.ts`, `./a.js`, `./dir`); the new specifier must resolve to the new place.
+A `new URL` path is relative to its file (`./x`, `../x`, or a bare `x`, which stays without `./`) and names
+the file exactly; other schemes (`https:`, `data:`) and absolute paths are left alone. Packages never change
+(one that does not resolve is skipped). Every match of `--files` must be under `--from`, and `INVALID_ARGS`
+refuses no match, a match outside `--from`, `--from` equal to `--to`, a new path that already exists, a
+group holding a `tsconfig*.json`, `jsconfig.json` or `package.json`, and a group holding a file but not its
+declaration file, or the reverse (`foo.js`/`foo.jsx` and `foo.d.ts`, `foo.mjs` and `foo.d.mts`, `foo.cjs`
+and `foo.d.cts`, `foo.css` and `foo.d.css.ts`; a `.ts` file has none). Any reference that cannot follow
+refuses the whole action (`REFACTOR_UNAVAILABLE`, nothing written, every problem listed with its file and
+line): one that does not resolve, a package-style specifier (bare name, `baseUrl`, workspace package) or an
+exact `paths`/`imports` key that reaches a moved file, one that reaches its file by another path than it
+names, a new place outside the alias's or subpath's folder (or a project without that key), a new specifier
+that would not resolve, a query import (`./icon.svg?react`) in a moved file or of a moved file from any
+file (jig does not rewrite those yet), a `new URL` that would need to change but names no file (a folder URL whose files all move
+included) or has a query, hash or percent-escape, and a moved source file that would leave the
+`include`/`files` of its tsconfig. tsconfig.json and package.json are never edited, and nothing is
+type-checked: the resolution check is the safety net.
 
 ### sweep
 
