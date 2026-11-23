@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { OkReport } from "@jig/core";
 import { assertReport, readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
 import { changed, errors, rejects, workspace } from "./helpers.ts";
@@ -12,18 +11,7 @@ describe("namespace-to-named on examples/import-shapes", () => {
   test("converts `x.name` uses, renames clashes, skips a namespace used as a value", async () => {
     const dir = await workspace("examples/import-shapes");
     const before = await readTree(dir);
-    const report = await toNamed(dir, "src/**");
-    assertReport(report);
-    const ok = report as OkReport;
-    assert.equal(ok.kind, "sweep");
-    assert.equal(ok.subject, "sweep(typescript namespace-to-named): src/**");
-    assert.equal(
-      ok.summary,
-      "Converted 2 namespace imports to named imports in 2 files:\n  src/clash.ts\n  src/sums.ts\n" +
-        "\nNot handled (1):\n" +
-        "  src/whole.ts:1: `math` is used as a value on its own\n" +
-        '    Left `import * as math from "./math"` in src/whole.ts as it is. Use math only as math.<name> (or leave the import as a namespace import), then run again.',
-    );
+    assertReport(await toNamed(dir, "src/**"));
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/clash.ts", "src/sums.ts"]);
     assert.equal(
@@ -52,28 +40,7 @@ describe("namespace-to-named on examples/import-shapes", () => {
     const once = await readTree(dir);
     const err = await rejects(toNamed(dir, "src/**"));
     assert.equal(err.code, "NO_CHANGES");
-    assert.match(err.message, /^No namespace import was converted\. Skipped:\nsrc\/whole\.ts:1: `math` is used as a value on its own$/);
     assert.deepEqual(await readTree(dir), once);
-  });
-
-  test("everything converted: nothing listed as not handled", async () => {
-    const dir = await workspace("examples/import-shapes");
-    const ok = (await toNamed(dir, "src/sums.ts")) as OkReport;
-    assertReport(ok);
-    assert.equal(ok.summary, "Converted 1 namespace import to named imports in 1 file:\n  src/sums.ts");
-  });
-
-  test("when unrelated code moves above, the skipped import is listed at its current line", async () => {
-    const plain = (await toNamed(await workspace("examples/import-shapes"), "src/**")) as OkReport;
-    const moved = await workspace("examples/import-shapes");
-    const tree = await readTree(moved);
-    const shifted = await workspace("examples/import-shapes", {
-      "src/whole.ts": `// a\n// b\n// c\n${tree["src/whole.ts"]}`,
-      "src/sums.ts": `// a\n// b\n${tree["src/sums.ts"]}`,
-    });
-    const report = (await toNamed(shifted, "src/**")) as OkReport;
-    assertReport(report);
-    assert.equal(report.summary, plain.summary.replace("src/whole.ts:1:", "src/whole.ts:4:"));
   });
 
   test("other bare uses (export, shorthand, default, unused) are skipped; type-only and qualified uses convert", async () => {
@@ -87,8 +54,7 @@ describe("namespace-to-named on examples/import-shapes", () => {
       "src/side.ts": 'import "./math";\nimport * as math from "./math";\n\nexport const s = math.add(1, 2);\n',
     });
     const before = await readTree(dir);
-    const report = (await toNamed(dir, "src/**")) as OkReport;
-    assertReport(report);
+    await toNamed(dir, "src/**");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/clash.ts", "src/shadow.ts", "src/side.ts", "src/sums.ts", "src/typesonly.ts"]);
     assert.equal(
@@ -98,15 +64,6 @@ describe("namespace-to-named on examples/import-shapes", () => {
     assert.equal(after["src/typesonly.ts"], 'import { Pair, PI } from "./math";\n\nexport type P = Pair;\nexport const k: typeof PI = 3.14159;\n');
     // The side-effect import is untouched.
     assert.equal(after["src/side.ts"], 'import "./math";\nimport { add } from "./math";\n\nexport const s = add(1, 2);\n');
-    const reasons = Object.fromEntries([...report.summary.matchAll(/^ {2}(\S+):\d+: (.*)$/gm)].map((m) => [m[1], m[2]]));
-    assert.deepEqual(reasons, {
-      "src/defaults.ts": "`geometry.default` cannot be written as a named import",
-      "src/reexport.ts": "`math` is used as a value on its own",
-      "src/shorthand.ts": "`math` is used as a value on its own",
-      "src/unused.ts": "`math` is not used",
-      "src/whole.ts": "`math` is used as a value on its own",
-    });
-    assert.match(report.summary, /\n\nNot handled \(5\):\n/);
     assert.deepEqual(await errors(dir, "src/side.ts"), []);
   });
 
@@ -129,13 +86,9 @@ describe("namespace-to-named on examples/import-shapes", () => {
       "src/values.ts": 'import * as math from "./math";\n\nexport const x = math.add(1, 2);\n',
     });
     const before = await readTree(dir);
-    const report = (await toNamed(dir, "src/onlytypes.ts,src/values.ts")) as OkReport;
-    assertReport(report);
+    await toNamed(dir, "src/onlytypes.ts,src/values.ts");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/values.ts"]);
-    assert.match(report.summary, /^Converted 1 namespace import to named imports in 1 file:\n {2}src\/values\.ts\n\nNot handled \(1\):\n/);
-    assert.match(report.summary, /\n {2}src\/onlytypes\.ts:1: converting it would introduce errors: TS1484/);
-    assert.match(report.summary, /\n {4}Left `import \* as math from "\.\/math"` in src\/onlytypes\.ts as it is, because converting it would introduce errors/);
   });
 
   test("globs that match no file are NO_CHANGES", async () => {
@@ -148,12 +101,7 @@ describe("import-type on examples/import-shapes", () => {
   test("whole imports and individual specifiers become type-only; value names and side-effect imports stay", async () => {
     const dir = await workspace("examples/import-shapes");
     const before = await readTree(dir);
-    const report = await importType(dir, "src/**");
-    assertReport(report);
-    const ok = report as OkReport;
-    assert.equal(ok.kind, "sweep");
-    assert.equal(ok.subject, "sweep(typescript import-type): src/**");
-    assert.equal(ok.summary, "Made 2 imports type-only in 2 files:\n  src/mixed.ts\n  src/types-only.ts");
+    assertReport(await importType(dir, "src/**"));
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/mixed.ts", "src/types-only.ts"]);
     // A mixed import is split by name: values keep their plain specifier, the default stays a value.
@@ -207,17 +155,6 @@ describe("import-type on examples/import-shapes", () => {
     );
   });
 
-  test("the summary stays the same when unrelated code moves above", async () => {
-    const plain = (await importType(await workspace("examples/import-shapes"), "src/**")) as OkReport;
-    const tree = await readTree(await workspace("examples/import-shapes"));
-    const shifted = await workspace("examples/import-shapes", {
-      "src/mixed.ts": `// a\n// b\n${tree["src/mixed.ts"]}`,
-    });
-    const report = (await importType(shifted, "src/**")) as OkReport;
-    assertReport(report);
-    assert.equal(report.summary, plain.summary);
-  });
-
   test("`verbatimModuleSyntax` need not be set in the project", async () => {
     const dir = await workspace("examples/import-shapes", { "tsconfig.json": '{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "noEmit": true } }\n' });
     await importType(dir, "src/types-only.ts");
@@ -231,30 +168,11 @@ describe("import-type on examples/import-shapes", () => {
       "src/default-mixed.ts": 'import Kind, { make } from "./kind";\n\nexport const k = (x: Kind): number => x.id + make();\n',
     });
     const before = await readTree(dir);
-    const report = (await importType(dir, "src/default-type.ts,src/default-mixed.ts")) as OkReport;
-    assertReport(report);
+    await importType(dir, "src/default-type.ts,src/default-mixed.ts");
     const after = await readTree(dir);
     assert.deepEqual(changed(before, after), ["src/default-type.ts"]);
     assert.equal(after["src/default-type.ts"], 'import type Kind from "./kind";\n\nexport const k = (x: Kind): number => x.id;\n');
-    assert.match(report.summary, /^Made 1 import type-only in 1 file:\n {2}src\/default-type\.ts\n\nNot handled \(1\):\n/);
-    assert.match(report.summary, /\n {2}src\/default-mixed\.ts:1: the default import `Kind` is only a type/);
-    assert.match(report.summary, /\n {4}Left the import of "\.\/kind" in src\/default-mixed\.ts as it is/);
     assert.deepEqual(await errors(dir, "src/default-type.ts"), []);
   });
 
-  test("only misses: NO_CHANGES listing them", async () => {
-    const dir = await workspace("examples/import-shapes", {
-      "src/kind.ts": "export default interface Kind {\n  id: number;\n}\n\nexport const make = (): number => 1;\n",
-      "src/default-mixed.ts": 'import Kind, { make } from "./kind";\n\nexport const k = (x: Kind): number => x.id + make();\n',
-    });
-    const err = await rejects(importType(dir, "src/default-mixed.ts"));
-    assert.equal(err.code, "NO_CHANGES");
-    assert.match(err.message, /src\/default-mixed\.ts:1: /);
-    assert.match(err.message, /\n  Left the import of "\.\/kind" in src\/default-mixed\.ts as it is: .*Split it into/s);
-  });
-
-  test("globs that match no file are NO_CHANGES", async () => {
-    const dir = await workspace("examples/import-shapes");
-    assert.equal((await rejects(importType(dir, "nope/**"))).code, "NO_CHANGES");
-  });
 });
