@@ -180,34 +180,96 @@ function urlSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteralLi
  * The declaration file of a file, or the files a declaration file declares, in the same folder (whether they exist
  * or not). `declares` is true when the companion is the declaration file. foo.js and foo.jsx ↔ foo.d.ts, foo.mjs ↔
  * foo.d.mts, foo.cjs ↔ foo.d.cts, and any other extension ↔ foo.d.<ext>.ts (allowArbitraryExtensions). A .ts, .tsx,
- * .mts or .cts file has none.
+ * .mts or .cts file has none. `stem` is the name both share (`foo`).
  */
-function declarationCompanions(file: string): { path: string; declares: boolean }[] {
+function declarationCompanions(file: string): { path: string; declares: boolean; stem: string }[] {
   const folder = dirname(file);
   const at = (name: string): string => (folder === "." ? name : `${folder}/${name}`);
   const name = basename(file);
   let m = /^(.+)\.d\.ts$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.js`), declares: false }, { path: at(`${m[1]}.jsx`), declares: false }];
+  if (m !== null) {
+    return [
+      { path: at(`${m[1]}.js`), declares: false, stem: `${m[1]}` },
+      { path: at(`${m[1]}.jsx`), declares: false, stem: `${m[1]}` },
+    ];
+  }
   m = /^(.+)\.d\.mts$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.mjs`), declares: false }];
+  if (m !== null) return [{ path: at(`${m[1]}.mjs`), declares: false, stem: `${m[1]}` }];
   m = /^(.+)\.d\.cts$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.cjs`), declares: false }];
+  if (m !== null) return [{ path: at(`${m[1]}.cjs`), declares: false, stem: `${m[1]}` }];
   m = /^(.+)\.d\.([^.]+)\.ts$/.exec(name);
   if (m !== null) {
     // foo.d.js.ts is not how a JavaScript file is declared: TypeScript looks for foo.d.ts.
     if (/^(m|c)?[jt]sx?$/.test(m[2] as string)) return [];
-    return [{ path: at(`${m[1]}.${m[2]}`), declares: false }];
+    return [{ path: at(`${m[1]}.${m[2]}`), declares: false, stem: `${m[1]}` }];
   }
   m = /^(.+)\.jsx?$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.d.ts`), declares: true }];
+  if (m !== null) return [{ path: at(`${m[1]}.d.ts`), declares: true, stem: `${m[1]}` }];
   m = /^(.+)\.mjs$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.d.mts`), declares: true }];
+  if (m !== null) return [{ path: at(`${m[1]}.d.mts`), declares: true, stem: `${m[1]}` }];
   m = /^(.+)\.cjs$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.d.cts`), declares: true }];
+  if (m !== null) return [{ path: at(`${m[1]}.d.cts`), declares: true, stem: `${m[1]}` }];
   if (/\.(m|c)?tsx?$/.test(name)) return [];
   m = /^(.+)\.([^.]+)$/.exec(name);
-  if (m !== null) return [{ path: at(`${m[1]}.d.${m[2]}.ts`), declares: true }];
+  if (m !== null) return [{ path: at(`${m[1]}.d.${m[2]}.ts`), declares: true, stem: `${m[1]}` }];
   return [];
+}
+
+/**
+ * The moves, with the declaration file of each moved file, or the file a moved declaration file declares, added and
+ * renamed the same way: src/foo.js → lib/bar.js takes src/foo.d.ts → lib/bar.d.ts along, and x.css → y.css takes
+ * x.d.css.ts → y.d.css.ts. A companion already in the moves is left as it is. Refuses (INVALID_ARGS) a companion
+ * whose new place is taken, and a new name the companion could not stay paired with (foo.js → foo.ts).
+ */
+export function withDeclarationFiles(engine: TsEngine, moves: Map<string, string>): Map<string, string> {
+  const listed = new Set(engine.listFiles());
+  const out = new Map(moves);
+  for (const [from, to] of moves) {
+    for (const companion of declarationCompanions(from)) {
+      if (!listed.has(companion.path) || moves.has(companion.path)) continue;
+      const role = companion.declares ? `the declaration file of ${from}` : `the file ${from} declares`;
+      const tail = basename(companion.path).slice(companion.stem.length);
+      const follow = declarationCompanions(to).find(
+        (c) => c.declares === companion.declares && basename(c.path).slice(c.stem.length) === tail,
+      );
+      if (follow === undefined) {
+        throw new RefactorError(
+          "INVALID_ARGS",
+          `${companion.path} is ${role}, and could not stay paired with it as ${to}: the extension changes. ` +
+            `Keep the extension, or move or delete ${companion.path} by hand first, then run again.`,
+        );
+      }
+      // foo.js → foo.jsx: foo.d.ts declares both, so it stays.
+      if (follow.path === companion.path) continue;
+      const earlier = out.get(companion.path);
+      if (earlier !== undefined) {
+        if (earlier !== follow.path) {
+          throw new RefactorError(
+            "INVALID_ARGS",
+            `${companion.path} is ${role}, and would have to become both ${earlier} and ${follow.path}. ` +
+              `Move these files by hand, then run again.`,
+          );
+        }
+        continue;
+      }
+      if ([...out.values()].includes(follow.path)) {
+        throw new RefactorError(
+          "INVALID_ARGS",
+          `${companion.path} is ${role}, and would move along to ${follow.path}, which is already the new place of another file. ` +
+            `Move these files by hand, then run again.`,
+        );
+      }
+      if (engine.read(follow.path) !== null || engine.existsOnDisk(follow.path)) {
+        throw new RefactorError(
+          "INVALID_ARGS",
+          `${follow.path} already exists, and ${companion.path}, ${role}, would move along to it. ` +
+            `Move or remove ${follow.path} first, then run again.`,
+        );
+      }
+      out.set(companion.path, follow.path);
+    }
+  }
+  return out;
 }
 
 /** Plans everything, refuses (REFACTOR_UNAVAILABLE) on any doubtful reference, then applies to the engine. */
@@ -235,6 +297,8 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
   for (const file of sources) {
     for (const companion of declarationCompanions(file)) {
       if (!listed.has(companion.path) || r.moves.has(companion.path)) continue;
+      // foo.js → foo.jsx: foo.d.ts stays, and still declares it.
+      if (declarationCompanions(newOf(file)).some((c) => c.path === companion.path)) continue;
       strays.push(
         companion.declares
           ? `${file} is in --files, but its declaration file ${companion.path} is not`

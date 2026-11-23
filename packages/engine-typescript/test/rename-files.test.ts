@@ -189,6 +189,44 @@ describe("rename-files on examples/rename-files", () => {
   });
 });
 
+describe("rename-files and declaration files", () => {
+  const EXTRA = {
+    "src/widgets/myWidget.js": "export const w = 1;\n",
+    "src/widgets/myWidget.d.ts": "export declare const w: number;\n",
+    "src/widgets/use.ts": 'import { w } from "./myWidget.js";\n\nexport const x = w;\n',
+    "src/widgets/themeColors.css": ".a { color: red; }\n",
+    "src/widgets/themeColors.d.css.ts": "declare const styles: { a: string };\nexport default styles;\n",
+  };
+
+  test("the file a declaration file declares is renamed with it, once", async () => {
+    const dir = await workspace(EXAMPLE, EXTRA);
+    const report = (await rename(dir, "kebab", "src/widgets/**")) as OkReport;
+    assertReport(report);
+    assert.deepEqual(moves(report), [
+      "src/widgets/myWidget.d.ts → src/widgets/my-widget.d.ts",
+      "src/widgets/myWidget.js → src/widgets/my-widget.js",
+      "src/widgets/themeColors.css → src/widgets/theme-colors.css",
+      "src/widgets/themeColors.d.css.ts → src/widgets/theme-colors.d.css.ts",
+    ]);
+    const files = await readTree(dir);
+    assert.equal(files["src/widgets/myWidget.js"], undefined);
+    assert.equal(files["src/widgets/my-widget.js"], "export const w = 1;\n");
+    assert.equal(files["src/widgets/my-widget.d.ts"], "export declare const w: number;\n");
+    assert.equal(files["src/widgets/theme-colors.css"], ".a { color: red; }\n");
+    assert.match(files["src/widgets/use.ts"] ?? "", /from "\.\/my-widget\.js"/);
+  });
+
+  test("refuses when the new name of the declared file is taken", async () => {
+    const dir = await workspace(EXAMPLE, { ...EXTRA, "src/widgets/my-widget.js": "export const other = 2;\n" });
+    const before = await readTree(dir);
+    const err = await rejects(rename(dir, "kebab", "src/widgets/**"));
+    assert.equal(err.code, "INVALID_ARGS");
+    assert.match(err.message, /src\/widgets\/my-widget\.js already exists/);
+    assert.doesNotMatch(err.message, /--to/);
+    assert.deepEqual(await readTree(dir), before);
+  });
+});
+
 describe("rename-files arguments", () => {
   test("refuses an unknown case and a missing one", async () => {
     const dir = await workspace(EXAMPLE);

@@ -2,7 +2,7 @@ import { basename, dirname } from "node:path";
 import { listFiles, listLines, plural, RefactorError } from "@jig/core";
 import type { Action } from "@jig/core";
 import type { TsEngine } from "./engine.ts";
-import { relocate } from "./relocate.ts";
+import { relocate, withDeclarationFiles } from "./relocate.ts";
 import { byString, list as globList, matchFiles, notHandled, required, unavailable } from "./shared.ts";
 import type { NotHandled } from "./shared.ts";
 
@@ -147,19 +147,21 @@ export const renameFilesAction: Action<RenameFilesParams, TsEngine> = {
             : "."),
       );
     }
-    for (const { from } of renames) {
+    // A renamed file's declaration file, or the file a renamed declaration file declares, is renamed with it.
+    const moves = withDeclarationFiles(engine, new Map(renames.map((r) => [r.from, r.to])));
+    for (const from of moves.keys()) {
       if (engine.read(from) === null) unavailable(`${from} cannot be read. Run again on a clean checkout.`);
     }
-    relocate(engine, { mode: "move", moves: new Map(renames.map((r) => [r.from, r.to])) });
-    const touched = new Set(renames.flatMap((r) => [r.from, r.to]));
+    relocate(engine, { mode: "move", moves });
+    const touched = new Set([...moves].flat());
     const others = engine.changes().filter((c) => !touched.has(c.path)).length;
-    const sorted = [...renames].sort((a, b) => byString(a.from, b.from));
+    const sorted = [...moves].map(([from, to]) => ({ from, to })).sort((a, b) => byString(a.from, b.from));
     const misses: NotHandled[] = skipped
       .sort((a, b) => byString(a.file, b.file))
       .map((s) => ({ path: s.file, line: 1, reason: s.reason, instructions: s.instructions }));
     return {
       summary:
-        `Renamed ${plural(renames.length, "file")} to ${p.case} case` +
+        `Renamed ${plural(moves.size, "file")} to ${p.case} case` +
         (others > 0 ? `, updating the imports of ${plural(others, "other file")}` : "") +
         `:\n${listLines(sorted.map((r) => `${r.from} → ${r.to}`))}` +
         (misses.length > 0 ? `\n\n${notHandled(misses)}` : ""),

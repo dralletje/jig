@@ -649,9 +649,12 @@ file under it (missing or empty; symlinks and `node_modules` are not counted) or
 that already exists (file or folder) or lies under a file, a `--to` inside `--from` or equal to it, a path
 outside the repo, a folder holding a `tsconfig*.json`, `jsconfig.json` or `package.json`, and a `--to` in
 another package than `--from` (another nearest package.json, or none where `--from` has one). For
-`move-file` and `rename-files` it refuses a new path that already exists, those config files, and a file
-moved without its declaration file, or the reverse (`foo.js`/`foo.jsx` and `foo.d.ts`, `foo.mjs` and `foo.d.mts`, `foo.cjs`
-and `foo.d.cts`, `foo.css` and `foo.d.css.ts`; a `.ts` file has none). Any reference that cannot follow
+`move-file` and `rename-files`, a file's declaration file moves along, renamed the same way, and so does the
+file a moved declaration file declares (`foo.js`/`foo.jsx` and `foo.d.ts`, `foo.mjs` and `foo.d.mts`, `foo.cjs`
+and `foo.d.cts`, `foo.css` and `foo.d.css.ts`; a `.ts` file has none): `move-file --file src/foo.js --to
+lib/bar.js` also moves `src/foo.d.ts` to `lib/bar.d.ts`, and the summary lists both. They refuse a new path
+that already exists (the companion's too), those config files, and an extension change the pair cannot
+follow (`foo.js` to `foo.ts`, which `foo.d.ts` would no longer declare). Any reference that cannot follow
 refuses the whole action (`REFACTOR_UNAVAILABLE`, nothing written, every problem listed with its file and
 line): one that does not resolve, a package-style specifier (bare name, `baseUrl`, workspace package) or an
 exact `paths`/`imports` key that reaches a moved file, one that reaches its file by another path than it

@@ -320,15 +320,71 @@ describe("move-file", () => {
     );
   });
 
-  test("refuses to move a file without its declaration file", async () => {
+  const PLAIN = {
+    "src/lib/plain.js": "export const p = 1;\n",
+    "src/lib/plain.d.ts": "export declare const p: number;\n",
+    "src/use-plain.ts": 'import { p } from "./lib/plain.js";\n\nexport const q = p;\n',
+  };
+
+  test("a file's declaration file moves along, renamed the same way", async () => {
+    const dir = await workspace("examples/duplicate-folder", PLAIN);
+    const report = (await main(["move-file", "--file", "src/lib/plain.js", "--to", "src/lib2/bar.js"], dir)) as OkReport;
+    assertReport(report);
+    assert.equal(
+      report.summary,
+      "Moved src/lib/plain.js to src/lib2/bar.js and src/lib/plain.d.ts to src/lib2/bar.d.ts, updating the imports of 1 other file.",
+    );
+    const files = await readTree(dir);
+    assert.equal(files["src/lib/plain.js"], undefined);
+    assert.equal(files["src/lib/plain.d.ts"], undefined);
+    assert.equal(files["src/lib2/bar.js"], "export const p = 1;\n");
+    assert.equal(files["src/lib2/bar.d.ts"], "export declare const p: number;\n");
+    contains(files["src/use-plain.ts"], 'from "./lib2/bar.js"');
+  });
+
+  test("a declaration file brings the file it declares along", async () => {
+    const dir = await workspace("examples/duplicate-folder", PLAIN);
+    const report = (await main(["move-file", "--file", "src/lib/plain.d.ts", "--to", "src/lib2/bar.d.ts"], dir)) as OkReport;
+    contains(report.summary, "Moved src/lib/plain.d.ts to src/lib2/bar.d.ts and src/lib/plain.js to src/lib2/bar.js");
+    const files = await readTree(dir);
+    assert.equal(files["src/lib/plain.js"], undefined);
+    assert.equal(files["src/lib2/bar.js"], "export const p = 1;\n");
+    assert.equal(files["src/lib2/bar.d.ts"], "export declare const p: number;\n");
+    contains(files["src/use-plain.ts"], 'from "./lib2/bar.js"');
+  });
+
+  test("a typed CSS module's declaration file moves along", async () => {
     const dir = await workspace("examples/duplicate-folder", {
-      "src/lib/plain.js": "export const p = 1;\n",
-      "src/lib/plain.d.ts": "export declare const p: number;\n",
+      "src/feature/x.css": ".a { color: red; }\n",
+      "src/feature/x.d.css.ts": "declare const styles: { a: string };\nexport default styles;\n",
     });
+    const report = (await main(["move-file", "--file", "src/feature/x.css", "--to", "src/feature/y.css"], dir)) as OkReport;
+    contains(report.summary, "Moved src/feature/x.css to src/feature/y.css and src/feature/x.d.css.ts to src/feature/y.d.css.ts");
+    const files = await readTree(dir);
+    assert.equal(files["src/feature/x.css"], undefined);
+    assert.equal(files["src/feature/x.d.css.ts"], undefined);
+    assert.equal(files["src/feature/y.css"], ".a { color: red; }\n");
+    contains(files["src/feature/y.d.css.ts"], "export default styles;");
+  });
+
+  test("refuses when the declaration file's new place is taken", async () => {
+    const dir = await workspace("examples/duplicate-folder", { ...PLAIN, "src/lib2/bar.d.ts": "export {};\n" });
     const before = await readTree(dir);
-    const err = await rejects(main(["move-file", "--file", "src/lib/plain.js", "--to", "src/lib2/plain.js"], dir));
+    const err = await rejects(main(["move-file", "--file", "src/lib/plain.js", "--to", "src/lib2/bar.js"], dir));
     assert.equal(err.code, "INVALID_ARGS");
-    contains(err.message, "src/lib/plain.js is in --files, but its declaration file src/lib/plain.d.ts is not");
+    contains(err.message, "src/lib2/bar.d.ts already exists");
+    lacks(err.message, "--files");
+    assert.deepEqual(await readTree(dir), before);
+  });
+
+  test("refuses an extension change its declaration file could not follow", async () => {
+    const dir = await workspace("examples/duplicate-folder", PLAIN);
+    const before = await readTree(dir);
+    const err = await rejects(main(["move-file", "--file", "src/lib/plain.js", "--to", "src/lib/plain.ts"], dir));
+    assert.equal(err.code, "INVALID_ARGS");
+    contains(err.message, "src/lib/plain.d.ts");
+    contains(err.message, "src/lib/plain.ts");
+    lacks(err.message, "--files");
     assert.deepEqual(await readTree(dir), before);
   });
 

@@ -1,7 +1,7 @@
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type { TsEngine } from "./engine.ts";
-import { relocate } from "./relocate.ts";
+import { relocate, withDeclarationFiles } from "./relocate.ts";
 import { PREFERENCES, list as globList, matchFiles, required } from "./shared.ts";
 
 // ---------------------------------------------------------------------------------------------
@@ -29,11 +29,13 @@ export const moveFileAction: Action<MoveFileParams, TsEngine> = {
     if (engine.read(to) !== null || engine.existsOnDisk(to)) {
       throw new RefactorError("REFACTOR_UNAVAILABLE", `${to} already exists. Pick another --to, or move that file away first.`);
     }
-    relocate(engine, { mode: "move", moves: new Map([[from, to]]) });
-    const others = engine.changes().filter((c) => c.path !== from && c.path !== to).length;
+    const moves = withDeclarationFiles(engine, new Map([[from, to]]));
+    relocate(engine, { mode: "move", moves });
+    const others = engine.changes().filter((c) => !moves.has(c.path) && ![...moves.values()].includes(c.path)).length;
     return {
       summary:
-        `Moved ${from} to ${to}` + (others > 0 ? `, updating the imports of ${plural(others, "other file")}.` : "."),
+        `Moved ${[...moves].map(([a, b]) => `${a} to ${b}`).join(" and ")}` +
+        (others > 0 ? `, updating the imports of ${plural(others, "other file")}.` : "."),
     };
   },
 };
