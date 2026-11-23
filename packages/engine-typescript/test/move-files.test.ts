@@ -115,6 +115,40 @@ describe("move-files", () => {
     assert.equal(files["src/deep/feature2/pad.ts"], 'import leftPad from "left-pad";\n\nexport const pad = leftPad;\n');
   });
 
+  test("alias and subpath imports of files TypeScript does not resolve follow the move", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/assets/logo.svg": "<svg/>\n",
+      "src/assets/use.ts": 'import "@/assets/logo.svg";\n\nexport {};\n',
+      "src/page.ts": 'import "@/assets/logo.svg";\nimport "#/assets/logo.svg";\nimport "./assets/logo.svg";\n\nexport {};\n',
+    });
+    await main(["move-files", "--files", "src/assets/**", "--from", "src/assets", "--to", "src/media"], dir);
+    const files = await readTree(dir);
+    assert.equal(files["src/page.ts"], 'import "@/media/logo.svg";\nimport "#/media/logo.svg";\nimport "./media/logo.svg";\n\nexport {};\n');
+    assert.equal(files["src/media/use.ts"], 'import "@/media/logo.svg";\n\nexport {};\n');
+  });
+
+  test("a tsconfig paths key starting with # is an alias, not a subpath import", async () => {
+    const dir = await workspace("examples/move-files", {
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: {
+          module: "ESNext",
+          moduleResolution: "bundler",
+          allowImportingTsExtensions: true,
+          noEmit: true,
+          types: [],
+          paths: { "@/*": ["./src/*"], "#app/*": ["./src/*"] },
+        },
+        include: ["src"],
+      }),
+      "src/feature/c.ts": 'import { shared } from "#app/shared";\n\nexport const c = shared;\n',
+      "src/other.ts": 'import { c } from "#app/feature/c";\n\nexport const d = c;\n',
+    });
+    await main(["move-files", ...FEATURE], dir);
+    const files = await readTree(dir);
+    assert.equal(files["src/deep/feature2/c.ts"], 'import { shared } from "#app/shared";\n\nexport const c = shared;\n');
+    contains(files["src/other.ts"], 'from "#app/deep/feature2/c"');
+  });
+
   describe("refusals", () => {
     test("no match is INVALID_ARGS", async () => {
       const dir = await workspace("examples/move-files");

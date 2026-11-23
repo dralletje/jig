@@ -9,6 +9,7 @@ import {
   list as globList,
   importSpecifiers,
   importsOf,
+  matchesPathsKey,
   namedPaths,
   nearestPackageJson,
   required,
@@ -18,7 +19,7 @@ import {
   styleOf,
   usesExactKey,
 } from "./shared.ts";
-import type { NotHandled, Reader } from "./shared.ts";
+import type { NotHandled, Reader, Style } from "./shared.ts";
 
 /**
  * The relocate core, shared by move-files, duplicate-files, move-file and rename-files: a group of files
@@ -277,25 +278,39 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
   };
 
   /**
-   * What a specifier names from `fromAbs` in a world: the absolute path of the file, "package" for a
-   * package (node_modules, an external library), or undefined when it does not resolve. A relative
-   * specifier TypeScript does not resolve that names an existing file exactly (`./styles.css`) names it.
+   * How a specifier is written, as TypeScript reads it: a tsconfig `paths` key is tried before package.json
+   * `imports`, so `#app/x` matching a `"#app/*"` paths key is an alias.
+   */
+  const styleIn = (specifier: string, options: ts.CompilerOptions): Style => {
+    if (specifier.startsWith("#") && Object.keys(options.paths ?? {}).some((key) => key !== "*" && matchesPathsKey(key, specifier))) {
+      return "alias";
+    }
+    return styleOf(specifier, options);
+  };
+
+  /**
+   * What a specifier in `file` (root-relative, its place in that world) names in a world: the absolute path
+   * of the file, "package" for a package (node_modules, an external library), or undefined when it does not
+   * resolve. A relative, alias or subpath specifier TypeScript does not resolve that names an existing file
+   * exactly (`./styles.css`, `@/assets/logo.svg`) names it.
    */
   const targetOf = (
     world: World,
     specifier: string,
-    fromAbs: string,
+    file: string,
     tsconfig: string | null,
     mode: ts.ResolutionMode,
   ): string | "package" | undefined => {
     const options = optionsOf(tsconfig);
+    const fromAbs = engine.absPath(file);
     const found = t.resolveModuleName(specifier, fromAbs, options, world.host, cacheFor(world, tsconfig), undefined, mode).resolvedModule;
     if (found !== undefined) {
       if (found.isExternalLibraryImport === true || found.resolvedFileName.split(sep).includes("node_modules")) return "package";
       return found.resolvedFileName;
     }
-    if (/^\.\.?(\/|$)/.test(specifier)) {
-      const named = resolve(dirname(fromAbs), specifier);
+    const style = styleIn(specifier, options);
+    if (style === "package") return undefined;
+    for (const named of namedPaths(world, file, specifier, style, options) ?? []) {
       const rel = engine.relPath(named);
       if (rel !== named && world.exists(rel)) return named;
     }
@@ -338,9 +353,9 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
       const specifier = literal.text;
       const start = literal.getStart(sf);
       const quoted = JSON.stringify(specifier);
-      const style = styleOf(specifier, options);
+      const style = styleIn(specifier, options);
       const mode = t.getModeForUsageLocation(sf, literal, options);
-      const found = targetOf(before, specifier, fromAbs, tsconfig, mode);
+      const found = targetOf(before, specifier, file, tsconfig, mode);
       if (found === "package") return;
       if (found === undefined) {
         if (moving && style !== "package") {
@@ -485,7 +500,7 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
 
       const newLiteral = newLiterals[index] as ts.StringLiteralLike;
       const newMode = t.getModeForUsageLocation(newSf, newLiteral, newOptions);
-      const resolved = targetOf(after, candidate, newAbs, newTsconfig, newMode);
+      const resolved = targetOf(after, candidate, newFile, newTsconfig, newMode);
       if (resolved !== newTargetAbs) {
         const what = resolved === undefined ? "nothing" : resolved === "package" ? "a package" : engine.relPath(resolved);
         problem(
