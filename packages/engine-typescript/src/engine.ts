@@ -41,6 +41,18 @@ export class TsEngine implements Engine {
   private readonly deleted = new Set<string>();
   /** Bumped whenever `created` or `deleted` changes; projects recompute their root files then. */
   private fileSet = 0;
+  /**
+   * Bumped on every write. Each project's host reports it as its project version, so TypeScript skips
+   * re-checking every file's version when nothing was written since its last look.
+   */
+  private writes = 0;
+  /** Path as TypeScript passes it → `rel` of it. `rel` runs for every file on every version check. */
+  private readonly relCache = new Map<string, string | null>();
+  /**
+   * Absolute folder → the names in it on disk. The disk does not change while the engine runs (writes go
+   * to the overlay until the end), so each folder is listed once.
+   */
+  private readonly listings = new Map<string, Set<string>>();
   /** Folder → its project. */
   private readonly projects = new Map<string, Project>();
 
@@ -60,9 +72,12 @@ export class TsEngine implements Engine {
 
   /** Root-relative `/` path, or null when the path is outside the root. */
   private rel(file: string): string | null {
+    const cached = this.relCache.get(file);
+    if (cached !== undefined) return cached;
     const r = relative(this.repoRoot, resolve(this.repoRoot, file));
-    if (r === "" || r.startsWith("..") || isAbsolute(r)) return null;
-    return r.split(sep).join("/");
+    const result = r === "" || r.startsWith("..") || isAbsolute(r) ? null : r.split(sep).join("/");
+    this.relCache.set(file, result);
+    return result;
   }
 
   /** Absolute form of a root-relative or absolute path. */
@@ -84,11 +99,17 @@ export class TsEngine implements Engine {
    */
   existsOnDisk(rel: string): boolean {
     const abs = join(this.repoRoot, rel);
-    try {
-      return readdirSync(dirname(abs)).includes(basename(abs));
-    } catch {
-      return false;
+    const folder = dirname(abs);
+    let names = this.listings.get(folder);
+    if (names === undefined) {
+      try {
+        names = new Set(readdirSync(folder));
+      } catch {
+        names = new Set();
+      }
+      this.listings.set(folder, names);
     }
+    return names.has(basename(abs));
   }
 
   private readDisk(rel: string): string | null {
@@ -130,6 +151,7 @@ export class TsEngine implements Engine {
     const rel = this.relPath(file);
     this.overlay.set(rel, content);
     this.versions.set(rel, (this.versions.get(rel) ?? 0) + 1);
+    this.writes++;
     const onDisk = this.existsOnDisk(rel);
     const created = content !== null && !onDisk;
     const deleted = content === null && onDisk;
@@ -222,6 +244,7 @@ export class TsEngine implements Engine {
     const host: ts.LanguageServiceHost = {
       getCompilationSettings: settings,
       getScriptFileNames: roots,
+      getProjectVersion: () => String(this.writes),
       getScriptVersion: (f) => {
         const rel = this.rel(f);
         return String(rel === null ? 0 : (this.versions.get(rel) ?? 0));
