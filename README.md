@@ -21,6 +21,7 @@ dist/jig --repo <repo> localhost/jig/typescript:local extract --file src/a.ts --
 dist/jig --repo <repo> localhost/jig/typescript:local lift-out --file src/a.ts --in outer --symbol inner [--to src/inner.ts]
 dist/jig --repo <repo> localhost/jig/typescript:local move-file --file src/a.ts --to src/lib/a.ts
 dist/jig --repo <repo> localhost/jig/typescript:local organize-imports --files "src/**/*.ts,src/**/*.tsx"
+dist/jig --repo <repo> localhost/jig/typescript:local imports-to-alias --files "src/**" --targets "src/lib/**" --alias @/
 dist/jig --repo <repo> localhost/jig/prettier:local format --files "src/**"
 dist/jig --repo <repo> localhost/jig/codemod-react:local rename-unsafe-lifecycles --files "src/**"
 dist/jig --repo <repo> localhost/jig/fs:local move --from src/old --to src/new
@@ -502,7 +503,7 @@ commits:
 | Kind | Meaning | Actions |
 |---|---|---|
 | `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
-| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
+| `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `subpath-imports`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
 The image reports it (`"kind"` in its ok report), the subject starts with it (`sweep(prettier format): src/**`),
@@ -640,6 +641,18 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 | `organize-imports` | `--files` | merges, sorts and drops unused imports (TS `organizeImports`) |
 | `add-import-extensions` | `--files` | relative imports, re-exports and `import("...")` get the real extension (`./a` to `./a.ts`, `./dir` to `./dir/index.ts`), and the tsconfig gets `allowImportingTsExtensions` when needed (it must have `noEmit` or `emitDeclarationOnly`); refuses a file that would gain errors |
 | `subpath-imports` | `--files [--alias @/]` | imports through a tsconfig `paths` alias become Node subpath imports (`#/x`) and the package.json gets `imports`; unresolved or outside-folder specifiers are left alone (named in the summary); `require()`, `import x = require()` and `.js` importers are not handled |
+| `imports-to-relative` | `--files --targets` | alias and subpath imports in `--files` that resolve to a file matching `--targets` (`**` for all) become relative imports (`../lib/date`) resolving to the same file; targets outside the importer's project folder are left alone (named in the summary) |
+| `imports-to-alias` | `--files --targets --alias @/` | relative and subpath imports become imports through the importer's tsconfig `paths` entry `@/*` (one `<folder>/*` target), which must exist (else `INVALID_ARGS`); targets outside that folder are left alone (named) |
+| `imports-to-subpath` | `--files --targets --prefix #/` | relative and alias imports become subpath imports through the nearest package.json's `imports` entry `#/*` (a string `./<folder>/*`), which must exist (else `INVALID_ARGS`); extensionless and folder imports cannot be subpath imports and are left alone (named) |
+
+The three `imports-to-*` sweeps resolve every specifier (`import`/`export … from`, type-only, `import()`,
+`import x = require()`, `require()`, `import("…")` types) with TypeScript under the importer's project, and
+write the new one in the same extension form (`./a`, `./a.ts`, `./a.js` for `a.ts`, `./dir` for its index
+file), keeping it only when it resolves to the same file. Packages never change, nor do imports already in
+the target style (an alias stays an alias whatever its prefix, a `#` import stays as it is). Imports that do
+not resolve, whose form is unclear (an exact `paths` or `imports` key), that would not resolve back to the
+same file, or whose file would gain errors are left alone and named in the summary. tsconfig.json and
+package.json are never changed; only TypeScript importers are looked at.
 | `default-to-named` | `--files [--keep globs]` | `export default` of a named function, class, interface or value becomes a named export and importers switch; anonymous defaults, `import()`/namespace/`require`/mock users and name clashes are left alone (named in the summary); JavaScript importers are only scanned syntactically |
 | `infer-return-types` | `--files [--exported-only true\|false]` | adds the inferred return type to functions without one (TS "Infer function return type"), exported ones only unless `false`; types holding an unwritten `any` or `import("...")`, or not in scope, are left alone (named in the summary) |
 | `namespace-to-named` | `--files` | `import * as x` becomes `import { a, b }` (TS "Convert namespace import to named imports"); only when every use is `x.name`, else left alone (named in the summary) |
@@ -744,6 +757,8 @@ it.
   type-only imports written as value imports, `console.log` calls, and file names in mixed cases.
 - `examples/monorepo`: two packages, `packages/app` importing `packages/shared` through its barrel
   (a tsconfig `paths` entry), each its own TypeScript project.
+- `examples/import-styles`: one package whose imports mix relative, `@/*` alias (tsconfig `paths`) and
+  `#/*` subpath (package.json `imports`) specifiers, for the `imports-to-*` sweeps.
 - `examples/react-app`: a few React components (a class component with legacy lifecycles,
   `ReactDOM.render`) for published React codemods. React is not installed, so it does not typecheck.
 
