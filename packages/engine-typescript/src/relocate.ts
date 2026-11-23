@@ -3,12 +3,17 @@ import type { Dirent } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
-import type ts from "typescript";
+import { SyntaxKind } from "typescript7/ast";
+import type * as ast7 from "typescript7/ast";
+import * as is7 from "typescript7/ast/is";
+import { createFileSystemLayer } from "typescript7/fs";
+import { API } from "typescript7/sync";
+import type { CompilerOptions, ModuleResolver, Program, ResolutionMode, ResolveModuleNameResult, Snapshot } from "typescript7/sync";
 import type { TsEngine } from "./engine.ts";
 import {
   bestWildcardKey,
   byString,
-  importSpecifiers,
+  importSpecifiers7,
   importsOf,
   matchesPathsKey,
   namedPaths,
@@ -20,15 +25,18 @@ import {
   styleOf,
   usesExactKey,
 } from "./shared.ts";
-import type { NotHandled, Reader, Style } from "./shared.ts";
+import type { NotHandled, PathsOptions, Reader, StringLiteralLike7, Style } from "./shared.ts";
 
 /**
  * The relocate core, shared by duplicate-folder, move-file and rename-files: a group of files
  * goes to new paths (moved, or copied), and every import that has to follow is rewritten.
  *
- * Without a program or a language service: each importer is parsed on its own (`ts.createSourceFile`), and
- * each reference is resolved with `ts.resolveModuleName` under the options of the importer's nearest
- * tsconfig.json. A reference is touched only when its importer or its target moves. The new specifier keeps
+ * On TypeScript 7's API (the native compiler, over a pipe), without a language service. Each side of the change
+ * is a snapshot whose filesystem is a layer over the disk: the engine's overlay, plus the copies or moves after.
+ * Importers are parsed by small programs that only parse (no resolution, no lib, no checking), one per nearest
+ * tsconfig.json, which also give each reference its resolution mode. Each reference is resolved with a module
+ * resolver for the options of the importer's nearest tsconfig.json, against the snapshot of that side; the
+ * importers' references are resolved in one batch. A reference is touched only when its importer or its target moves. The new specifier keeps
  * the style (relative, the same `paths` key, the same package.json `imports` key) and the extension form of
  * the old one, and must resolve to the target's new place in the world after the change. Any reference
  * that cannot follow refuses the whole action, and nothing is written.
@@ -47,130 +55,77 @@ export type Relocated = {
   rewritten: { file: string; imports: number }[];
 };
 
-/** `ts.matchFiles`: how TypeScript applies a tsconfig's include and exclude to a listing. Not in the public typings. */
-type MatchFiles = (
-  path: string,
-  extensions: readonly string[] | undefined,
-  excludes: readonly string[] | undefined,
-  includes: readonly string[] | undefined,
-  useCaseSensitiveFileNames: boolean,
-  currentDirectory: string,
-  depth: number | undefined,
-  getFileSystemEntries: (path: string) => { files: readonly string[]; directories: readonly string[] },
-  realpath: (path: string) => string,
-) => string[];
-
-/** One side of the change: which files exist, what they hold, and module resolution that sees just that. */
+/**
+ * One side of the change: which files exist and what they hold (for the specifier helpers), and the TypeScript 7
+ * snapshot that sees just that, through a filesystem layer over the disk.
+ */
 type World = Reader & {
   files: string[];
   exists: (rel: string) => boolean;
-  host: ts.ModuleResolutionHost;
-  /** Absolute folder → the names of the files and folders in it. */
-  entries: Map<string, { files: string[]; directories: string[] }>;
+  snapshot: Snapshot;
+  /** Each parsed file (absolute) → the parse-only program that holds it. */
+  programs: Map<string, Program>;
+  /** Resolutions already asked for, by `resolutionKey`. */
+  resolved: Map<string, ResolveModuleNameResult>;
 };
 
-function makeWorld(engine: TsEngine, files: string[], read: (rel: string) => string | null): World {
-  const t = engine.ts;
-  const present = new Set(files);
-  const folders = new Set<string>();
-  const entries = new Map<string, { files: string[]; directories: string[] }>();
-  const entry = (folder: string): { files: string[]; directories: string[] } => {
-    const abs = engine.absPath(folder === "." ? "" : folder);
-    let found = entries.get(abs);
-    if (found === undefined) {
-      found = { files: [], directories: [] };
-      entries.set(abs, found);
-    }
-    return found;
-  };
-  for (const file of files) {
-    entry(dirname(file)).files.push(basename(file));
-    let folder = dirname(file);
-    while (folder !== "." && !folders.has(folder)) {
-      folders.add(folder);
-      entry(dirname(folder)).directories.push(basename(folder));
-      folder = dirname(folder);
-    }
-  }
-  /** The root-relative path of a listed place, or null for one outside the root or under node_modules (read from disk). */
-  const listed = (abs: string): string | null => {
-    const rel = engine.relPath(abs);
-    if (rel === abs || rel.split("/").includes("node_modules")) return null;
-    return rel;
-  };
-  const host: ts.ModuleResolutionHost = {
-    fileExists: (p) => {
-      const rel = listed(p);
-      return rel === null ? t.sys.fileExists(p) : present.has(rel);
-    },
-    readFile: (p) => {
-      const rel = listed(p);
-      if (rel === null) return t.sys.readFile(p);
-      return present.has(rel) ? (read(rel) ?? undefined) : undefined;
-    },
-    directoryExists: (p) => {
-      const rel = listed(p);
-      return rel === null ? t.sys.directoryExists(p) : folders.has(rel);
-    },
-    realpath: (p) => (listed(p) === null ? (t.sys.realpath?.(p) ?? p) : p),
-    getCurrentDirectory: () => engine.repoRoot,
-  };
-  return {
-    files,
-    exists: (rel) => present.has(rel),
-    read: (rel) => (present.has(rel) ? read(rel) : null),
-    absPath: (file) => engine.absPath(file),
-    relPath: (file) => engine.relPath(file),
-    host,
-    entries,
-  };
+/** A string literal or template without substitutions, as `ts.isStringLiteralLike` checks it. */
+function isStringLiteralLike7(node: ast7.Node): node is StringLiteralLike7 {
+  return is7.isStringLiteral(node) || is7.isNoSubstitutionTemplateLiteral(node);
 }
 
 /** A reference to rewrite: the text between `start` and `end` (inside the quotes) becomes `text`. */
 type Edit = { start: number; end: number; text: string };
 
 /** The `@import` tags and `import("…")` types in the JSDoc of a JavaScript file. */
-function jsDocSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteralLike[] {
-  const out: ts.StringLiteralLike[] = [];
-  const inDoc = (node: ts.Node): void => {
-    if (t.isJSDocImportTag(node) && t.isStringLiteralLike(node.moduleSpecifier)) {
+function jsDocSpecifiers7(sf: ast7.SourceFile): StringLiteralLike7[] {
+  const out: StringLiteralLike7[] = [];
+  const inDoc = (node: ast7.Node): void => {
+    if (is7.isJSDocImportTag(node) && isStringLiteralLike7(node.moduleSpecifier)) {
       out.push(node.moduleSpecifier);
-    } else if (t.isImportTypeNode(node) && t.isLiteralTypeNode(node.argument) && t.isStringLiteral(node.argument.literal)) {
+    } else if (is7.isImportTypeNode(node) && is7.isLiteralTypeNode(node.argument) && is7.isStringLiteral(node.argument.literal)) {
       out.push(node.argument.literal);
     }
-    t.forEachChild(node, inDoc);
+    node.forEachChild(inDoc);
   };
-  const visit = (node: ts.Node): void => {
-    for (const doc of (node as { jsDoc?: ts.JSDoc[] }).jsDoc ?? []) inDoc(doc);
-    t.forEachChild(node, visit);
+  const visit = (node: ast7.Node): void => {
+    for (const doc of node.jsDoc ?? []) inDoc(doc);
+    node.forEachChild(visit);
   };
   visit(sf);
   return out;
 }
 
 /** The first argument of each `new URL("…", import.meta.url)`: a plain string (no substitutions), with exactly `import.meta.url` as the base. */
-function urlSpecifiers(t: TsEngine["ts"], sf: ts.SourceFile): ts.StringLiteralLike[] {
-  const out: ts.StringLiteralLike[] = [];
-  const visit = (node: ts.Node): void => {
-    if (t.isNewExpression(node) && t.isIdentifier(node.expression) && node.expression.text === "URL" && node.arguments?.length === 2) {
+function urlSpecifiers7(sf: ast7.SourceFile): StringLiteralLike7[] {
+  const out: StringLiteralLike7[] = [];
+  const visit = (node: ast7.Node): void => {
+    if (is7.isNewExpression(node) && is7.isIdentifier(node.expression) && node.expression.text === "URL" && node.arguments?.length === 2) {
       const [first, second] = node.arguments;
       if (
         first !== undefined &&
         second !== undefined &&
-        t.isStringLiteralLike(first) &&
-        t.isPropertyAccessExpression(second) &&
-        t.isMetaProperty(second.expression) &&
-        second.expression.keywordToken === t.SyntaxKind.ImportKeyword &&
+        isStringLiteralLike7(first) &&
+        is7.isPropertyAccessExpression(second) &&
+        is7.isMetaProperty(second.expression) &&
+        second.expression.keywordToken === SyntaxKind.ImportKeyword &&
+        is7.isIdentifier(second.expression.name) &&
         second.expression.name.text === "meta" &&
+        is7.isIdentifier(second.name) &&
         second.name.text === "url"
       ) {
         out.push(first);
       }
     }
-    t.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sf);
   return out;
+}
+
+/** The key of a resolution in `World.resolved`: what is resolved, from where, how, under which options. */
+function resolutionKey(tsconfig: string | null, folderAbs: string, mode: ResolutionMode | undefined, specifier: string): string {
+  return `${tsconfig ?? ""}\n${folderAbs}\n${mode ?? ""}\n${specifier}`;
 }
 
 /**
@@ -271,9 +226,20 @@ export function withDeclarationFiles(engine: TsEngine, moves: Map<string, string
   return out;
 }
 
-/** Plans everything, refuses (REFACTOR_UNAVAILABLE) on any doubtful reference, then applies to the engine. */
+/**
+ * Plans everything, refuses (REFACTOR_UNAVAILABLE) on any doubtful reference, then applies to the engine. Runs
+ * TypeScript 7's compiler for the planning, and stops it again before returning.
+ */
 export function relocate(engine: TsEngine, r: Relocation): Relocated {
-  const t = engine.ts;
+  const api = new API({ cwd: engine.repoRoot });
+  try {
+    return relocateWith(engine, r, api);
+  } finally {
+    api.close();
+  }
+}
+
+function relocateWith(engine: TsEngine, r: Relocation, api: API): Relocated {
   const move = r.mode === "move";
   const sources = [...r.moves.keys()].sort(byString);
   /** New path → old path. */
@@ -321,17 +287,6 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
     );
   }
 
-  const before = makeWorld(engine, listing, (rel) => engine.read(rel));
-  const after = makeWorld(
-    engine,
-    [...listing.filter((f) => !(move && r.moves.has(f))), ...origins.keys()].sort(byString),
-    (rel) => {
-      const origin = origins.get(rel);
-      if (origin !== undefined) return engine.read(origin);
-      return engine.read(rel);
-    },
-  );
-
   // ---- tsconfigs: never moved, so the same in both worlds ----
   const tsconfigs = new Set(listing.filter((f) => basename(f) === "tsconfig.json"));
   const nearest = new Map<string, string | null>();
@@ -354,84 +309,218 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
     nearest.set(start, found);
     return found;
   };
-  const parse = (tsconfig: string, world: World, readDirectory: ts.ParseConfigHost["readDirectory"]): ts.ParsedCommandLine | undefined => {
-    const host: ts.ParseConfigFileHost = {
-      useCaseSensitiveFileNames: t.sys.useCaseSensitiveFileNames,
-      readDirectory,
-      fileExists: (p) => world.host.fileExists(p),
-      readFile: (p) => world.host.readFile(p),
-      getCurrentDirectory: () => engine.absPath(dirname(tsconfig)),
-      onUnRecoverableConfigFileDiagnostic: () => {},
-    };
-    return t.getParsedCommandLineOfConfigFile(engine.absPath(tsconfig), undefined, host);
-  };
-  const optionsCache = new Map<string, ts.CompilerOptions>();
+  // The files whose references are read: TypeScript and JavaScript sources, declaration files included.
+  const importers = move ? listing.filter((f) => /\.(m|c)?[jt]sx?$/.test(f)) : sources.filter((f) => /\.(m|c)?[jt]sx?$/.test(f));
+  const movingImporters = importers.filter((f) => r.moves.has(f));
+  const movedSources = sources.filter((f) => /\.(m|c)?[jt]sx?$/.test(f));
+
+  // ---- the two worlds: TypeScript 7 snapshots over filesystem layers ----
+  // Before: the disk with the engine's overlay on it. After: that, with the copies (or moves) made.
+  const beforeWritten = new Map<string, string>();
+  const beforeRemoved = new Set<string>();
+  for (const [rel, content] of engine.overlayEntries()) {
+    if (content === null) beforeRemoved.add(rel);
+    else beforeWritten.set(rel, content);
+  }
+  const afterWritten = new Map(beforeWritten);
+  const afterRemoved = new Set(beforeRemoved);
+  for (const [to, from] of origins) {
+    const text = engine.read(from);
+    if (text === null) throw new Error(`relocate: there is no file ${from}`);
+    afterWritten.set(to, text);
+    afterRemoved.delete(to);
+  }
+  if (move) {
+    for (const from of sources) {
+      afterWritten.delete(from);
+      afterRemoved.add(from);
+    }
+  }
+  const layer = (written: Map<string, string>, removed: Set<string>): ReturnType<typeof createFileSystemLayer> =>
+    createFileSystemLayer(
+      [...written].map(([rel, text]): [string, string] => [engine.absPath(rel), text]),
+      { removedPaths: [...removed].map((rel) => engine.absPath(rel)) },
+    );
+  /** The tsconfigs whose options are read (each importer's, before and after), and whose include is checked. */
+  const beforeProjects = new Set<string>();
+  for (const file of importers) {
+    for (const tsconfig of [tsconfigOf(file), tsconfigOf(newOf(file))]) {
+      if (tsconfig !== null) beforeProjects.add(tsconfig);
+    }
+  }
+  const afterProjects = new Set<string>();
+  for (const file of movedSources) {
+    const tsconfig = tsconfigOf(newOf(file));
+    if (tsconfig !== null) afterProjects.add(tsconfig);
+  }
+  let beforeSnapshot: Snapshot;
+  try {
+    beforeSnapshot = api.createSnapshot({
+      fileSystem: layer(beforeWritten, beforeRemoved),
+      openProjects: [...beforeProjects].map((f) => engine.absPath(f)),
+    });
+  } catch (e) {
+    throw new RefactorError(
+      "REFACTOR_UNAVAILABLE",
+      `TypeScript 7 could not load the projects of ${[...beforeProjects].join(", ") || "the repo root"} ` +
+        `(${(e as Error).message}), so nothing was ${move ? "moved" : "copied"}. Check that these tsconfig.json files are valid, then run again.`,
+    );
+  }
+  const afterSnapshot = api.createSnapshot({
+    fileSystem: layer(afterWritten, afterRemoved),
+    openProjects: [...afterProjects].map((f) => engine.absPath(f)),
+  });
+
+  const optionsCache = new Map<string, CompilerOptions>();
   /** The compiler options of the tsconfig (its errors ignored, as the engine does), or the defaults for none. */
-  const optionsOf = (tsconfig: string | null): ts.CompilerOptions => {
+  const optionsOf = (tsconfig: string | null): CompilerOptions => {
     if (tsconfig === null) return {};
     let options = optionsCache.get(tsconfig);
     if (options === undefined) {
-      options = parse(tsconfig, before, () => [])?.options ?? {};
+      options = beforeSnapshot.getConfiguredProject(engine.absPath(tsconfig))?.parsedCommandLine.options ?? {};
       optionsCache.set(tsconfig, options);
     }
     return options;
   };
-  const matchFiles = (t as unknown as { matchFiles: MatchFiles | undefined }).matchFiles;
-  if (typeof matchFiles !== "function") {
-    throw new RefactorError(
-      "REFACTOR_UNAVAILABLE",
-      `TypeScript ${t.version} lacks ts.matchFiles, the internal jig uses to check a tsconfig's include and files, so nothing was ` +
-        `${move ? "moved" : "copied"}. The typescript image needs updating to a jig that supports this TypeScript version.`,
-    );
-  }
-  const coveredCache = new Map<World, Map<string, Set<string>>>();
+
+  /**
+   * The world of a snapshot, with the files given parsed: one parse-only program per tsconfig (its options, so the
+   * same module format, but nothing resolved, no lib, JavaScript allowed).
+   */
+  const makeWorld = (
+    base: Snapshot,
+    files: string[],
+    read: (rel: string) => string | null,
+    parse: { file: string; tsconfig: string | null }[],
+  ): World => {
+    const groups = new Map<string | null, string[]>();
+    for (const item of parse) {
+      const group = groups.get(item.tsconfig);
+      if (group === undefined) groups.set(item.tsconfig, [engine.absPath(item.file)]);
+      else group.push(engine.absPath(item.file));
+    }
+    const entries = [...groups];
+    const snapshot = base.update({
+      createPrograms: entries.map(([tsconfig, rootFiles]) => ({
+        rootFiles,
+        compilerOptions: { ...optionsOf(tsconfig), allowJs: true, noResolve: true, noLib: true, types: [] },
+      })),
+    });
+    const programs = new Map<string, Program>();
+    const created = snapshot.operation.createdPrograms ?? [];
+    entries.forEach(([, rootFiles], index) => {
+      const program = created[index];
+      if (program === undefined) throw new Error(`relocate: TypeScript 7 created no program for ${rootFiles[0]}`);
+      for (const abs of rootFiles) programs.set(abs, program);
+    });
+    const present = new Set(files);
+    return {
+      files,
+      exists: (rel) => present.has(rel),
+      read: (rel) => (present.has(rel) ? read(rel) : null),
+      absPath: (file) => engine.absPath(file),
+      relPath: (file) => engine.relPath(file),
+      snapshot,
+      programs,
+      resolved: new Map(),
+    };
+  };
+  const before = makeWorld(
+    beforeSnapshot,
+    listing,
+    (rel) => engine.read(rel),
+    importers.map((file) => ({ file, tsconfig: tsconfigOf(file) })),
+  );
+  const after = makeWorld(
+    afterSnapshot,
+    [...listing.filter((f) => !(move && r.moves.has(f))), ...origins.keys()].sort(byString),
+    (rel) => {
+      const origin = origins.get(rel);
+      if (origin !== undefined) return engine.read(origin);
+      return engine.read(rel);
+    },
+    movingImporters.map((file) => ({ file: newOf(file), tsconfig: tsconfigOf(newOf(file)) })),
+  );
+
   /** The absolute paths of the files the tsconfig's include and files take in, in that world. */
   const covered = (world: World, tsconfig: string): Set<string> => {
-    let perWorld = coveredCache.get(world);
-    if (perWorld === undefined) {
-      perWorld = new Map();
-      coveredCache.set(world, perWorld);
-    }
-    let names = perWorld.get(tsconfig);
-    if (names === undefined) {
-      const parsed = parse(tsconfig, world, (path, extensions, excludes, includes, depth) =>
-        matchFiles(
-          path,
-          extensions,
-          excludes,
-          includes,
-          t.sys.useCaseSensitiveFileNames,
-          engine.absPath(dirname(tsconfig)),
-          depth,
-          (folder) => world.entries.get(resolve(folder)) ?? { files: [], directories: [] },
-          (p) => p,
-        ),
-      );
-      names = new Set(parsed?.fileNames ?? []);
-      perWorld.set(tsconfig, names);
-    }
-    return names;
+    const project = world.snapshot.getConfiguredProject(engine.absPath(tsconfig));
+    if (project === undefined) throw new Error(`relocate: ${tsconfig} was not opened in this snapshot`);
+    return new Set(project.parsedCommandLine.fileNames);
   };
-  const caches = new Map<string, ts.ModuleResolutionCache>();
-  const cacheFor = (world: World, tsconfig: string | null): ts.ModuleResolutionCache => {
-    const key = `${world === before ? "before" : "after"}:${tsconfig ?? ""}`;
-    let cache = caches.get(key);
-    if (cache === undefined) {
-      cache = t.createModuleResolutionCache(
-        engine.repoRoot,
-        (s) => (t.sys.useCaseSensitiveFileNames ? s : s.toLowerCase()),
-        optionsOf(tsconfig),
-      );
-      caches.set(key, cache);
+
+  const resolvers = new Map<string, ModuleResolver>();
+  /** A module resolver with the options of the tsconfig (the defaults for none). */
+  const resolverOf = (tsconfig: string | null): ModuleResolver => {
+    let resolver = resolvers.get(tsconfig ?? "");
+    if (resolver === undefined) {
+      resolver = api.createModuleResolver(optionsOf(tsconfig));
+      resolvers.set(tsconfig ?? "", resolver);
     }
-    return cache;
+    return resolver;
   };
+
+  /** Each importer parsed in a world: its source file, its reference literals, and the resolution mode of each. */
+  type Parsed = { sf: ast7.SourceFile; literals: StringLiteralLike7[]; modes: (ResolutionMode | undefined)[] };
+  /** Parses the files (root-relative, as they are in that world) in one batch, and asks their modes in another. */
+  const parseIn = (world: World, files: string[]): Map<string, Parsed> => {
+    const programOf = (abs: string): Program => {
+      const program = world.programs.get(abs);
+      if (program === undefined) throw new Error(`relocate: no program parses ${abs}`);
+      return program;
+    };
+    const absFiles = files.map((f) => engine.absPath(f));
+    const sfs = api.batch(...absFiles.map((abs) => programOf(abs).getSourceFile.gen(abs)));
+    const out = new Map<string, Parsed>();
+    const asks: { parsed: Parsed; gen: ReturnType<Program["getModeForUsageLocation"]["gen"]> }[] = [];
+    absFiles.forEach((abs, index) => {
+      const sf = sfs[index];
+      if (sf === undefined) throw new Error(`relocate: TypeScript 7 did not parse ${abs}`);
+      const literals = [...importSpecifiers7(sf), ...(/\.(m|c)?jsx?$/.test(abs) ? jsDocSpecifiers7(sf) : [])];
+      const parsed: Parsed = { sf, literals, modes: [] };
+      out.set(files[index] as string, parsed);
+      for (const literal of literals) asks.push({ parsed, gen: programOf(abs).getModeForUsageLocation.gen(abs, literal) });
+    });
+    const modes = api.batch(...asks.map((a) => a.gen));
+    asks.forEach((ask, index) => {
+      ask.parsed.modes.push(modes[index] as ResolutionMode | undefined);
+    });
+    return out;
+  };
+  const parsedBefore = parseIn(before, importers);
+  const parsedAfter = parseIn(
+    after,
+    movingImporters.map((f) => newOf(f)),
+  );
+
+  // Every reference of every importer resolved before the change, in one batch: most are only looked up.
+  const asks: { key: string; gen: ReturnType<ModuleResolver["resolveModuleName"]["gen"]> }[] = [];
+  const asked = new Set<string>();
+  for (const file of importers) {
+    const parsed = parsedBefore.get(file);
+    if (parsed === undefined) continue;
+    const tsconfig = tsconfigOf(file);
+    const folderAbs = dirname(engine.absPath(file));
+    parsed.literals.forEach((literal, index) => {
+      const query = literal.text.indexOf("?");
+      const specifier = query === -1 ? literal.text : literal.text.slice(0, query);
+      const mode = parsed.modes[index];
+      const key = resolutionKey(tsconfig, folderAbs, mode, specifier);
+      if (asked.has(key)) return;
+      asked.add(key);
+      asks.push({ key, gen: resolverOf(tsconfig).resolveModuleName.gen(specifier, folderAbs, mode, { snapshot: before.snapshot }) });
+    });
+  }
+  const results = api.batch(...asks.map((a) => a.gen));
+  asks.forEach((ask, index) => {
+    before.resolved.set(ask.key, results[index] as ResolveModuleNameResult);
+  });
 
   /**
    * How a specifier is written, as TypeScript reads it: a tsconfig `paths` key is tried before package.json
    * `imports`, so `#app/x` matching a `"#app/*"` paths key is an alias.
    */
-  const styleIn = (specifier: string, options: ts.CompilerOptions): Style => {
+  const styleIn = (specifier: string, options: CompilerOptions): Style => {
     if (specifier.startsWith("#") && Object.keys(options.paths ?? {}).some((key) => key !== "*" && matchesPathsKey(key, specifier))) {
       return "alias";
     }
@@ -449,11 +538,17 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
     specifier: string,
     file: string,
     tsconfig: string | null,
-    mode: ts.ResolutionMode,
+    mode: ResolutionMode | undefined,
   ): string | "package" | undefined => {
     const options = optionsOf(tsconfig);
-    const fromAbs = engine.absPath(file);
-    const found = t.resolveModuleName(specifier, fromAbs, options, world.host, cacheFor(world, tsconfig), undefined, mode).resolvedModule;
+    const folderAbs = dirname(engine.absPath(file));
+    const key = resolutionKey(tsconfig, folderAbs, mode, specifier);
+    let result = world.resolved.get(key);
+    if (result === undefined) {
+      result = resolverOf(tsconfig).resolveModuleName(specifier, folderAbs, mode, { snapshot: world.snapshot });
+      world.resolved.set(key, result);
+    }
+    const found = result.resolvedModule;
     if (found !== undefined) {
       if (found.isExternalLibraryImport === true || found.resolvedFileName.split(sep).includes("node_modules")) return "package";
       return found.resolvedFileName;
@@ -469,8 +564,6 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
 
   const problems: NotHandled[] = [];
   const planned: { file: string; text: string; imports: number }[] = [];
-  // The files whose references are read: TypeScript and JavaScript sources, declaration files included.
-  const importers = move ? listing.filter((f) => /\.(m|c)?[jt]sx?$/.test(f)) : sources.filter((f) => /\.(m|c)?[jt]sx?$/.test(f));
 
   for (const file of importers) {
     const text = engine.read(file);
@@ -487,24 +580,20 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
       problems.push({ path: file, line: engine.locationAt(file, offset).line, reason, instructions });
     };
 
-    const format = t.getImpliedNodeFormatForFile(fromAbs, cacheFor(before, tsconfig).getPackageJsonInfoCache(), before.host, options);
-    const sf = t.createSourceFile(fromAbs, text, { languageVersion: t.ScriptTarget.Latest, impliedNodeFormat: format }, true);
-    const literals = [...importSpecifiers(t, sf), ...(/\.(m|c)?jsx?$/.test(file) ? jsDocSpecifiers(t, sf) : [])];
-    // The resolution mode after the change: the same file, parsed as the format its new place implies.
-    const newFormat = moving
-      ? t.getImpliedNodeFormatForFile(newAbs, cacheFor(after, newTsconfig).getPackageJsonInfoCache(), after.host, newOptions)
-      : format;
-    const newSf =
-      newFormat === format ? sf : t.createSourceFile(newAbs, text, { languageVersion: t.ScriptTarget.Latest, impliedNodeFormat: newFormat }, true);
-    const newLiterals =
-      newSf === sf ? literals : [...importSpecifiers(t, newSf), ...(/\.(m|c)?jsx?$/.test(file) ? jsDocSpecifiers(t, newSf) : [])];
+    const parsed = parsedBefore.get(file);
+    if (parsed === undefined) throw new Error(`relocate: ${file} was not parsed`);
+    const { sf, literals, modes } = parsed;
+    // After the change: the same text, at its new place (its module format can change there).
+    const parsedNew = moving ? parsedAfter.get(newFile) : parsed;
+    if (parsedNew === undefined) throw new Error(`relocate: ${newFile} was not parsed`);
+    const { literals: newLiterals, modes: newModes } = parsedNew;
 
     const edits: Edit[] = [];
     literals.forEach((literal, index) => {
       const specifier = literal.text;
       const start = literal.getStart(sf);
       const quoted = JSON.stringify(specifier);
-      const mode = t.getModeForUsageLocation(sf, literal, options);
+      const mode = modes[index];
       // A bundler query import (`./icon.svg?react`): what its path part names decides, and it is not rewritten yet.
       const query = specifier.indexOf("?");
       if (query !== -1) {
@@ -634,7 +723,9 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
             );
             return;
           }
-          const base = newOptions.baseUrl ?? newOptions.pathsBasePath;
+          // TypeScript 7 has no baseUrl: paths are relative to the tsconfig's folder, its pathsBasePath (not in its typings).
+          const pathsOptions: PathsOptions = newOptions;
+          const base = pathsOptions.baseUrl ?? pathsOptions.pathsBasePath;
           let written: string | undefined;
           for (const entry of targets) {
             const star = entry.indexOf("*");
@@ -695,8 +786,8 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
         }
       }
 
-      const newLiteral = newLiterals[index] as ts.StringLiteralLike;
-      const newMode = t.getModeForUsageLocation(newSf, newLiteral, newOptions);
+      if (newLiterals.length !== literals.length) throw new Error(`relocate: ${file} parses differently at ${newFile}`);
+      const newMode = newModes[index];
       const resolved = targetOf(after, candidate, newFile, newTsconfig, newMode);
       if (resolved !== newTargetAbs) {
         const what = resolved === undefined ? "nothing" : resolved === "package" ? "a package" : engine.relPath(resolved);
@@ -743,7 +834,7 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
 
     // `new URL("…", import.meta.url)`: a path relative to the file (`./x`, `../x`, or a bare `x`), naming the file
     // exactly. Another scheme (`https:`, `data:`) or an absolute path is not a reference to a file here, and is left alone.
-    for (const literal of urlSpecifiers(t, sf)) {
+    for (const literal of urlSpecifiers7(sf)) {
       const url = literal.text;
       if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) || url.startsWith("/") || url.startsWith("\\")) continue;
       const start = literal.getStart(sf);

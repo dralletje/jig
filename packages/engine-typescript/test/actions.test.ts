@@ -6,8 +6,6 @@ import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
 import type { OkReport, RefactorError } from "@jig/core";
 import { assertReport, makeRepo, readTree } from "@jig/test-utils";
-import { TsEngine } from "../src/engine.ts";
-import { moveFileAction } from "../src/files.ts";
 import { main } from "../src/index.ts";
 
 const BIN = join(import.meta.dirname, "..", "src", "bin.ts");
@@ -411,22 +409,6 @@ describe("move-file", () => {
     contains(err.message, "src/lib/plain.d.ts");
     contains(err.message, "src/lib/plain.ts");
     lacks(err.message, "--files");
-    assert.deepEqual(await readTree(dir), before);
-  });
-
-  test("a TypeScript without the internal matchFiles is refused, not crashed on", async () => {
-    const dir = await workspace("simple", SIMPLE_EVERYWHERE);
-    const before = await readTree(dir);
-    const engine = await TsEngine.load(dir);
-    // Only this engine sees a TypeScript without matchFiles; the module itself is untouched.
-    const ts = engine.ts;
-    const stripped = new Proxy(ts, { get: (target, key) => (key === "matchFiles" ? undefined : Reflect.get(target, key)) });
-    Object.defineProperty(engine, "ts", { value: stripped });
-    const err = await rejects(moveFileAction.run(engine, { file: "b.ts", to: "sub/b.ts" }));
-    assert.equal(err.code, "REFACTOR_UNAVAILABLE");
-    contains(err.message, `TypeScript ${ts.version} lacks ts.matchFiles`);
-    contains(err.message, "image needs updating");
-    assert.equal(typeof (ts as unknown as { matchFiles: unknown }).matchFiles, "function");
     assert.deepEqual(await readTree(dir), before);
   });
 

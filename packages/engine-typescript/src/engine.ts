@@ -146,6 +146,11 @@ export class TsEngine implements Engine {
     return rel !== null && [...this.created].some((f) => f.startsWith(`${rel}/`));
   }
 
+  /** What the overlay holds: root-relative path → content (`null` = deleted). For a TypeScript 7 filesystem layer over the disk. */
+  overlayEntries(): [string, string | null][] {
+    return [...this.overlay];
+  }
+
   /** Every file as the overlay sees it, root-relative and sorted: the files on disk when loaded, plus created, minus deleted. */
   listFiles(): string[] {
     return [...new Set([...this.files, ...this.created])].filter((f) => !this.deleted.has(f)).sort(byString);
