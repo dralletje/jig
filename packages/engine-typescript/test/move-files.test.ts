@@ -223,6 +223,41 @@ describe("move-files", () => {
       assert.deepEqual(await readTree(dir), before);
     });
 
+    test("a query import of a file in the group refuses, in a file that stays too", async () => {
+      const dir = await workspace("examples/move-files", {
+        "src/icons.ts":
+          'import "./feature/logo.png?react";\nimport "@/feature/styles.css?inline";\nimport "#/feature/sub/b.ts?raw";\nimport "./shared.ts?raw";\n\nexport {};\n',
+      });
+      const before = await readTree(dir);
+      const err = await rejects(main(["move-files", ...FEATURE], dir));
+      assert.equal(err.code, "REFACTOR_UNAVAILABLE");
+      assert.match(err.message, /src\/icons\.ts:1: "\.\/feature\/logo\.png\?react" is a query import of src\/feature\/logo\.png, which moves\. jig does not rewrite query imports yet/);
+      assert.match(err.message, /src\/icons\.ts:2: "@\/feature\/styles\.css\?inline" is a query import of src\/feature\/styles\.css/);
+      assert.match(err.message, /src\/icons\.ts:3: "#\/feature\/sub\/b\.ts\?raw" is a query import of src\/feature\/sub\/b\.ts/);
+      lacks(err.message, "src/icons.ts:4:");
+      assert.deepEqual(await readTree(dir), before);
+    });
+
+    test("a query import in a moving file refuses", async () => {
+      const dir = await workspace("examples/move-files", {
+        "src/feature/raw.ts": 'import "../shared.ts?raw";\n\nexport {};\n',
+      });
+      const before = await readTree(dir);
+      const err = await rejects(main(["move-files", ...FEATURE], dir));
+      assert.equal(err.code, "REFACTOR_UNAVAILABLE");
+      assert.match(err.message, /src\/feature\/raw\.ts:1: "\.\.\/shared\.ts\?raw" is a query import in src\/feature\/raw\.ts, which moves\. jig does not rewrite query imports yet/);
+      assert.deepEqual(await readTree(dir), before);
+    });
+
+    test("a query import elsewhere does not stop a move", async () => {
+      const dir = await workspace("examples/move-files", {
+        "src/icons.ts": 'import "./shared.ts?raw";\n\nexport {};\n',
+      });
+      await main(["move-files", ...FEATURE], dir);
+      const files = await readTree(dir);
+      assert.equal(files["src/icons.ts"], 'import "./shared.ts?raw";\n\nexport {};\n');
+    });
+
     test("no match is INVALID_ARGS", async () => {
       const dir = await workspace("examples/move-files");
       const err = await rejects(main(["move-files", "--files", "src/nothing/**", "--from", "src/nothing", "--to", "src/else"], dir));
@@ -378,5 +413,18 @@ describe("duplicate-files", () => {
       'export const logo = new URL("./logo.png", import.meta.url);\nexport const shared = new URL("../../shared.ts", import.meta.url);\n',
     );
     assert.equal(files["src/assets.ts"], 'export const logo = new URL("./feature/logo.png", import.meta.url);\n');
+  });
+
+  test("a query import in a copy refuses; one in a file outside the group does not", async () => {
+    const dir = await workspace("examples/move-files", {
+      "src/feature/inline.ts": 'import "./styles.css?inline";\n\nexport {};\n',
+      "src/icons.ts": 'import "./feature/logo.png?react";\n\nexport {};\n',
+    });
+    const before = await readTree(dir);
+    const err = await rejects(main(["duplicate-files", ...FEATURE], dir));
+    assert.equal(err.code, "REFACTOR_UNAVAILABLE");
+    assert.match(err.message, /src\/feature\/inline\.ts:1: "\.\/styles\.css\?inline" is a query import of src\/feature\/styles\.css, which is copied/);
+    lacks(err.message, "src/icons.ts");
+    assert.deepEqual(await readTree(dir), before);
   });
 });

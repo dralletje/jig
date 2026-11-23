@@ -378,8 +378,34 @@ export function relocate(engine: TsEngine, r: Relocation): Relocated {
       const specifier = literal.text;
       const start = literal.getStart(sf);
       const quoted = JSON.stringify(specifier);
-      const style = styleIn(specifier, options);
       const mode = t.getModeForUsageLocation(sf, literal, options);
+      // A bundler query import (`./icon.svg?react`): what its path part names decides, and it is not rewritten yet.
+      const query = specifier.indexOf("?");
+      if (query !== -1) {
+        const pathPart = specifier.slice(0, query);
+        const pathStyle = styleIn(pathPart, options);
+        const named = targetOf(before, pathPart, file, tsconfig, mode);
+        if (named === "package") return;
+        if (named === undefined && pathStyle === "package") return;
+        const namedFile = named === undefined ? undefined : engine.relPath(named);
+        if (namedFile !== undefined && r.moves.has(namedFile)) {
+          problem(
+            start,
+            `${quoted} is a query import of ${namedFile}, which ${move ? "moves" : "is copied"}`,
+            `jig does not rewrite query imports yet. Move the files by hand, or change the import in ${file} by hand, then run again.`,
+          );
+          return;
+        }
+        if (moving) {
+          problem(
+            start,
+            `${quoted} is a query import in ${file}, which ${move ? "moves" : "is copied"}`,
+            `jig does not rewrite query imports yet. Move the files by hand, or change the import in ${file} by hand, then run again.`,
+          );
+        }
+        return;
+      }
+      const style = styleIn(specifier, options);
       const found = targetOf(before, specifier, file, tsconfig, mode);
       if (found === "package") return;
       if (found === undefined) {
