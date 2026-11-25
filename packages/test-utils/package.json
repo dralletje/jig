@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "ajv": "8.20.0"
+  },
+  "dependencies": {
+    "@dral/toml-tests": "5.2.0"
   }
 }

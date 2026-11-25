@@ -5,11 +5,9 @@
 #   use(..., E, ...);       →      if (d === null) return R;
 #                                  use(..., d, ...);
 #
-# input   = the source of src/a.ts
-# options = the flags: at (without the path: <line>:<column>-<line>:<column>, the end just after the
-#           last character), before, after; `files` (not a flag) writes more files by path
-# output  = src/a.ts afterwards
-# throws  = "^<ERROR_CODE>: ..." (the test throws a RefactorError again as "<code>: <message>")
+# --at is <path>:<line>:<column>-<line>:<column>, the end just after the last character.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards.
 
 name = "replace-same-behavior"
 
@@ -40,7 +38,7 @@ export async function choose(id: string, outcome: Outcome) {
 }
 '''
 options = {
-	at = "8:3-15:5",
+	at = "src/a.ts:8:3-15:5",
 	before = '''
 if (outcome === OUTCOME.ELIGIBLE) {
     return "not-retryable";
@@ -91,7 +89,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "2:3-3:41",
+	at = "src/a.ts:2:3-3:41",
 	before = '''
 if (n < 0) return;
   const size = n > 10 ? "big" : "small";''',
@@ -123,7 +121,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "2:3-3:22",
+	at = "src/a.ts:2:3-3:22",
 	before = '''
 if (n < 0) return;
   console.log(n + 2);''',
@@ -144,7 +142,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "2:3-3:22",
+	at = "src/a.ts:2:3-3:22",
 	before = '''
 if (n < 0) return;
   console.log(n + 1);''',
@@ -166,7 +164,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "2:3-4:22",
+	at = "src/a.ts:2:3-4:22",
 	before = '''
 if (n < 0) return;
   console.log("checked");
@@ -189,7 +187,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "2:3-3:22",
+	at = "src/a.ts:2:3-3:22",
 	before = '''
 if (n < 0) return; else console.log("ok");
   console.log(n + 1);''',
@@ -211,7 +209,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "3:3-4:26",
+	at = "src/a.ts:3:3-4:26",
 	before = '''
 if (n < 0) return;
   console.log(format(n));''',
@@ -234,7 +232,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "4:3-5:25",
+	at = "src/a.ts:4:3-5:25",
 	before = '''
 if (n < 0) return;
   save(nextId(), n + 1);''',
@@ -255,7 +253,7 @@ export function f(label: string | null, skip: boolean) {
 }
 '''
 options = {
-	at = "2:3-3:22",
+	at = "src/a.ts:2:3-3:22",
 	before = '''
 if (skip) return;
   console.log(label);''',
@@ -276,7 +274,7 @@ export function f(n: number, ready: boolean) {
 }
 '''
 options = {
-	at = "2:3-3:31",
+	at = "src/a.ts:2:3-3:31",
 	before = '''
 if (n < 0) return;
   console.log(ready && n + 1);''',
@@ -302,7 +300,7 @@ export function f(c: Counter, stop: boolean) {
 }
 '''
 options = {
-	at = "7:3-8:23",
+	at = "src/a.ts:7:3-8:23",
 	before = '''
 if (stop) return;
   console.log(c.next);''',
@@ -323,7 +321,7 @@ export function f(n: number, m: number) {
 }
 '''
 options = {
-	at = "2:3-3:22",
+	at = "src/a.ts:2:3-3:22",
 	before = '''
 if (n < 0) return;
   console.log(n + m);''',
@@ -344,7 +342,7 @@ export function f(n: number) {
 }
 '''
 options = {
-	at = "2:3-3:22",
+	at = "src/a.ts:2:3-3:22",
 	before = '''
 if (n < 0) return;
   console.log(n + 1);''',
@@ -368,7 +366,7 @@ export function f(s: string | null, n: number) {
 }
 '''
 options = {
-	at = "2:3-3:33",
+	at = "src/a.ts:2:3-3:33",
 	before = '''
 if (s === null) return;
   console.log(s.length + n * 2);''',

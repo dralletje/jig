@@ -243,6 +243,10 @@ importers:
         version: typescript@7.1.0-beta
 
   packages/test-utils:
+    dependencies:
+      '@dral/toml-tests':
+        specifier: 5.2.0
+        version: 5.2.0
     devDependencies:
       ajv:
         specifier: 8.20.0

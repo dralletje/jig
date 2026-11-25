@@ -1,13 +1,10 @@
 # extract-function: whole statements of a function become a new module-level function, right
-# above the top-level declaration they came from.
+# above the top-level declaration they came from. --params and --returns are checked, never
+# inferred: they name exactly the locals the lines read from the function around them, and exactly
+# the locals the lines declare that later code uses.
 #
-# input   = the source of src/a.ts
-# options = the flags: lines, name, params, returns (optional)
-# output  = src/a.ts afterwards
-# throws  = "^<ERROR_CODE>: ..." (the test throws a RefactorError again as "<code>: <message>")
-#
-# --params and --returns are checked, never inferred: they name exactly the locals the lines read
-# from the function around them, and exactly the locals the lines declare that later code uses.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards.
 
 name = "extract-function"
 
@@ -28,6 +25,7 @@ export function report(user: User, items: string[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "4-5",
 	name = "printHeader",
 	params = "user",
@@ -57,6 +55,7 @@ export function report(user: User, items: string[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "4",
 	name = "printSummary",
 	params = "{ user, items }",
@@ -82,6 +81,7 @@ export function point(x: number, y: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "log",
 	params = "[x, y]",
@@ -105,6 +105,7 @@ export function f(a: number, b: string) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "b, a",
@@ -128,6 +129,7 @@ export function f() {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "",
@@ -152,6 +154,7 @@ export function f() {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3",
 	name = "g",
 	params = "n",
@@ -185,6 +188,7 @@ export function total(items: Item[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "4-5",
 	name = "sumPrices",
 	params = "items",
@@ -217,6 +221,7 @@ export function stats(values: number[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-3",
 	name = "range",
 	params = "values",
@@ -246,6 +251,7 @@ export function stats(values: number[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-3",
 	name = "summary",
 	params = "values",
@@ -267,14 +273,20 @@ export function stats(values: number[]) {
 
 [[suites.tests]]
 name = "one const returned: the function returns its value itself"
-input = """
+input = '''
 export function f(n: number) {
   const size = n > 10 ? "big" : "small";
   console.log(size);
 }
-"""
-options = { lines = "2", name = "pickSize", params = "n", returns = "size" }
-output = """
+'''
+options = {
+	file = "src/a.ts",
+	lines = "2",
+	name = "pickSize",
+	params = "n",
+	returns = "size",
+}
+output = '''
 function pickSize(n: number) {
   return n > 10 ? "big" : "small";
 }
@@ -283,12 +295,12 @@ export function f(n: number) {
   const size = pickSize(n);
   console.log(size);
 }
-"""
+'''
 
 
 [[suites.tests]]
 name = "one const over several lines, returned"
-input = """
+input = '''
 export function f(n: number) {
   const size =
     n > 10
@@ -296,9 +308,15 @@ export function f(n: number) {
       : "small";
   console.log(size);
 }
-"""
-options = { lines = "2-5", name = "pickSize", params = "n", returns = "size" }
-output = """
+'''
+options = {
+	file = "src/a.ts",
+	lines = "2-5",
+	name = "pickSize",
+	params = "n",
+	returns = "size",
+}
+output = '''
 function pickSize(n: number) {
   return n > 10
       ? "big"
@@ -309,19 +327,25 @@ export function f(n: number) {
   const size = pickSize(n);
   console.log(size);
 }
-"""
+'''
 
 
 [[suites.tests]]
 name = "one const with a type annotation keeps it"
-input = """
+input = '''
 export function f(n: number) {
   const size: string = n > 10 ? "big" : "small";
   console.log(size);
 }
-"""
-options = { lines = "2", name = "pickSize", params = "n", returns = "size" }
-output = """
+'''
+options = {
+	file = "src/a.ts",
+	lines = "2",
+	name = "pickSize",
+	params = "n",
+	returns = "size",
+}
+output = '''
 function pickSize(n: number) {
   const size: string = n > 10 ? "big" : "small";
   return size;
@@ -331,7 +355,7 @@ export function f(n: number) {
   const size = pickSize(n);
   console.log(size);
 }
-"""
+'''
 
 
 [[suites]]
@@ -349,6 +373,7 @@ export function f(xs: number[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3-4",
 	name = "logDoubled",
 	params = "x",
@@ -378,6 +403,7 @@ export function f(xs: number[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-5",
 	name = "logUntilNegative",
 	params = "xs",
@@ -406,6 +432,7 @@ export const f = (a: number) => {
 };
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3-4",
 	name = "logTwice",
 	params = "a",
@@ -434,6 +461,7 @@ export function f(xs: number[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-4",
 	name = "increment",
 	params = "xs",
@@ -463,6 +491,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-4",
 	name = "logTwice",
 	params = "a",
@@ -494,6 +523,7 @@ export function f(state: State) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "6",
 	name = "double",
 	params = "outcome",
@@ -531,6 +561,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "makeBox",
 	params = "a",
@@ -561,6 +592,7 @@ export function f(a: string | null) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3",
 	name = "g",
 	params = "a",
@@ -576,6 +608,7 @@ export function f(a: number, b: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "a",
@@ -591,6 +624,7 @@ export function f(a: number, b: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "a, b",
@@ -607,6 +641,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "a",
@@ -623,6 +658,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-3",
 	name = "g",
 	params = "a",
@@ -641,6 +677,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3",
 	name = "g",
 	params = "a, total",
@@ -657,6 +694,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "a",
@@ -674,6 +712,7 @@ export function f(xs: number[]) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3",
 	name = "g",
 	params = "x",
@@ -690,6 +729,7 @@ export async function f(p: Promise<number>) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-3",
 	name = "g",
 	params = "p",
@@ -705,6 +745,7 @@ export function f(this: { n: number }) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "",
@@ -722,6 +763,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-3",
 	name = "g",
 	params = "a",
@@ -737,6 +779,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2-3",
 	name = "g",
 	params = "a",
@@ -751,6 +794,7 @@ const a = 1;
 console.log(a);
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "",
@@ -767,6 +811,7 @@ export function f(a: number) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "3",
 	name = "g",
 	params = "a",
@@ -782,6 +827,7 @@ export function f<T>(a: T) {
 }
 '''
 options = {
+	file = "src/a.ts",
 	lines = "2",
 	name = "g",
 	params = "a",
@@ -799,6 +845,7 @@ input = '''
 export function f() {}
 '''
 options = {
+	file = "src/a.ts",
 	lines = "1",
 	name = "g",
 	params = "",
@@ -813,6 +860,7 @@ input = '''
 export function f() {}
 '''
 options = {
+	file = "src/a.ts",
 	lines = "two",
 	name = "g",
 	params = "",

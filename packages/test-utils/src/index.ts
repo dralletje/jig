@@ -92,3 +92,6 @@ export async function readTree(dir: string): Promise<Record<string, string>> {
   await walk(dir, "");
   return out;
 }
+
+export { actionToml } from "./toml-actions.ts";
+export type { RunAction, TypeErrors } from "./toml-actions.ts";
