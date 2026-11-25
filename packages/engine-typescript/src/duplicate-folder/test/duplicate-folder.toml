@@ -1,0 +1,666 @@
+# duplicate-folder: copies the folder --from to --to, rewriting the specifiers of the copies so they keep
+# pointing at what they pointed at (the copies of the files inside the folder, the originals outside it).
+# Importers outside the folder are left on the originals.
+#
+# The example's src/feature/logo.png is a real binary file, which these cases cannot say; each suite
+# replaces it with a text placeholder (options.extra_files). Copying the real bytes is tested in
+# duplicate-folder.test.ts, with the symlinks and the timing.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is files by path, options are the flags in order, output is every changed file.
+
+name = "duplicate-folder"
+
+
+[[suites]]
+name = "copying"
+options = {
+	extra_files = {
+		"src/feature/logo.png" = "logo placeholder\n",
+	},
+}
+
+
+[[suites.tests]]
+name = "copies a folder and leaves outside importers on the originals"
+input = {}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+	typecheck = true,
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+}
+
+
+[[suites.tests]]
+name = "declaration files are copied with the files they declare"
+input = {
+	"src/feature/plain.js" = '''
+export const p = 1;
+''',
+	"src/feature/plain.d.ts" = '''
+export declare const p: number;
+''',
+	"src/feature/theme.css" = '''
+.a {}
+''',
+	"src/feature/theme.d.css.ts" = '''
+declare const styles: Record<string, string>;
+export default styles;
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/plain.d.ts" = '''
+export declare const p: number;
+''',
+	"src/deep/feature2/plain.js" = '''
+export const p = 1;
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+	"src/deep/feature2/theme.css" = '''
+.a {}
+''',
+	"src/deep/feature2/theme.d.css.ts" = '''
+declare const styles: Record<string, string>;
+export default styles;
+''',
+}
+
+
+[[suites.tests]]
+name = "a typed CSS module (theme.d.css.ts) inside the folder is imported as the CSS file in the copy"
+input = {
+	"src/feature/theme.css" = '''
+.a {}
+''',
+	"src/feature/theme.d.css.ts" = '''
+declare const styles: Record<string, string>;
+export default styles;
+''',
+	"src/feature/themed.ts" = '''
+import styles from "./theme.css";
+export const s = styles;
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+	typecheck = true,
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+	"src/deep/feature2/theme.css" = '''
+.a {}
+''',
+	"src/deep/feature2/theme.d.css.ts" = '''
+declare const styles: Record<string, string>;
+export default styles;
+''',
+	"src/deep/feature2/themed.ts" = '''
+import styles from "./theme.css";
+export const s = styles;
+''',
+}
+
+
+[[suites.tests]]
+name = "a copy's import of a typed CSS module outside the folder follows it"
+input = {
+	"src/theme.css" = '''
+.a {}
+''',
+	"src/theme.d.css.ts" = '''
+declare const styles: Record<string, string>;
+export default styles;
+''',
+	"src/feature/themed.ts" = '''
+import styles from "../theme.css";
+import aliased from "@/theme.css";
+export const s = [styles, aliased];
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+	typecheck = true,
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+	"src/deep/feature2/themed.ts" = '''
+import styles from "../../theme.css";
+import aliased from "@/theme.css";
+export const s = [styles, aliased];
+''',
+}
+
+
+[[suites.tests]]
+name = "a copy within the same package (same nearest package.json) is allowed"
+input = {
+	"src/pkg/package.json" = '''
+{ "name": "pkg", "private": true }
+''',
+	"src/pkg/lib/a.ts" = '''
+export const a = 1;
+''',
+}
+options = {
+	from = "src/pkg/lib",
+	to = "src/pkg/lib2",
+}
+output = {
+	"src/pkg/lib2/a.ts" = '''
+export const a = 1;
+''',
+}
+
+
+[[suites.tests]]
+name = "a copy's JSDoc imports and triple-slash references follow it"
+input = {
+	"src/feature/tool.js" = '''
+/** @import { shared } from "../shared.ts" */
+
+/** @param {import("./sub/b.ts").B} value */
+export function apply(value) {
+  return value;
+}
+''',
+	"src/feature/ref.ts" = '''
+/// <reference path="../shared.ts" />
+/// <reference path="./sub/b.ts" />
+export {};
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/ref.ts" = '''
+/// <reference path="../../shared.ts" />
+/// <reference path="./sub/b.ts" />
+export {};
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+	"src/deep/feature2/tool.js" = '''
+/** @import { shared } from "../../shared.ts" */
+
+/** @param {import("./sub/b.ts").B} value */
+export function apply(value) {
+  return value;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "alias and subpath imports in a copy keep their style"
+input = {
+	"src/feature/c.ts" = '''
+import { shared } from "@/shared";
+import { a } from "#/feature/a.ts";
+
+export const c = shared + a;
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/c.ts" = '''
+import { shared } from "@/shared";
+import { a } from "#/deep/feature2/a.ts";
+
+export const c = shared + a;
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+}
+
+
+[[suites.tests]]
+name = "a copy's URLs point at the copies in the folder and at the originals outside it"
+input = {
+	"src/feature/worker.ts" = '''
+export const logo = new URL("./logo.png", import.meta.url);
+export const shared = new URL("../shared.ts", import.meta.url);
+''',
+	"src/assets.ts" = '''
+export const logo = new URL("./feature/logo.png", import.meta.url);
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+output = {
+	"src/deep/feature2/a.ts" = '''
+import { shared } from "../../shared";
+import { b } from "./sub/b";
+import type { B } from "./sub/b.ts";
+import "./styles.css";
+
+export const a = shared + b.b;
+
+export function useB(x: B): number {
+  return x.b;
+}
+''',
+	"src/deep/feature2/index.ts" = '''
+export { a } from "./a";
+export { b } from "./sub/b.ts";
+''',
+	"src/deep/feature2/logo.png" = '''
+logo placeholder
+''',
+	"src/deep/feature2/styles.css" = '''
+.feature {
+  color: teal;
+}
+''',
+	"src/deep/feature2/sub/b.ts" = '''
+export type B = { b: number };
+
+export const b: B = { b: 1 };
+''',
+	"src/deep/feature2/worker.ts" = '''
+export const logo = new URL("./logo.png", import.meta.url);
+export const shared = new URL("../../shared.ts", import.meta.url);
+''',
+}
+
+
+[[suites]]
+name = "refusals"
+options = {
+	extra_files = {
+		"src/feature/logo.png" = "logo placeholder\n",
+	},
+}
+
+
+[[suites.tests]]
+name = "a --from that does not exist is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/nothing",
+	to = "src/else",
+}
+throws = "^INVALID_ARGS: No file is under --from src/nothing"
+
+
+[[suites.tests]]
+name = "a --from that is a file is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/user.ts",
+	to = "src/else",
+}
+throws = "^INVALID_ARGS: --from src/user.ts is a file, not a folder"
+
+
+[[suites.tests]]
+name = "a copy into another package (another nearest package.json) is INVALID_ARGS"
+input = {
+	"src/other/package.json" = '''
+{ "name": "other", "private": true }
+''',
+	"src/other/inner/keep.ts" = '''
+export {};
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/other/feature",
+}
+throws = "^INVALID_ARGS: --from src/feature is in the package of package.json, but --to src/other/feature is in the package of src/other/package.json"
+
+
+[[suites.tests]]
+name = "a copy out of another package (another nearest package.json) is INVALID_ARGS"
+input = {
+	"src/other/package.json" = '''
+{ "name": "other", "private": true }
+''',
+	"src/other/inner/keep.ts" = '''
+export {};
+''',
+}
+options = {
+	from = "src/other/inner",
+	to = "src/inner",
+}
+throws = "^INVALID_ARGS: --from src/other/inner is in the package of src/other/package.json, but --to src/inner is in the package of package.json"
+
+
+[[suites.tests]]
+name = "a --to folder that already exists is INVALID_ARGS"
+input = {
+	"src/feature2/other.ts" = '''
+export {};
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/feature2",
+}
+throws = "^INVALID_ARGS: --to src/feature2 already exists"
+
+
+[[suites.tests]]
+name = "a --to that is an existing file is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/feature",
+	to = "src/shared.ts",
+}
+throws = "^INVALID_ARGS: --to src/shared.ts already exists"
+
+
+[[suites.tests]]
+name = "a --to under an existing file is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/feature",
+	to = "src/shared.ts/feature",
+}
+throws = "^INVALID_ARGS: --to src/shared.ts/feature is under src/shared.ts, which is a file"
+
+
+[[suites.tests]]
+name = "a --to inside --from is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/feature",
+	to = "src/feature/v2",
+}
+throws = "^INVALID_ARGS: --to src/feature/v2 is inside --from src/feature"
+
+
+[[suites.tests]]
+name = "--from equal to --to is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/feature",
+	to = "src/feature/",
+}
+throws = "^INVALID_ARGS: --from and --to are both src/feature"
+
+
+[[suites.tests]]
+name = "the repo root as --from is INVALID_ARGS"
+input = {}
+options = {
+	from = ".",
+	to = "copy",
+}
+throws = "^INVALID_ARGS: --to copy is inside --from \\."
+
+
+[[suites.tests]]
+name = "a --from outside the repo is INVALID_ARGS"
+input = {}
+options = {
+	from = "../elsewhere",
+	to = "src/else",
+}
+throws = "^INVALID_ARGS: --from \\.\\./elsewhere is outside the repo"
+
+
+[[suites.tests]]
+name = "a --to outside the repo is INVALID_ARGS"
+input = {}
+options = {
+	from = "src/feature",
+	to = "/tmp/elsewhere",
+}
+throws = "^INVALID_ARGS: --to /tmp/elsewhere is outside the repo"
+
+
+[[suites.tests]]
+name = "a folder holding a package.json is INVALID_ARGS, named"
+input = {
+	"src/feature/package.json" = '''
+{}
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+throws = "^INVALID_ARGS: src/feature/package.json is under --from src/feature"
+
+
+[[suites.tests]]
+name = "a --to outside the tsconfig's include refuses"
+input = {}
+options = {
+	from = "src/feature",
+	to = "lib/feature",
+}
+throws = "^REFACTOR_UNAVAILABLE: Nothing was copied: 3 references cannot follow[\\s\\S]*tsconfig.json would not include lib/feature/a.ts"
+
+
+[[suites.tests]]
+name = "a query import in a copy refuses"
+input = {
+	"src/feature/inline.ts" = '''
+import "./styles.css?inline";
+
+export {};
+''',
+	"src/icons.ts" = '''
+import "./feature/logo.png?react";
+
+export {};
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+throws = "^REFACTOR_UNAVAILABLE: Nothing was copied: 1 reference cannot follow[\\s\\S]*is a query import of src/feature/styles.css"
+
+
+[[suites.tests]]
+name = "a relative import in a copied file that does not resolve refuses"
+input = {
+	"src/feature/broken.ts" = '''
+import { x } from "./missing";
+
+export const y = x;
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+throws = "^REFACTOR_UNAVAILABLE: Nothing was copied: 1 reference cannot follow[\\s\\S]*\"./missing\" does not resolve"
+
+
+[[suites.tests]]
+name = "a URL with a query or hash in a copy refuses"
+input = {
+	"src/feature/worker.ts" = '''
+export const shared = new URL("../shared.ts#x", import.meta.url);
+''',
+}
+options = {
+	from = "src/feature",
+	to = "src/deep/feature2",
+}
+throws = "^REFACTOR_UNAVAILABLE: Nothing was copied: 1 reference cannot follow[\\s\\S]*has a query or hash"
