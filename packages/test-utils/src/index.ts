@@ -73,15 +73,22 @@ export function assertReport(doc: unknown): void {
   if (errors.length > 0) throw new Error(`not a valid report:\n${errors.join("\n")}\n${JSON.stringify(doc, null, 2)}`);
 }
 
+/**
+ * The files under `dir` (not .git), by path relative to it. Symlinks are neither read nor followed.
+ *
+ * It walks folder by folder: Node 26's `readdir(dir, { recursive: true })` now and then follows a symlink to a
+ * folder (about 1 call in 300 on a tree holding `up -> ..`), looping until ELOOP.
+ */
 export async function readTree(dir: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-  for (const e of entries) {
-    if (!e.isFile()) continue;
-    const full = join(e.parentPath, e.name);
-    const rel = full.slice(dir.length + 1).split("\\").join("/");
-    if (rel === ".git" || rel.startsWith(".git/")) continue;
-    out[rel] = await readFile(full, "utf8");
-  }
+  const walk = async (folder: string, prefix: string): Promise<void> => {
+    for (const e of await readdir(folder, { withFileTypes: true })) {
+      const rel = `${prefix}${e.name}`;
+      if (rel === ".git") continue;
+      if (e.isDirectory()) await walk(join(folder, e.name), `${rel}/`);
+      else if (e.isFile()) out[rel] = await readFile(join(folder, e.name), "utf8");
+    }
+  };
+  await walk(dir, "");
   return out;
 }
