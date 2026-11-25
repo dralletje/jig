@@ -5,18 +5,21 @@ public let usage = """
          jig verify [--repo <path>] [--sandbox docker|rootlesskit] <commit-or-range>
          jig [--sandbox docker|rootlesskit] <image> [--help]
          jig [--sandbox docker|rootlesskit] <image> <action> --help
-  The last two show what an image can do: its actions, or one action's flags (no repo needed).
+         jig --version
+  The <image> --help forms show what an image can do: its actions, or one action's flags (no repo needed).
   <image> is a registry reference (ghcr.io/acme/tool:1.0, node:26), which jig downloads, or
   localhost/<name>, an image in this machine's Docker.
   """
 
 /// What the command line asks for: a run of an image (the default form), `verify` (first argument), an
-/// image's help (`<image>`, `<image> --help`, `<image> <action> --help`) or jig's usage (`--help` alone).
+/// image's help (`<image>`, `<image> --help`, `<image> <action> --help`), jig's usage (`--help` alone) or
+/// jig's version (`--version` alone).
 public enum Command: Equatable, Sendable {
   case run(CLIArgs)
   case verify(VerifyArgs)
   case help(HelpArgs)
   case usage
+  case version
 }
 
 /// `jig [--repo <path>] [--sandbox docker|rootlesskit] <image> [<action>] --help`, or `<image>` alone.
@@ -97,6 +100,9 @@ public func parseCommand(_ argv: [String]) throws -> Command {
   }
   if argv == ["--help"] {
     return .usage
+  }
+  if argv == ["--version"] {
+    return .version
   }
   let cli = try CLIArgs.parse(argv)
   let action: String?

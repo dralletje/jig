@@ -14,6 +14,7 @@ dist/jig verify [--repo <path>] [--sandbox docker|rootlesskit] <commit-or-range>
 dist/jig [--sandbox docker|rootlesskit] <image> [--help]           # the image's actions
 dist/jig [--sandbox docker|rootlesskit] <image> <action> --help    # one action's flags
 dist/jig --help                                                    # this usage
+dist/jig --version                                                 # jig <version>, e.g. jig 0.2.0
 
 dist/jig localhost/jig/fs:local --help
 dist/jig --repo <repo> localhost/jig/typescript:local rename --file src/a.ts --symbol foo --to bar
@@ -347,7 +348,8 @@ Failures use the output v1 failure shape and exit 1: an action the image does no
 `UNKNOWN_ACTION`, listing the image's actions; an image that answers `--help` with a failed report (an
 image built before help) is `IMAGE_FAILED` saying it gives no help and quoting what it said; any other
 answer that is not valid help is `IMAGE_FAILED`, as for a broken report; resolving or running the image
-fails as for a run (`IMAGE_NOT_FOUND`, …). `jig --help` prints jig's usage and exits 0.
+fails as for a run (`IMAGE_NOT_FOUND`, …). `jig --help` prints jig's usage and exits 0. `jig --version` prints `jig <version>` and exits 0: a
+released binary says its release (`jig 0.2.0`), a build of main the next release with `-dev`.
 
 ## Image report v1
 

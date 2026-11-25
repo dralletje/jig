@@ -21,8 +21,8 @@ signal(SIGPIPE, SIG_IGN)
 installInterruptHandlers(report: interruptedJSON)
 
 /// Prints exactly one JSON object on stdout and exits 0 on success (a run that committed, a verify that
-/// is ok, an image's help), 1 otherwise. Two exceptions print text: `jig --help` (the usage), and an
-/// image's help when stdout is a terminal.
+/// is ok, an image's help), 1 otherwise. Three exceptions print text: `jig --help` (the usage),
+/// `jig --version` (`jig <version>`), and an image's help when stdout is a terminal.
 do {
   let command = try parseCommand(Array(CommandLine.arguments.dropFirst()))
   let kind: SandboxKind
@@ -31,6 +31,7 @@ do {
   case .verify(let args): kind = args.sandbox
   case .help(let args): kind = args.sandbox
   case .usage: finishRun(usage, status: 0)
+  case .version: finishRun("jig \(version)", status: 0)
   }
   setInterruptedSandbox(kind)
   let sandbox = try makeSandbox(kind)
@@ -56,6 +57,8 @@ do {
     finishRun(helpJSON(image: answer.image, notes: answer.notes, help: answer.help), status: 0)
   case .usage:
     finishRun(usage, status: 0)
+  case .version:
+    finishRun("jig \(version)", status: 0)
   }
 } catch {
   finishRun(errorJSON(RefactorError.from(error)), status: 1)

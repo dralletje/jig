@@ -148,6 +148,16 @@ func aRunWhoseFirstArgumentIsNotAnActionIsRefused(argv: [String]) {
   }
 }
 
+@Test func jigVersionAlone() throws {
+  #expect(try parseCommand(["--version"]) == .version)
+  // Before an image, --version is an unknown option, as any other.
+  #expect {
+    try parseCommand(["--version", "localhost/x"])
+  } throws: { error in
+    (error as? RefactorError)?.code == .INVALID_ARGS
+  }
+}
+
 @Test func jigHelpIsUsage() throws {
   #expect(try parseCommand(["--help"]) == .usage)
   #expect {
