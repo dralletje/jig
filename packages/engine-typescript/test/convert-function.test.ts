@@ -3,9 +3,12 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { assertReport, readTree } from "@jig/test-utils";
+import { readTree } from "@jig/test-utils";
 import { main } from "../src/index.ts";
-import { errors, rejects, workspace } from "./helpers.ts";
+import { rejects, workspace } from "./helpers.ts";
+
+// The cases that are plain files in, files out (or a refusal) are in src/convert-function/test/convert-function.toml.
+// What stays here runs the converted programs with Node, or converts one file twice.
 
 const EXAMPLE = "examples/convert-function";
 
@@ -35,142 +38,6 @@ function run(dir: string, file: string): string {
     return m ? m[0] : "crashed";
   }
 }
-
-describe("convert-function --to arrow", () => {
-  test("a declaration becomes a const arrow, keeping export, types and body", async () => {
-    const dir = await workspace(EXAMPLE);
-    const report = await convert(dir, "src/math.ts:1", "arrow");
-    assertReport(report);
-    assert.equal(
-      await read(dir, "src/math.ts"),
-      [
-        "export const add = (a: number, b: number): number => {",
-        "  return a + b;",
-        "};",
-        "",
-        "export const double = (n: number): number => n * 2;",
-        "",
-        "export const first = <T>(items: T[]): T | undefined => items[0];",
-        "",
-      ].join("\n"),
-    );
-    assert.deepEqual(await errors(dir, "src/math.ts"), []);
-  });
-
-  test("async, generics and a doc comment are kept", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/a.ts": "/** Loads. */\nexport async function load<T extends object>(x: T, y = 1): Promise<T> {\n  return x;\n}\n",
-    });
-    await convert(dir, "src/a.ts:2", "arrow");
-    assert.equal(
-      await read(dir, "src/a.ts"),
-      "/** Loads. */\nexport const load = async <T extends object>(x: T, y = 1): Promise<T> => {\n  return x;\n};\n",
-    );
-  });
-
-  test("in a .tsx file a single type parameter gets the comma that keeps it from reading as JSX", async () => {
-    const dir = await workspace(EXAMPLE, { "src/a.tsx": "export function id<T>(x: T): T {\n  return x;\n}\n" });
-    await convert(dir, "src/a.tsx:1", "arrow");
-    assert.equal(await read(dir, "src/a.tsx"), "export const id = <T,>(x: T): T => {\n  return x;\n};\n");
-    await convert(dir, "src/a.tsx:1", "function");
-    assert.equal(await read(dir, "src/a.tsx"), "export function id<T>(x: T): T {\n  return x;\n}\n");
-  });
-
-  test("a function expression becomes an arrow; its own name is dropped", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/a.ts": "export const run = function run(a: number) {\n  return a;\n};\n",
-    });
-    await convert(dir, "src/a.ts:1", "arrow");
-    assert.equal(await read(dir, "src/a.ts"), "export const run = (a: number) => {\n  return a;\n};\n");
-  });
-
-  test("an anonymous function expression converts, with parentheses where syntax needs them", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/a.ts": [
-        "export function go(xs: number[], f?: () => number) {",
-        "  const g = f || function () { return 1; };",
-        "  return xs.map(function (x) { return x * g(); });",
-        "}",
-        "",
-      ].join("\n"),
-    });
-    await convert(dir, "src/a.ts:2", "arrow");
-    await convert(dir, "src/a.ts:3", "arrow");
-    assert.equal(
-      await read(dir, "src/a.ts"),
-      [
-        "export function go(xs: number[], f?: () => number) {",
-        "  const g = f || (() => { return 1; });",
-        "  return xs.map((x) => { return x * g(); });",
-        "}",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  test("refuses this, arguments, super and new.target, but not inside a nested function", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/t.ts": "export function a(this: Window) {\n  return 1;\n}\n",
-      "src/u.ts": "export function b(x: number) {\n  return () => this;\n}\n",
-      "src/v.ts": "export function c() {\n  return arguments.length;\n}\n",
-      "src/w.ts": "export function d() {\n  return new.target;\n}\n",
-      "src/ok.ts": "export function e() {\n  return function () { return this; };\n}\n",
-    });
-    await refused(dir, "src/t.ts:1", "arrow", U);
-    await refused(dir, "src/u.ts:1", "arrow", U);
-    await refused(dir, "src/v.ts:1", "arrow", U);
-    await refused(dir, "src/w.ts:1", "arrow", U);
-    await convert(dir, "src/ok.ts:1", "arrow");
-    assert.equal(await read(dir, "src/ok.ts"), "export const e = () => {\n  return function () { return this; };\n};\n");
-  });
-
-  test("refuses a generator", async () => {
-    const dir = await workspace(EXAMPLE, { "src/g.ts": "export function* g() {\n  yield 1;\n}\n" });
-    await refused(dir, "src/g.ts:1", "arrow", U);
-  });
-
-  test("refuses a function called with new, in any file, or used through its prototype", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/ctor.ts": "export function Thing(this: { n: number }) {}\n",
-      "src/ctor2.ts": "export function Plain() {}\n",
-      "src/use.ts": 'import { Plain } from "./ctor2.ts";\nexport const x = new Plain();\n',
-      "src/proto.ts": "export function P() {}\nP.prototype.hello = 1;\n",
-    });
-    await refused(dir, "src/ctor2.ts:1", "arrow", U);
-    await refused(dir, "src/proto.ts:1", "arrow", U);
-  });
-
-  test("refuses an overloaded function", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/o.ts":
-        "export function f(a: string): string;\nexport function f(a: number): number;\nexport function f(a: any): any {\n  return a;\n}\n",
-    });
-    await refused(dir, "src/o.ts:3", "arrow", U);
-    await refused(dir, "src/o.ts:1", "arrow", U);
-  });
-
-  test("refuses a default export", async () => {
-    const dir = await workspace(EXAMPLE, { "src/d.ts": "export default function named() {\n  return 1;\n}\n" });
-    await refused(dir, "src/d.ts:1", "arrow", U);
-  });
-
-  test("refuses a function used before its declaration, but not an export list", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/h.ts": "export const r = later();\nfunction later() {\n  return 1;\n}\n",
-      "src/ok.ts": "export { later };\nfunction later() {\n  return 1;\n}\n",
-    });
-    await refused(dir, "src/h.ts:2", "arrow", U);
-    await convert(dir, "src/ok.ts:2", "arrow");
-    assert.equal(await read(dir, "src/ok.ts"), "export { later };\nconst later = () => {\n  return 1;\n};\n");
-  });
-
-  test("refuses a function expression that calls itself by a different name", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/s.ts": "export const f = function inner(n: number): number {\n  return n ? inner(n - 1) : 0;\n};\n",
-    });
-    await refused(dir, "src/s.ts:1", "arrow", U);
-  });
-});
 
 describe("convert-function runtime behaviour", () => {
   test("refuses a use inside a hoisted function declaration that runs before the const (TDZ)", async () => {
@@ -209,93 +76,9 @@ describe("convert-function runtime behaviour", () => {
       assert.equal(run(dir, file), before, file);
     }
   });
-
-  test("--to function keeps a comment between => and an expression body", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/c.ts": "export const f = (n: number) => // keep me\n  n * 2;\nexport const g = (n: number) => /* and me */ n + 1;\n",
-    });
-    await convert(dir, "src/c.ts:3", "function");
-    await convert(dir, "src/c.ts:1", "function");
-    assert.equal(
-      await read(dir, "src/c.ts"),
-      "export function f(n: number) {\n  // keep me\n  return n * 2;\n}\nexport function g(n: number) {\n  /* and me */\n  return n + 1;\n}\n",
-    );
-  });
 });
 
-describe("convert-function --to function", () => {
-  test("a const arrow becomes a declaration, keeping generics, parameter and return types", async () => {
-    const dir = await workspace(EXAMPLE);
-    const report = await convert(dir, "src/math.ts:7", "function");
-    assertReport(report);
-    assert.equal(
-      await read(dir, "src/math.ts"),
-      [
-        "export function add(a: number, b: number): number {",
-        "  return a + b;",
-        "}",
-        "",
-        "export const double = (n: number): number => n * 2;",
-        "",
-        "export function first<T>(items: T[]): T | undefined {",
-        "  return items[0];",
-        "}",
-        "",
-      ].join("\n"),
-    );
-    assert.deepEqual(await errors(dir, "src/math.ts"), []);
-  });
-
-  test("an object-literal expression body keeps its braces; async and bare parameters work", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/a.ts": "export const box = (n: number) => ({ n });\nconst inc = async x => x + 1;\n",
-    });
-    await convert(dir, "src/a.ts:1", "function");
-    assert.equal(
-      await read(dir, "src/a.ts"),
-      "export function box(n: number) {\n  return { n };\n}\nconst inc = async x => x + 1;\n",
-    );
-  });
-
-  test("a function expression becomes a declaration", async () => {
-    const dir = await workspace(EXAMPLE, { "src/a.ts": "export const f = async function* (n: number) {\n  yield n;\n};\n" });
-    await convert(dir, "src/a.ts:1", "function");
-    assert.equal(await read(dir, "src/a.ts"), "export async function* f(n: number) {\n  yield n;\n}\n");
-  });
-
-  test("refuses this, arguments, super and new.target in the arrow", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/t.ts": "export class A {\n  m = () => {\n    return this;\n  };\n}\nexport const k = () => this;\n",
-      "src/v.ts": "export const v = () => arguments.length;\n",
-      "src/w.ts": "export const w = () => new.target;\n",
-    });
-    await refused(dir, "src/t.ts:6", "function", U);
-    await refused(dir, "src/v.ts:1", "function", U);
-    await refused(dir, "src/w.ts:1", "function", U);
-  });
-
-  test("refuses a type-annotated variable, multiple declarators, let and var", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/a.ts": "export const typed: (n: number) => number = (n) => n;\n",
-      "src/b.ts": "export const one = () => 1, two = () => 2;\n",
-      "src/c.ts": "export let mutable = () => 1;\n",
-    });
-    await refused(dir, "src/a.ts:1", "function", U);
-    await refused(dir, "src/b.ts:1:20", "function", U);
-    await refused(dir, "src/c.ts:1", "function", U);
-  });
-
-  test("an asserts signature survives the conversion", async () => {
-    const dir = await workspace(EXAMPLE, {
-      "src/a.ts": "export const assertIt = (x: unknown): asserts x is string => {\n  if (typeof x !== 'string') throw new Error();\n};\n",
-    });
-    // A function declaration with an asserts signature is fine; this must succeed.
-    await convert(dir, "src/a.ts:1", "function");
-    assert.deepEqual(await errors(dir, "src/a.ts"), []);
-  });
-});
-
-describe("convert-function round trip and --at", () => {
+describe("convert-function round trip", () => {
   test("--to arrow then --to function restores the original text", async () => {
     const dir = await workspace(EXAMPLE);
     const original = await read(dir, "src/math.ts");
@@ -303,30 +86,5 @@ describe("convert-function round trip and --at", () => {
     assert.notEqual(await read(dir, "src/math.ts"), original);
     await convert(dir, "src/math.ts:1", "function");
     assert.equal(await read(dir, "src/math.ts"), original);
-  });
-
-  test("a column picks one of several functions on a line; without it the call is refused", async () => {
-    const two = await workspace(EXAMPLE, {
-      "src/a.ts": "export function a() { return 1; } export function b() { return 2; }\n",
-    });
-    const before = await readTree(two);
-    const several = await rejects(convert(two, "src/a.ts:1", "arrow"));
-    assert.equal(several.code, "INVALID_ARGS");
-    assert.deepEqual(await readTree(two), before);
-    await convert(two, "src/a.ts:1:40", "arrow");
-    assert.equal(await read(two, "src/a.ts"), "export function a() { return 1; } export const b = () => { return 2; };\n");
-  });
-
-  test("bad --at values are INVALID_ARGS, a line without a function is REFACTOR_UNAVAILABLE", async () => {
-    const dir = await workspace(EXAMPLE);
-    for (const at of ["src/math.ts", "src/math.ts:0", "src/math.ts:x", ":3"]) {
-      assert.equal((await rejects(convert(dir, at, "arrow"))).code, "INVALID_ARGS", at);
-    }
-    assert.equal((await rejects(convert(dir, "src/math.ts:2", "arrow"))).code, "REFACTOR_UNAVAILABLE");
-    assert.equal((await rejects(convert(dir, "src/math.ts:99", "arrow"))).code, "INVALID_ARGS");
-    const to = await rejects(main(["convert-function", "--at", "src/math.ts:1", "--to", "class"], dir));
-    assert.equal(to.code, "INVALID_ARGS");
-    const missing = await rejects(main(["convert-function", "--to", "arrow"], dir));
-    assert.equal(missing.code, "INVALID_ARGS");
   });
 });

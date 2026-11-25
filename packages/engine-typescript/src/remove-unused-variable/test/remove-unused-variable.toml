@@ -1,0 +1,805 @@
+# remove-unused-variable: the unused variable (or one destructured element, or one declarator of several) at
+# --at (<path>:<line>[:<column>]) is removed, with its line, its doc comment and its trailing line comment, and
+# without leaving blank-line debris. It is refused while the variable is referenced or exported, is not a plain
+# variable (a parameter, a catch binding, a loop variable), or its initializer could have side effects.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards.
+
+name = "remove-unused-variable"
+
+
+[[suites]]
+name = "remove-unused-variable"
+
+
+[[suites.tests]]
+name = "removes a single declarator and its line"
+input = {}
+options = {
+	at = 'src/report.ts:5',
+}
+output = {
+	"src/report.ts" = '''
+export const VERSION = 1;
+
+export function summarize(values: number[]): string {
+  const label = "total";
+
+  const sum = values.reduce((a, b) => a + b, 0);
+  return `${label}: ${sum}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "blank-line debris: between blank lines one blank stays"
+input = '''
+export function f() {
+  const a = f;
+
+  const b = 1;
+
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:4',
+}
+output = '''
+export function f() {
+  const a = f;
+
+  return a;
+}
+'''
+
+
+[[suites.tests]]
+name = "blank-line debris: first in a block, the blank after goes"
+input = '''
+export function f() {
+  const b = 1;
+
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "blank-line debris: last in a block, the blank before goes"
+input = '''
+export function f() {
+  g();
+
+  const b = 1;
+}
+function g() {}
+'''
+options = {
+	at = 'src/a.ts:4',
+}
+output = '''
+export function f() {
+  g();
+}
+function g() {}
+'''
+
+
+[[suites.tests]]
+name = "blank-line debris: touching lines stay touching"
+input = '''
+export function f() {
+  g();
+  const b = 1;
+  g();
+}
+function g() {}
+'''
+options = {
+	at = 'src/a.ts:3',
+}
+output = '''
+export function f() {
+  g();
+  g();
+}
+function g() {}
+'''
+
+
+[[suites.tests]]
+name = "takes its doc comment and trailing line comment along"
+input = '''
+export function f() {
+  /** The limit. */
+  const limit = 10; // for later
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:3',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "removes one declarator of several (the middle one)"
+input = '''
+export function f() {
+  const a = 1, b = 2, c = 3;
+  return [a, c];
+}
+'''
+options = {
+	at = 'src/a.ts:2:16',
+}
+output = '''
+export function f() {
+  const a = 1, c = 3;
+  return [a, c];
+}
+'''
+
+
+[[suites.tests]]
+name = "removes one declarator of several (the last one)"
+input = '''
+export function f() {
+  const a = 1, b = 2;
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:2:16',
+}
+output = '''
+export function f() {
+  const a = 1;
+  return a;
+}
+'''
+
+
+[[suites.tests]]
+name = "removes one declarator of several (the first one)"
+input = '''
+export function f() {
+  const a = 1, b = 2;
+  return b;
+}
+'''
+options = {
+	at = 'src/a.ts:2:9',
+}
+output = '''
+export function f() {
+  const b = 2;
+  return b;
+}
+'''
+
+
+[[suites.tests]]
+name = "without a column, several candidates on the line are refused"
+input = '''
+export function f() {
+  const a = 1, b = 2;
+  return 0;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^INVALID_ARGS: Line src/a\\.ts:2 has 2 variable names"
+
+
+[[suites.tests]]
+name = "without a column, no candidate on the line is refused"
+input = '''
+export const x = 1;
+
+export const y = 2;
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: There is no variable name starting on line src/a\\.ts:2"
+
+
+[[suites.tests]]
+name = "removes one destructured element and keeps the rest (object pattern)"
+input = '''
+export function f(o: { a: number; b: number; c: number }) {
+  const { a, b, c } = o;
+  return [a, c];
+}
+'''
+options = {
+	at = 'src/a.ts:2:14',
+}
+output = '''
+export function f(o: { a: number; b: number; c: number }) {
+  const { a, c } = o;
+  return [a, c];
+}
+'''
+
+
+[[suites.tests]]
+name = "removes one destructured element and keeps the rest (renamed property)"
+input = '''
+export function f(o: { a: number; b: number }) {
+  const { a, b: renamed } = o;
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:2:17',
+}
+output = '''
+export function f(o: { a: number; b: number }) {
+  const { a } = o;
+  return a;
+}
+'''
+
+
+[[suites.tests]]
+name = "removes one destructured element and keeps the rest (array pattern: the hole keeps the position of what follows)"
+input = '''
+export function f(p: number[]) {
+  const [a, b] = p;
+  return b;
+}
+'''
+options = {
+	at = 'src/a.ts:2:10',
+}
+output = '''
+export function f(p: number[]) {
+  const [, b] = p;
+  return b;
+}
+'''
+
+
+[[suites.tests]]
+name = "removes one destructured element and keeps the rest (array pattern over an array literal, the tail element)"
+input = '''
+export function f() {
+  const [a, b] = [1, 2];
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:2:13',
+}
+output = '''
+export function f() {
+  const [a] = [1, 2];
+  return a;
+}
+'''
+
+
+[[suites.tests]]
+name = "removes the whole declarator when the only destructured element goes"
+input = '''
+export function f(o: { a: number }) {
+  const { a } = o;
+  return o;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f(o: { a: number }) {
+  return o;
+}
+'''
+
+
+[[suites.tests]]
+name = "a module-level variable that is not exported can go"
+input = '''
+const hidden = 1;
+export const shown = 2;
+'''
+options = {
+	at = 'src/a.ts:1',
+}
+output = '''
+export const shown = 2;
+'''
+
+
+[[suites.tests]]
+name = "a function-valued local can go"
+input = '''
+export function f() {
+  const helper = () => 1;
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "refuses a variable that is referenced"
+input = '''
+export function f() {
+  const a = 1;
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is still referenced"
+
+
+[[suites.tests]]
+name = "refuses a variable that is written (a write is a reference)"
+input = '''
+export function f() {
+  let a = 1;
+  a = 2;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is still referenced"
+
+
+[[suites.tests]]
+name = "refuses a variable used as a shorthand property"
+input = '''
+export function f() {
+  const a = 1;
+  return { a };
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is still referenced"
+
+
+[[suites.tests]]
+name = "refuses a variable exported by name"
+input = '''
+const a = 1;
+export { a };
+'''
+options = {
+	at = 'src/a.ts:1',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is still referenced \\(or redeclared, or exported by name\\)"
+
+
+[[suites.tests]]
+name = "refuses an exported variable"
+input = '''
+export const a = 1;
+'''
+options = {
+	at = 'src/a.ts:1',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is exported or ambient"
+
+
+[[suites.tests]]
+name = "refuses a global of a script"
+input = '''
+const a = 1;
+'''
+options = {
+	at = 'src/a.ts:1',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is a global of the script"
+
+
+[[suites.tests]]
+name = "refuses a parameter"
+input = '''
+export function f(a: number) {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:1:19',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is a parameter of a function"
+
+
+[[suites.tests]]
+name = "refuses a catch binding"
+input = '''
+export function f() {
+  try {
+    f();
+  } catch (e) {}
+}
+'''
+options = {
+	at = 'src/a.ts:4:12',
+}
+throws = "^REFACTOR_UNAVAILABLE: `e` is the binding of a catch clause"
+
+
+[[suites.tests]]
+name = "refuses a loop variable"
+input = '''
+export function f(xs: number[]) {
+  for (const x of xs) {}
+}
+'''
+options = {
+	at = 'src/a.ts:2:14',
+}
+throws = "^REFACTOR_UNAVAILABLE: `x` is declared in a for loop header"
+
+
+[[suites.tests]]
+name = "refuses an initializer that calls a function"
+input = '''
+export function f() {
+  const a = g();
+}
+function g() {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: The initializer of `a` \\(src/a\\.ts:2\\) may have side effects"
+
+
+[[suites.tests]]
+name = "refuses an initializer with a call nested in an object"
+input = '''
+export function f() {
+  const a = { b: g() };
+}
+function g() {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: The initializer of `a` \\(src/a\\.ts:2\\) may have side effects"
+
+
+[[suites.tests]]
+name = "refuses an initializer that is a new expression"
+input = '''
+export function f() {
+  const a = new Date();
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+throws = "^REFACTOR_UNAVAILABLE: The initializer of `a` \\(src/a\\.ts:2\\) may have side effects"
+
+
+[[suites.tests]]
+name = "refuses a destructured element whose default calls a function"
+input = '''
+export function f(o: { a: number; b: number }) {
+  const { a = g(), b } = o;
+  return b;
+}
+function g() {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:2:11',
+}
+throws = "^REFACTOR_UNAVAILABLE: The default value of `a` \\(src/a\\.ts:2:11\\) may have side effects"
+
+
+[[suites.tests]]
+name = "accepts the initializer \"s\""
+input = '''
+export function f() {
+  const a = "s";
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "accepts the initializer -1"
+input = '''
+export function f() {
+  const a = -1;
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "accepts the initializer `a${f}`"
+input = '''
+export function f() {
+  const a = `a${f}`;
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "accepts the initializer [1, f, () => 1]"
+input = '''
+export function f() {
+  const a = [1, f, () => 1];
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "accepts the initializer { a: 1, b: f, c() { return 1; } }"
+input = '''
+export function f() {
+  const a = { a: 1, b: f, c() { return 1; } };
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "accepts the initializer function () {}"
+input = '''
+export function f() {
+  const a = function () {};
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "accepts the initializer f as unknown"
+input = '''
+export function f() {
+  const a = f as unknown;
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+}
+output = '''
+export function f() {
+  return f;
+}
+'''
+
+
+[[suites.tests]]
+name = "refuses a destructured element before a rest element (the rest would pick the property up)"
+input = '''
+export function f(o: { a: number; b: number }) {
+  const { a, ...rest } = o;
+  return rest;
+}
+'''
+options = {
+	at = 'src/a.ts:2:11',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` \\(src/a\\.ts:2:11\\) sits before a `\\.\\.\\.rest` element"
+
+
+[[suites.tests]]
+name = "refuses the only element of a nested pattern"
+input = '''
+export function f(o: { a: { b: number }; c: number }) {
+  const { a: { b }, c } = o;
+  return c;
+}
+'''
+options = {
+	at = 'src/a.ts:2:16',
+}
+throws = "^REFACTOR_UNAVAILABLE: `b` is the only element of a nested pattern"
+
+
+[[suites.tests]]
+name = "refuses an array pattern over a call"
+input = '''
+export function f(p: number[]) {
+  const [a] = p;
+}
+'''
+options = {
+	at = 'src/a.ts:2:10',
+}
+throws = "^REFACTOR_UNAVAILABLE: Removing `a` \\(src/a\\.ts:2:10\\) would drop the destructuring of an iterable"
+
+
+[[suites.tests]]
+name = "refuses the tail element of an array pattern over a generator"
+input = '''
+function* g() {
+  yield 1;
+  yield 2;
+}
+export function f() {
+  const [a, b] = g();
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:6:13',
+}
+throws = "^REFACTOR_UNAVAILABLE: Removing `b` \\(src/a\\.ts:6:13\\) would drop the destructuring of an iterable"
+
+
+[[suites.tests]]
+name = "refuses the body of an if, which would be left without one"
+input = '''
+export function f(c: boolean) {
+  if (c) var a = 1;
+}
+'''
+options = {
+	at = 'src/a.ts:2:14',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` is the only statement of a larger statement"
+
+
+[[suites.tests]]
+name = "a point that is not a variable name is refused"
+input = '''
+export function f() {
+  const a = 1;
+  return f;
+}
+'''
+options = {
+	at = 'src/a.ts:3:3',
+}
+throws = "^REFACTOR_UNAVAILABLE: There is no variable name at src/a\\.ts:3:3"
+
+
+[[suites.tests]]
+name = "a malformed --at (no line)"
+input = {}
+options = {
+	at = 'src/report.ts',
+}
+throws = "^INVALID_ARGS: --at must be <path>:<line>"
+
+
+[[suites.tests]]
+name = "a missing --at"
+input = {}
+options = {}
+throws = "^INVALID_ARGS: Missing --at"
+
+
+[[suites.tests]]
+name = "same-named locals in sibling blocks: the one at --at goes (first block)"
+input = '''
+export function f(a: boolean) {
+  if (a) {
+    const t = 1;
+  } else {
+    const t = 2;
+  }
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:3',
+}
+output = '''
+export function f(a: boolean) {
+  if (a) {
+  } else {
+    const t = 2;
+  }
+  return a;
+}
+'''
+
+
+[[suites.tests]]
+name = "same-named locals in sibling blocks: the one at --at goes (second block)"
+input = '''
+export function f(a: boolean) {
+  if (a) {
+    const t = 1;
+  } else {
+    const t = 2;
+  }
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:5',
+}
+output = '''
+export function f(a: boolean) {
+  if (a) {
+    const t = 1;
+  } else {
+  }
+  return a;
+}
+'''
