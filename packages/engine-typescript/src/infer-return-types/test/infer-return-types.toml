@@ -1,0 +1,474 @@
+# infer-return-types: the functions without a return type in --files get the type TypeScript infers,
+# written down. Only exported functions, methods, object-literal methods and get accessors, unless
+# --exported-only is false. A type that would need an import, or that names something not in scope, and
+# an `any` nobody wrote are left alone.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards; a table
+# input and output are files by path, the output holding every changed file.
+
+name = "infer-return-types"
+
+
+[[suites]]
+name = "infer-return-types on examples/infer-return-types"
+
+
+[[suites.tests]]
+name = "exported functions and methods gain the inferred types; the rest is left as it is"
+input = {}
+options = {
+	files = "src/**",
+	typecheck = true,
+}
+output = {
+	"src/orders.ts" = '''
+import { makeLine, makeOrder } from "./models.ts";
+import type { Order } from "./models.ts";
+
+export function countLines(order: Order): number {
+  return order.lines.length;
+}
+
+export function totalQuantity(order: Order): number {
+  return order.lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+export function describe(order: Order): { id: string; lines: number; empty: boolean; } {
+  return { id: order.id, lines: order.lines.length, empty: order.lines.length === 0 };
+}
+
+export const skus = (order: Order): string[] => order.lines.map((line) => line.sku);
+
+export function emptyOrder(id: string): Order {
+  return makeOrder(id, []);
+}
+
+export function singleLine(sku: string) {
+  return makeLine(sku, 1);
+}
+
+export function summarize(order: Order): string {
+  return `${order.id}: ${countLines(order)} lines`;
+}
+
+export class OrderService {
+  private orders = new Map<string, Order>();
+
+  add(order: Order): number {
+    this.orders.set(order.id, order);
+    return this.orders.size;
+  }
+
+  find(id: string): Order | undefined {
+    return this.orders.get(id);
+  }
+
+  ids(): string[] {
+    return [...this.orders.keys()];
+  }
+
+  private count() {
+    return this.orders.size;
+  }
+}
+
+function normalize(sku: string) {
+  return sku.trim().toLowerCase();
+}
+
+const double = (n: number) => n * 2;
+
+export function internalUse(order: Order): number {
+  return double(order.lines.map((line) => normalize(line.sku)).length);
+}
+''',
+	"src/reports.ts" = '''
+import { makeLine, makeOrder } from "./models.ts";
+
+export function firstLine(skus: string[]) {
+  return makeOrder("report", skus.map((sku) => makeLine(sku, 1))).lines[0];
+}
+
+export function reportTitle(name: string): string {
+  return `Report ${name}`;
+}
+
+export function pageSize(): number {
+  return 20;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a second run has nothing left to annotate"
+input = {
+	"src/orders.ts" = '''
+import { makeLine, makeOrder } from "./models.ts";
+import type { Order } from "./models.ts";
+
+export function countLines(order: Order): number {
+  return order.lines.length;
+}
+
+export function totalQuantity(order: Order): number {
+  return order.lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+export function describe(order: Order): { id: string; lines: number; empty: boolean; } {
+  return { id: order.id, lines: order.lines.length, empty: order.lines.length === 0 };
+}
+
+export const skus = (order: Order): string[] => order.lines.map((line) => line.sku);
+
+export function emptyOrder(id: string): Order {
+  return makeOrder(id, []);
+}
+
+export function singleLine(sku: string) {
+  return makeLine(sku, 1);
+}
+
+export function summarize(order: Order): string {
+  return `${order.id}: ${countLines(order)} lines`;
+}
+
+export class OrderService {
+  private orders = new Map<string, Order>();
+
+  add(order: Order): number {
+    this.orders.set(order.id, order);
+    return this.orders.size;
+  }
+
+  find(id: string): Order | undefined {
+    return this.orders.get(id);
+  }
+
+  ids(): string[] {
+    return [...this.orders.keys()];
+  }
+
+  private count() {
+    return this.orders.size;
+  }
+}
+
+function normalize(sku: string) {
+  return sku.trim().toLowerCase();
+}
+
+const double = (n: number) => n * 2;
+
+export function internalUse(order: Order): number {
+  return double(order.lines.map((line) => normalize(line.sku)).length);
+}
+''',
+	"src/reports.ts" = '''
+import { makeLine, makeOrder } from "./models.ts";
+
+export function firstLine(skus: string[]) {
+  return makeOrder("report", skus.map((sku) => makeLine(sku, 1))).lines[0];
+}
+
+export function reportTitle(name: string): string {
+  return `Report ${name}`;
+}
+
+export function pageSize(): number {
+  return 20;
+}
+''',
+}
+options = {
+	files = "src/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "--exported-only false includes functions that are not exported"
+input = {}
+options = {
+	files = "src/orders.ts",
+	"exported-only" = false,
+	typecheck = true,
+}
+output = {
+	"src/orders.ts" = '''
+import { makeLine, makeOrder } from "./models.ts";
+import type { Order } from "./models.ts";
+
+export function countLines(order: Order): number {
+  return order.lines.length;
+}
+
+export function totalQuantity(order: Order): number {
+  return order.lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+export function describe(order: Order): { id: string; lines: number; empty: boolean; } {
+  return { id: order.id, lines: order.lines.length, empty: order.lines.length === 0 };
+}
+
+export const skus = (order: Order): string[] => order.lines.map((line) => line.sku);
+
+export function emptyOrder(id: string): Order {
+  return makeOrder(id, []);
+}
+
+export function singleLine(sku: string) {
+  return makeLine(sku, 1);
+}
+
+export function summarize(order: Order): string {
+  return `${order.id}: ${countLines(order)} lines`;
+}
+
+export class OrderService {
+  private orders = new Map<string, Order>();
+
+  add(order: Order): number {
+    this.orders.set(order.id, order);
+    return this.orders.size;
+  }
+
+  find(id: string): Order | undefined {
+    return this.orders.get(id);
+  }
+
+  ids(): string[] {
+    return [...this.orders.keys()];
+  }
+
+  private count(): number {
+    return this.orders.size;
+  }
+}
+
+function normalize(sku: string): string {
+  return sku.trim().toLowerCase();
+}
+
+const double = (n: number): number => n * 2;
+
+export function internalUse(order: Order): number {
+  return double(order.lines.map((line) => normalize(line.sku)).length);
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "--files limits the sweep"
+input = {}
+options = {
+	files = "src/reports.ts",
+}
+output = {
+	"src/reports.ts" = '''
+import { makeLine, makeOrder } from "./models.ts";
+
+export function firstLine(skus: string[]) {
+  return makeOrder("report", skus.map((sku) => makeLine(sku, 1))).lines[0];
+}
+
+export function reportTitle(name: string): string {
+  return `Report ${name}`;
+}
+
+export function pageSize(): number {
+  return 20;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "functions exported by name later, and default exports, count as exported"
+input = '''
+function late() {
+  return 1;
+}
+function hidden() {
+  return 2;
+}
+export { late as renamed };
+export default function () {
+  return 'x';
+}
+'''
+options = {
+	files = "src/a.ts",
+}
+output = '''
+function late(): number {
+  return 1;
+}
+function hidden() {
+  return 2;
+}
+export { late as renamed };
+export default function (): string {
+  return 'x';
+}
+'''
+
+
+[[suites.tests]]
+name = "no function to annotate is NO_CHANGES"
+input = {}
+options = {
+	files = "src/models.ts",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a bad --exported-only is INVALID_ARGS"
+input = {}
+options = {
+	files = "src/**",
+	"exported-only" = "maybe",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "files that match nothing are NO_CHANGES"
+input = {}
+options = {
+	files = "nothing/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a function whose inferred type names something not in scope is left; the others proceed"
+input = '''
+export function good(): number {
+  return 1;
+}
+export function outer() {
+  interface Hidden {
+    a: number;
+  }
+  const make = () => {
+    const h: Hidden = { a: 1 };
+    return h;
+  };
+  return make;
+}
+export function fine() {
+  return 'x';
+}
+'''
+options = {
+	files = "src/a.ts",
+	typecheck = true,
+}
+output = '''
+export function good(): number {
+  return 1;
+}
+export function outer() {
+  interface Hidden {
+    a: number;
+  }
+  const make = () => {
+    const h: Hidden = { a: 1 };
+    return h;
+  };
+  return make;
+}
+export function fine(): string {
+  return 'x';
+}
+'''
+
+
+[[suites.tests]]
+name = "a type that needs an unexported interface of another file does not block the file"
+input = {
+	"src/hidden.ts" = '''
+interface Hidden {
+  a: number;
+}
+export const make = (): Hidden => ({ a: 1 });
+''',
+	"src/user.ts" = '''
+import { make } from './hidden.ts';
+export function viaHidden() {
+  return make();
+}
+export function plain() {
+  return 2;
+}
+''',
+}
+options = {
+	files = "src/user.ts",
+	typecheck = true,
+}
+output = {
+	"src/user.ts" = '''
+import { make } from './hidden.ts';
+export function viaHidden() {
+  return make();
+}
+export function plain(): number {
+  return 2;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "object-literal methods and get accessors are candidates"
+input = '''
+export const api = {
+  count() {
+    return 1;
+  },
+  get label() {
+    return 'x';
+  },
+};
+const local = {
+  hidden() {
+    return 2;
+  },
+};
+export class K {
+  get size() {
+    return 3;
+  }
+}
+export default local;
+'''
+options = {
+	files = "src/a.ts",
+	typecheck = true,
+}
+output = '''
+export const api = {
+  count(): number {
+    return 1;
+  },
+  get label(): string {
+    return 'x';
+  },
+};
+const local = {
+  hidden(): number {
+    return 2;
+  },
+};
+export class K {
+  get size(): number {
+    return 3;
+  }
+}
+export default local;
+'''
