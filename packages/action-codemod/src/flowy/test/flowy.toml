@@ -1,0 +1,28 @@
+# flowy: a stand-in transform that renames the identifier x to y and declares the parser flow.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
+
+name = "flowy"
+
+
+[[suites]]
+name = "parser"
+
+
+[[suites.tests]]
+name = "a transform that declares parser flow gets it"
+input = {
+	"a.js" = '''
+const x = (1: number);
+''',
+}
+options = {
+	files = "a.js",
+}
+output = {
+	"a.js" = '''
+const y = (1: number);
+''',
+}

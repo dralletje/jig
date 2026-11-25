@@ -1,0 +1,332 @@
+# format: formats the matching files with the repo's own prettier config, prettier's defaults when
+# there is none or it fails to load. Files prettier ignores (.prettierignore) or cannot parse are
+# skipped.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
+
+name = "format"
+
+
+[[suites]]
+name = "format"
+
+
+[[suites.tests]]
+name = "formats matching files with the repo's config"
+input = {
+	"ugly.ts" = '''
+export const   x = {a:1,
+  b:'two'}
+''',
+}
+options = {
+	fixture = "simple",
+	files = "ugly.ts",
+}
+output = {
+	"ugly.ts" = '''
+export const x = { a: 1, b: "two" };
+''',
+}
+
+
+[[suites.tests]]
+name = "no prettier config: prettier defaults"
+input = {
+	"q.ts" = '''
+const a = 'x'
+''',
+}
+options = {
+	files = "q.ts",
+}
+output = {
+	"q.ts" = '''
+const a = "x";
+''',
+}
+
+
+[[suites.tests]]
+name = "a config that fails to load falls back to the defaults"
+input = {
+	"prettier.config.mjs" = '''
+import x from "nope"; export default x;
+''',
+	"q.ts" = '''
+const a = 'x'
+''',
+}
+options = {
+	files = "q.ts",
+}
+output = {
+	"q.ts" = '''
+const a = "x";
+''',
+}
+
+
+[[suites.tests]]
+name = "a plugin the image does not have is dropped, the rest of the config applies"
+input = {
+	".prettierrc" = '''
+{"plugins":["prettier-plugin-nope"],"singleQuote":true}
+''',
+	"q.ts" = '''
+const a = "x"
+''',
+}
+options = {
+	files = "q.ts",
+}
+output = {
+	"q.ts" = '''
+const a = 'x';
+''',
+}
+
+
+[[suites.tests]]
+name = ".prettierignore is respected"
+input = {
+	".prettierignore" = '''
+skip.ts
+''',
+	"skip.ts" = '''
+const a = 'x'
+''',
+	"do.ts" = '''
+const a = 'x'
+''',
+}
+options = {
+	files = "*.ts",
+}
+output = {
+	"do.ts" = '''
+const a = "x";
+''',
+}
+
+
+[[suites.tests]]
+name = "files prettier cannot parse are skipped"
+input = {
+	"data.bin" = '''
+a   =   'b'
+''',
+}
+options = {
+	files = "data.bin",
+}
+output = {}
+
+
+[[suites.tests]]
+name = "missing --files"
+input = {}
+options = {}
+throws = "INVALID_ARGS: Missing --files"
+
+
+[[suites.tests]]
+name = "empty --files"
+input = {}
+options = {
+	files = " , ",
+}
+throws = "INVALID_ARGS: Missing --files"
+
+
+# Unformatted everywhere, so a file changes exactly when it was selected. `*` and `**` also match
+# names that start with a dot.
+[[suites]]
+name = "--files matching"
+
+
+[[suites.tests]]
+name = "src/** selects everything under src, dotfiles included"
+input = {
+	"a.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"b.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"c.tsx" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"lib/w.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/x.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	".dot/z.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"node_modules/m.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+}
+options = {
+	files = "src/**",
+}
+output = {
+	"src/.hidden.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+}
+
+
+[[suites.tests]]
+name = "**/*.ts selects every .ts file at any depth, outside node_modules"
+input = {
+	"a.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"b.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"c.tsx" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"lib/w.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/x.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	".dot/z.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"node_modules/m.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+}
+options = {
+	files = "**/*.ts",
+}
+output = {
+	".dot/z.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"a.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"b.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"lib/w.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+}
+
+
+[[suites.tests]]
+name = "a.ts,c.tsx selects exactly those two"
+input = {
+	"a.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"b.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"c.tsx" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"lib/w.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/x.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	".dot/z.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+	"node_modules/m.ts" = '''
+import { b, a } from 'x'
+export const v = a + b
+''',
+}
+options = {
+	files = "a.ts,c.tsx",
+}
+output = {
+	"a.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"c.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+}

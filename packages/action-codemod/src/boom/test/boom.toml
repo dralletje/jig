@@ -1,0 +1,29 @@
+# boom: a stand-in transform that always throws. The run still succeeds; the files stay as they were.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
+
+name = "boom"
+
+
+[[suites]]
+name = "a transform that throws"
+
+
+[[suites.tests]]
+name = "leaves the files as they were, without failing the run"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"b.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "*.ts",
+}
+output = {}

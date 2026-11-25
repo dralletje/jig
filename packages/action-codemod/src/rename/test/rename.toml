@@ -1,0 +1,425 @@
+# rename: a stand-in transform (foo becomes bar) standing for every codemod transform: the cases are
+# about the runner they share. It runs the transform over the matching JavaScript and TypeScript
+# files, declaration files excepted, and leaves a file it cannot parse alone.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
+
+name = "rename"
+
+
+[[suites]]
+name = "codemod"
+
+
+[[suites.tests]]
+name = "runs over the matching JavaScript and TypeScript files only"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"b.tsx" = '''
+const x = <div>{foo}</div>;
+''',
+	"notes.md" = '''
+foo
+''',
+}
+options = {
+	files = "*.ts,*.tsx,*.md",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"b.tsx" = '''
+const x = <div>{bar}</div>;
+''',
+}
+
+
+[[suites.tests]]
+name = "a file the transform leaves alone is not changed"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"b.ts" = '''
+export const keep = 2;
+''',
+}
+options = {
+	files = "*.ts",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "a file that does not parse is left, the others are still changed"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"b.ts" = '''
+export const = ;
+''',
+}
+options = {
+	files = "*.ts",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "declaration files are not passed to transforms"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"types.d.ts" = '''
+export declare const foo: number;
+''',
+	"x.d.mts" = '''
+export declare const foo: number;
+''',
+}
+options = {
+	files = "**/*.ts,**/*.mts",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites]]
+name = "--parser"
+
+
+[[suites.tests]]
+name = "tsx is accepted"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "a.ts",
+	parser = "tsx",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "ts is accepted"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "a.ts",
+	parser = "ts",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "babel is accepted"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "a.ts",
+	parser = "babel",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "flow gives any transform the Flow parser"
+input = {
+	"a.js" = '''
+const foo = (1: number);
+''',
+}
+options = {
+	files = "a.js",
+	parser = "flow",
+}
+output = {
+	"a.js" = '''
+const bar = (1: number);
+''',
+}
+
+
+[[suites.tests]]
+name = "a wrong --parser is INVALID_ARGS, and nothing changes"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "a.ts",
+	parser = "bogus",
+}
+throws = 'INVALID_ARGS: Unknown --parser "bogus"'
+
+
+[[suites]]
+name = "arguments"
+
+
+[[suites.tests]]
+name = "missing --files is INVALID_ARGS"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {}
+throws = "INVALID_ARGS: Missing --files"
+
+
+[[suites.tests]]
+name = "an empty --files is INVALID_ARGS"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = " , ",
+}
+throws = "INVALID_ARGS: Missing --files"
+
+
+[[suites.tests]]
+name = "an unknown flag is INVALID_ARGS, and nothing changes"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "a.ts",
+	force = true,
+}
+throws = "INVALID_ARGS: Unknown option '--force'"
+
+
+[[suites]]
+name = "--files matching"
+
+
+[[suites.tests]]
+name = "src/** selects everything under src, dotfiles included"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"c.tsx" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"lib/w.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/x.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/deep/y.tsx" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/.hidden.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	".dot/z.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"node_modules/m.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "src/**",
+}
+output = {
+	"src/.hidden.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"src/deep/y.tsx" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"src/x.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "**/*.ts selects every .ts file at any depth, outside node_modules"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"c.tsx" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"lib/w.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/x.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/deep/y.tsx" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/.hidden.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	".dot/z.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"node_modules/m.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "**/*.ts",
+}
+output = {
+	".dot/z.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"lib/w.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"src/.hidden.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"src/x.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
+
+
+[[suites.tests]]
+name = "a.ts,c.tsx selects exactly those two"
+input = {
+	"a.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"c.tsx" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"lib/w.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/x.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/deep/y.tsx" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"src/.hidden.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	".dot/z.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+	"node_modules/m.ts" = '''
+export const foo = 1;
+export const keep = foo;
+''',
+}
+options = {
+	files = "a.ts,c.tsx",
+}
+output = {
+	"a.ts" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+	"c.tsx" = '''
+export const bar = 1;
+export const keep = bar;
+''',
+}
