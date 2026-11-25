@@ -1,0 +1,533 @@
+# default-to-named: `export default X` becomes a named export in the files --files names (globs, comma-separated),
+# and every importer and re-export follows. Files matching --keep are left alone, and so is a file the action
+# cannot convert safely (an anonymous default, a JavaScript importer of the default, a namespace import that reads
+# `.default`, a vi.mock factory returning default): those are listed as not handled in the report. When nothing
+# is left to convert, the run is refused with NO_CHANGES.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is files by path, options are the flags in order, output is every changed file by path.
+
+name = "default-to-named"
+
+
+[[suites]]
+name = "on examples/default-to-named"
+
+
+[[suites.tests]]
+name = "function, class, const and specifier defaults become named; importers and re-exports follow; routes are kept"
+input = {}
+options = {
+	files = 'src/**',
+	keep = 'src/routes/**',
+	typecheck = true,
+}
+output = {
+	"src/config.ts" = '''
+export type Config = { currency: string; retries: number };
+
+const config: Config = { currency: "USD", retries: 3 };
+
+export { config };
+''',
+	"src/index.ts" = '''
+export { Order } from "./models/Order";
+export { formatPrice } from "./lib/format";
+export { config } from "./config";
+export { sendReceipt as default } from "./services/mailer";
+export type { OrderLine } from "./models/Order";
+''',
+	"src/lib/format.ts" = '''
+export function formatPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+''',
+	"src/models/Order.ts" = '''
+export type OrderLine = { sku: string; cents: number };
+
+export class Order {
+  constructor(readonly lines: OrderLine[]) {}
+
+  total(): number {
+    return this.lines.reduce((sum, line) => sum + line.cents, 0);
+  }
+}
+''',
+	"src/services/checkout.ts" = '''
+import { config, type Config } from "../config";
+import { formatPrice as fmt } from "../lib/format";
+import { Order } from "../models/Order";
+import { sendReceipt } from "./mailer";
+import { Store } from "./store";
+
+const store = new Store();
+
+export async function checkout(order: Order, email: string): Promise<string> {
+  const settings: Config = config;
+  store.put(email, order.total());
+  const ok = await sendReceipt(email, `Total: ${fmt(order.total())} ${settings.currency}`);
+  return ok ? "sent" : "failed";
+}
+''',
+	"src/services/mailer.ts" = '''
+export async function sendReceipt(to: string, body: string): Promise<boolean> {
+  return to.includes("@") && body.length > 0;
+}
+''',
+	"src/services/store.ts" = '''
+class Store {
+  private readonly items = new Map<string, number>();
+
+  put(key: string, value: number): void {
+    this.items.set(key, value);
+  }
+}
+
+export { Store };
+''',
+}
+
+
+[[suites.tests]]
+name = "without --keep a route module is converted too"
+input = {}
+options = {
+	files = 'src/routes/**',
+}
+output = {
+	"src/routes/about.ts" = '''
+export function About(): string {
+  return "about";
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "--keep skipping every match leaves nothing to do"
+input = {}
+options = {
+	files = 'src/routes/**',
+	keep = 'src/routes/**',
+}
+throws = "^NO_CHANGES: No file matching"
+
+
+[[suites]]
+name = "import forms"
+
+
+[[suites.tests]]
+name = "importers with another local name use `as`; type-only, namespace and merged forms are kept valid"
+input = {
+	"src/x/widget.ts" = '''
+export type Thing = { id: number };
+export const extra = 2;
+
+export default function widget(): number {
+  return 1;
+}
+''',
+	"src/x/user-a.ts" = '''
+import w from "./widget";
+
+export const a = w();
+''',
+	"src/x/user-b.ts" = '''
+import widget, { type Thing } from "./widget";
+
+export const b: Thing | undefined = undefined;
+export const c = widget();
+''',
+	"src/x/user-c.ts" = '''
+import { default as renamed } from "./widget";
+
+export const d = renamed();
+''',
+	"src/x/user-d.ts" = '''
+import w, * as all from "./widget";
+
+export const e = [w(), all.extra];
+''',
+	"src/x/user-e.ts" = '''
+import type W from "./shape";
+
+export const f: W | undefined = undefined;
+''',
+	"src/x/shape.ts" = '''
+export default interface Shape {
+  sides: number;
+}
+''',
+	"src/x/user-f.ts" = '''
+export { default } from "./widget";
+export type { default as Sh } from "./shape";
+''',
+}
+options = {
+	files = 'src/x/**',
+	typecheck = true,
+}
+output = {
+	"src/x/shape.ts" = '''
+export interface Shape {
+  sides: number;
+}
+''',
+	"src/x/user-a.ts" = '''
+import { widget as w } from "./widget";
+
+export const a = w();
+''',
+	"src/x/user-b.ts" = '''
+import { widget, type Thing } from "./widget";
+
+export const b: Thing | undefined = undefined;
+export const c = widget();
+''',
+	"src/x/user-c.ts" = '''
+import { widget as renamed } from "./widget";
+
+export const d = renamed();
+''',
+	"src/x/user-d.ts" = '''
+import * as all from "./widget";
+import { widget as w } from "./widget";
+
+export const e = [w(), all.extra];
+''',
+	"src/x/user-e.ts" = '''
+import type { Shape as W } from "./shape";
+
+export const f: W | undefined = undefined;
+''',
+	"src/x/user-f.ts" = '''
+export { widget as default } from "./widget";
+export type { Shape as Sh } from "./shape";
+''',
+	"src/x/widget.ts" = '''
+export type Thing = { id: number };
+export const extra = 2;
+
+export function widget(): number {
+  return 1;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "`export const X` plus `export default X` keeps one named export"
+input = {
+	"src/y/limit.ts" = '''
+export const limit = 10;
+export default limit;
+''',
+	"src/y/use.ts" = '''
+import max from "./limit";
+
+export const doubled = max * 2;
+''',
+}
+options = {
+	files = 'src/y/**',
+	typecheck = true,
+}
+output = {
+	"src/y/limit.ts" = '''
+export const limit = 10;
+''',
+	"src/y/use.ts" = '''
+import { limit as max } from "./limit";
+
+export const doubled = max * 2;
+''',
+}
+
+
+[[suites.tests]]
+name = "`export default abstract class` loses only `default`"
+input = {
+	"src/z/base.ts" = '''
+export default abstract class Base {
+  abstract id(): string;
+}
+''',
+	"src/z/impl.ts" = '''
+import Base from "./base";
+
+export class Impl extends Base {
+  id() {
+    return "x";
+  }
+}
+''',
+}
+options = {
+	files = 'src/z/**',
+	typecheck = true,
+}
+output = {
+	"src/z/base.ts" = '''
+export abstract class Base {
+  abstract id(): string;
+}
+''',
+	"src/z/impl.ts" = '''
+import { Base } from "./base";
+
+export class Impl extends Base {
+  id() {
+    return "x";
+  }
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a namespace import that reads `.default` leaves that file not handled"
+input = {
+	"src/n/thing.ts" = '''
+export default function thing() {
+  return 1;
+}
+''',
+	"src/n/other.ts" = '''
+export default function other() {
+  return 2;
+}
+''',
+	"src/n/use.ts" = '''
+import * as t from "./thing";
+
+export const x = t.default();
+''',
+}
+options = {
+	files = 'src/n/**',
+}
+output = {
+	"src/n/other.ts" = '''
+export function other() {
+  return 2;
+}
+''',
+}
+
+
+[[suites]]
+name = "anonymous defaults"
+
+
+[[suites.tests]]
+name = "an anonymous default is left as is while other files are converted"
+input = {}
+options = {
+	files = 'src/pages/home.ts,src/lib/format.ts',
+}
+output = {
+	"src/index.ts" = '''
+export { default as Order } from "./models/Order";
+export { formatPrice } from "./lib/format";
+export { default as config } from "./config";
+export { default } from "./services/mailer";
+export type { OrderLine } from "./models/Order";
+''',
+	"src/lib/format.ts" = '''
+export function formatPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+''',
+	"src/services/checkout.ts" = '''
+import config, { type Config } from "../config";
+import { formatPrice as fmt } from "../lib/format";
+import Order from "../models/Order";
+import sendReceipt from "./mailer";
+import Store from "./store";
+
+const store = new Store();
+
+export async function checkout(order: Order, email: string): Promise<string> {
+  const settings: Config = config;
+  store.put(email, order.total());
+  const ok = await sendReceipt(email, `Total: ${fmt(order.total())} ${settings.currency}`);
+  return ok ? "sent" : "failed";
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "anonymous defaults alone leave nothing to do; nothing is written"
+input = {
+	"src/a/arrow.ts" = '''
+export default () => 1;
+''',
+	"src/a/cls.ts" = '''
+export default class {}
+''',
+}
+options = {
+	files = 'src/a/**,src/pages/home.ts',
+}
+throws = "^NO_CHANGES: No default export can be converted[\\s\\S]*src/a/arrow\\.ts: the default export has no name"
+
+
+[[suites]]
+name = "JavaScript and mock users"
+
+
+[[suites.tests]]
+name = "a JS importer of the default blocks that file: it and the JS file are untouched, others are converted"
+input = {
+	"src/j/widget.ts" = '''
+export default function widget(): number {
+  return 1;
+}
+''',
+	"src/j/ok.ts" = '''
+export default function ok(): number {
+  return 2;
+}
+''',
+	"src/j/use.js" = '''
+import w from "./widget";
+
+export const a = w();
+''',
+}
+options = {
+	files = 'src/j/**',
+}
+output = {
+	"src/j/ok.ts" = '''
+export function ok(): number {
+  return 2;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a JS named-only import does not block"
+input = {
+	"src/j/widget.ts" = '''
+export default function widget(): number {
+  return 1;
+}
+''',
+	"src/j/ok.ts" = '''
+export default function ok(): number {
+  return 2;
+}
+''',
+	"src/j/use.js" = '''
+import { other } from "./widget";
+
+export const a = other;
+''',
+}
+options = {
+	files = 'src/j/widget.ts',
+}
+output = {
+	"src/j/widget.ts" = '''
+export function widget(): number {
+  return 1;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "require(...).default in a JS file blocks, also through a .js extension specifier"
+input = {
+	"src/j/widget.ts" = '''
+export default function widget(): number {
+  return 1;
+}
+''',
+	"src/j/ok.ts" = '''
+export default function ok(): number {
+  return 2;
+}
+''',
+	"src/j/free.ts" = '''
+export default function free(): number {
+  return 4;
+}
+''',
+	"src/j/use.cjs" = '''
+const w = require("./widget").default;
+module.exports = w;
+''',
+	"src/j/use2.mjs" = '''
+const m = await import("./ok.js");
+export default m.default;
+''',
+}
+options = {
+	files = 'src/j/**',
+}
+output = {
+	"src/j/free.ts" = '''
+export function free(): number {
+  return 4;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a vi.mock factory returning default blocks the mocked file"
+input = {
+	"src/j/widget.ts" = '''
+export default function widget(): number {
+  return 1;
+}
+''',
+	"src/j/ok.ts" = '''
+export default function ok(): number {
+  return 2;
+}
+''',
+	"src/j/widget.test.ts" = '''
+declare const vi: { mock(path: string, f: () => unknown): void };
+vi.mock("./widget", () => ({ default: () => 3 }));
+export {};
+''',
+}
+options = {
+	files = 'src/j/widget.ts,src/j/ok.ts',
+}
+output = {
+	"src/j/ok.ts" = '''
+export function ok(): number {
+  return 2;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a rerun after a partial result has nothing to convert"
+input = {
+	"src/j/widget.ts" = '''
+export default function widget(): number {
+  return 1;
+}
+''',
+	"src/j/ok.ts" = '''
+export function ok(): number {
+  return 2;
+}
+''',
+	"src/j/use.js" = '''
+import w from "./widget";
+export const a = w();
+''',
+}
+options = {
+	files = 'src/j/**',
+}
+throws = "^NO_CHANGES: No default export can be converted[\\s\\S]*src/j/widget\\.ts: the default export is still needed"

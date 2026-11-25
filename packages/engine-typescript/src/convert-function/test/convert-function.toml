@@ -1,0 +1,680 @@
+# convert-function: the function at --at (<path>:<line>[:<column>]) becomes a const arrow (--to arrow) or a
+# function declaration (--to function), only where that cannot change what the program does: no this, arguments,
+# super or new.target, no generator, no default export, no use before the declaration, no new or prototype use.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards.
+
+name = "convert-function"
+
+
+[[suites]]
+name = "--to arrow"
+
+
+[[suites.tests]]
+name = "a declaration becomes a const arrow, keeping export, types and body"
+input = {}
+options = {
+	at = 'src/math.ts:1',
+	to = 'arrow',
+	typecheck = true,
+}
+output = {
+	"src/math.ts" = '''
+export const add = (a: number, b: number): number => {
+  return a + b;
+};
+
+export const double = (n: number): number => n * 2;
+
+export const first = <T>(items: T[]): T | undefined => items[0];
+''',
+}
+
+
+[[suites.tests]]
+name = "async, generics and a doc comment are kept"
+input = '''
+/** Loads. */
+export async function load<T extends object>(x: T, y = 1): Promise<T> {
+  return x;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+	to = 'arrow',
+}
+output = '''
+/** Loads. */
+export const load = async <T extends object>(x: T, y = 1): Promise<T> => {
+  return x;
+};
+'''
+
+
+[[suites.tests]]
+name = "in a .tsx file a single type parameter gets the comma that keeps it from reading as JSX"
+input = {
+	"src/a.tsx" = '''
+export function id<T>(x: T): T {
+  return x;
+}
+''',
+}
+options = {
+	at = 'src/a.tsx:1',
+	to = 'arrow',
+}
+output = {
+	"src/a.tsx" = '''
+export const id = <T,>(x: T): T => {
+  return x;
+};
+''',
+}
+
+
+[[suites.tests]]
+name = "in a .tsx file --to function drops that comma again"
+input = {
+	"src/a.tsx" = '''
+export const id = <T,>(x: T): T => {
+  return x;
+};
+''',
+}
+options = {
+	at = 'src/a.tsx:1',
+	to = 'function',
+}
+output = {
+	"src/a.tsx" = '''
+export function id<T>(x: T): T {
+  return x;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a function expression becomes an arrow; its own name is dropped"
+input = '''
+export const run = function run(a: number) {
+  return a;
+};
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+output = '''
+export const run = (a: number) => {
+  return a;
+};
+'''
+
+
+[[suites.tests]]
+name = "an anonymous function expression converts, with parentheses where syntax needs them (after ||)"
+input = '''
+export function go(xs: number[], f?: () => number) {
+  const g = f || function () { return 1; };
+  return xs.map(function (x) { return x * g(); });
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+	to = 'arrow',
+}
+output = '''
+export function go(xs: number[], f?: () => number) {
+  const g = f || (() => { return 1; });
+  return xs.map(function (x) { return x * g(); });
+}
+'''
+
+
+[[suites.tests]]
+name = "an anonymous function expression converts, with parentheses where syntax needs them (as an argument)"
+input = '''
+export function go(xs: number[], f?: () => number) {
+  const g = f || function () { return 1; };
+  return xs.map(function (x) { return x * g(); });
+}
+'''
+options = {
+	at = 'src/a.ts:3',
+	to = 'arrow',
+}
+output = '''
+export function go(xs: number[], f?: () => number) {
+  const g = f || function () { return 1; };
+  return xs.map((x) => { return x * g(); });
+}
+'''
+
+
+[[suites.tests]]
+name = "refuses a this parameter"
+input = '''
+export function a(this: Window) {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `a` uses a `this` parameter"
+
+
+[[suites.tests]]
+name = "refuses this inside an arrow in the function"
+input = '''
+export function b(x: number) {
+  return () => this;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `b` uses `this`"
+
+
+[[suites.tests]]
+name = "refuses arguments"
+input = '''
+export function c() {
+  return arguments.length;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `c` uses `arguments`"
+
+
+[[suites.tests]]
+name = "refuses new.target"
+input = '''
+export function d() {
+  return new.target;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `d` uses `new\\.target`"
+
+
+[[suites.tests]]
+name = "a this inside a nested function is no obstacle"
+input = '''
+export function e() {
+  return function () { return this; };
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+output = '''
+export const e = () => {
+  return function () { return this; };
+};
+'''
+
+
+[[suites.tests]]
+name = "refuses a generator"
+input = '''
+export function* g() {
+  yield 1;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `g` is a generator"
+
+
+[[suites.tests]]
+name = "refuses a function called with new, in any file"
+input = {
+	"src/ctor.ts" = '''
+export function Thing(this: { n: number }) {}
+''',
+	"src/ctor2.ts" = '''
+export function Plain() {}
+''',
+	"src/use.ts" = '''
+import { Plain } from "./ctor2.ts";
+export const x = new Plain();
+''',
+}
+options = {
+	at = 'src/ctor2.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `Plain` is called with `new` in src/use\\.ts"
+
+
+[[suites.tests]]
+name = "refuses a function used through its prototype"
+input = '''
+export function P() {}
+P.prototype.hello = 1;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `P` is used as a constructor through its `\\.prototype`"
+
+
+[[suites.tests]]
+name = "refuses an overloaded function (the implementation)"
+input = '''
+export function f(a: string): string;
+export function f(a: number): number;
+export function f(a: any): any {
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:3',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `f` is declared more than once"
+
+
+[[suites.tests]]
+name = "refuses an overloaded function (an overload)"
+input = '''
+export function f(a: string): string;
+export function f(a: number): number;
+export function f(a: any): any {
+  return a;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `f` has no body"
+
+
+[[suites.tests]]
+name = "refuses a default export"
+input = '''
+export default function named() {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `named` is a default export"
+
+
+[[suites.tests]]
+name = "refuses a function used before its declaration"
+input = '''
+export const r = later();
+function later() {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `later` is used in src/a\\.ts:1, before its declaration"
+
+
+[[suites.tests]]
+name = "an export list does not count as a use before the declaration"
+input = '''
+export { later };
+function later() {
+  return 1;
+}
+'''
+options = {
+	at = 'src/a.ts:2',
+	to = 'arrow',
+}
+output = '''
+export { later };
+const later = () => {
+  return 1;
+};
+'''
+
+
+[[suites.tests]]
+name = "refuses a function expression that calls itself by a different name"
+input = '''
+export const f = function inner(n: number): number {
+  return n ? inner(n - 1) : 0;
+};
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: `f` is a function expression with its own name `inner`"
+
+
+[[suites]]
+name = "--to function"
+
+
+[[suites.tests]]
+name = "a const arrow becomes a declaration, keeping generics, parameter and return types"
+input = {}
+options = {
+	at = 'src/math.ts:7',
+	to = 'function',
+	typecheck = true,
+}
+output = {
+	"src/math.ts" = '''
+export function add(a: number, b: number): number {
+  return a + b;
+}
+
+export const double = (n: number): number => n * 2;
+
+export function first<T>(items: T[]): T | undefined {
+  return items[0];
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "an object-literal expression body keeps its braces; bare parameters work"
+input = '''
+export const box = (n: number) => ({ n });
+const inc = async x => x + 1;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+output = '''
+export function box(n: number) {
+  return { n };
+}
+const inc = async x => x + 1;
+'''
+
+
+[[suites.tests]]
+name = "a function expression becomes a declaration"
+input = '''
+export const f = async function* (n: number) {
+  yield n;
+};
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+output = '''
+export async function* f(n: number) {
+  yield n;
+}
+'''
+
+
+[[suites.tests]]
+name = "refuses this in an arrow"
+input = '''
+export class A {
+  m = () => {
+    return this;
+  };
+}
+export const k = () => this;
+'''
+options = {
+	at = 'src/a.ts:6',
+	to = 'function',
+}
+throws = "^REFACTOR_UNAVAILABLE: `k` uses `this`"
+
+
+[[suites.tests]]
+name = "refuses arguments in the arrow"
+input = '''
+export const v = () => arguments.length;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+throws = "^REFACTOR_UNAVAILABLE: `v` uses `arguments`"
+
+
+[[suites.tests]]
+name = "refuses new.target in the arrow"
+input = '''
+export const w = () => new.target;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+throws = "^REFACTOR_UNAVAILABLE: `w` uses `new\\.target`"
+
+
+[[suites.tests]]
+name = "refuses a type-annotated variable"
+input = '''
+export const typed: (n: number) => number = (n) => n;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+throws = "^REFACTOR_UNAVAILABLE: `typed` has a type annotation"
+
+
+[[suites.tests]]
+name = "refuses multiple declarators"
+input = '''
+export const one = () => 1, two = () => 2;
+'''
+options = {
+	at = 'src/a.ts:1:20',
+	to = 'function',
+}
+throws = "^REFACTOR_UNAVAILABLE: `one` is declared together with other variables"
+
+
+[[suites.tests]]
+name = "refuses let"
+input = '''
+export let mutable = () => 1;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+throws = "^REFACTOR_UNAVAILABLE: `mutable` is declared with let or var"
+
+
+[[suites.tests]]
+name = "an asserts signature survives the conversion"
+input = '''
+export const assertIt = (x: unknown): asserts x is string => {
+  if (typeof x !== 'string') throw new Error();
+};
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+	typecheck = true,
+}
+output = '''
+export function assertIt(x: unknown): asserts x is string {
+  if (typeof x !== 'string') throw new Error();
+}
+'''
+
+
+[[suites.tests]]
+name = "--to function keeps a comment between => and an expression body (line comment)"
+input = '''
+export const f = (n: number) => // keep me
+  n * 2;
+export const g = (n: number) => /* and me */ n + 1;
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'function',
+}
+output = '''
+export function f(n: number) {
+  // keep me
+  return n * 2;
+}
+export const g = (n: number) => /* and me */ n + 1;
+'''
+
+
+[[suites.tests]]
+name = "--to function keeps a comment between => and an expression body (block comment)"
+input = '''
+export const f = (n: number) => // keep me
+  n * 2;
+export const g = (n: number) => /* and me */ n + 1;
+'''
+options = {
+	at = 'src/a.ts:3',
+	to = 'function',
+}
+output = '''
+export const f = (n: number) => // keep me
+  n * 2;
+export function g(n: number) {
+  /* and me */
+  return n + 1;
+}
+'''
+
+
+[[suites]]
+name = "--at"
+
+
+[[suites.tests]]
+name = "a column picks one of several functions on a line"
+input = '''
+export function a() { return 1; } export function b() { return 2; }
+'''
+options = {
+	at = 'src/a.ts:1:40',
+	to = 'arrow',
+}
+output = '''
+export function a() { return 1; } export const b = () => { return 2; };
+'''
+
+
+[[suites.tests]]
+name = "without a column, several functions on the line are refused"
+input = '''
+export function a() { return 1; } export function b() { return 2; }
+'''
+options = {
+	at = 'src/a.ts:1',
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: Line src/a\\.ts:1 has 2 functions to convert"
+
+
+[[suites.tests]]
+name = "--at without a line"
+input = {}
+options = {
+	at = 'src/math.ts',
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: --at must be <path>:<line>"
+
+
+[[suites.tests]]
+name = "--at with line 0"
+input = {}
+options = {
+	at = 'src/math.ts:0',
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: --at must be <path>:<line>"
+
+
+[[suites.tests]]
+name = "--at with a line that is not a number"
+input = {}
+options = {
+	at = 'src/math.ts:x',
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: --at must be <path>:<line>"
+
+
+[[suites.tests]]
+name = "--at without a path"
+input = {}
+options = {
+	at = ':3',
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: --at must be <path>:<line>"
+
+
+[[suites.tests]]
+name = "a line without a function"
+input = {}
+options = {
+	at = 'src/math.ts:2',
+	to = 'arrow',
+}
+throws = "^REFACTOR_UNAVAILABLE: There is no function to convert --to arrow"
+
+
+[[suites.tests]]
+name = "a line past the end of the file"
+input = {}
+options = {
+	at = 'src/math.ts:99',
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: src/math\\.ts has 8 lines, not 99"
+
+
+[[suites.tests]]
+name = "--to with an unknown form"
+input = {}
+options = {
+	at = 'src/math.ts:1',
+	to = 'class',
+}
+throws = "^INVALID_ARGS: --to must be arrow or function"
+
+
+[[suites.tests]]
+name = "--at missing"
+input = {}
+options = {
+	to = 'arrow',
+}
+throws = "^INVALID_ARGS: Missing --at"
