@@ -19,10 +19,51 @@ name = "remove-console on examples/remove-console"
 name = "console.log statements go, other methods stay, calls used as values are left"
 input = {}
 options = {
-	files = "src/orders.ts",
+	files = "src/**",
 	typecheck = true,
 }
 output = {
+	"src/guards.ts" = '''
+let calls = 0;
+
+function next(): number {
+  calls += 1;
+  return calls;
+}
+
+export function pureGuard(verbose: boolean, id: string): string {
+  return id;
+}
+
+export function guardWithElse(verbose: boolean, id: string): string {
+  if (verbose) {}
+  else id = id.trim();
+  return id;
+}
+
+export function sideEffectGuard(id: string): string {
+  if (next() > 1) {}
+  return id;
+}
+
+export function loop(ids: string[]): void {
+  for (const id of ids) {}
+  while (next() < 3) {}
+}
+''',
+	"src/lines.ts" = '''
+export function lines(ids: string[]): string {
+  let out = "";
+
+  for (const id of ids) {
+    out += id;
+  }
+
+  out += "!";
+
+  return out;
+}
+''',
 	"src/orders.ts" = '''
 export type Order = { id: string; total: number };
 
@@ -58,10 +99,51 @@ export function describe(order: Order): string {
 name = "--methods log,debug covers both"
 input = {}
 options = {
-	files = "src/orders.ts",
+	files = "src/**",
 	methods = ["log", "debug"],
 }
 output = {
+	"src/guards.ts" = '''
+let calls = 0;
+
+function next(): number {
+  calls += 1;
+  return calls;
+}
+
+export function pureGuard(verbose: boolean, id: string): string {
+  return id;
+}
+
+export function guardWithElse(verbose: boolean, id: string): string {
+  if (verbose) {}
+  else id = id.trim();
+  return id;
+}
+
+export function sideEffectGuard(id: string): string {
+  if (next() > 1) {}
+  return id;
+}
+
+export function loop(ids: string[]): void {
+  for (const id of ids) {}
+  while (next() < 3) {}
+}
+''',
+	"src/lines.ts" = '''
+export function lines(ids: string[]): string {
+  let out = "";
+
+  for (const id of ids) {
+    out += id;
+  }
+
+  out += "!";
+
+  return out;
+}
+''',
 	"src/orders.ts" = '''
 export type Order = { id: string; total: number };
 
@@ -95,9 +177,37 @@ export function describe(order: Order): string {
 name = "comments on the removed line go with it; own-line comments stay; no stray blank lines"
 input = {}
 options = {
-	files = "src/lines.ts",
+	files = "src/**",
 }
 output = {
+	"src/guards.ts" = '''
+let calls = 0;
+
+function next(): number {
+  calls += 1;
+  return calls;
+}
+
+export function pureGuard(verbose: boolean, id: string): string {
+  return id;
+}
+
+export function guardWithElse(verbose: boolean, id: string): string {
+  if (verbose) {}
+  else id = id.trim();
+  return id;
+}
+
+export function sideEffectGuard(id: string): string {
+  if (next() > 1) {}
+  return id;
+}
+
+export function loop(ids: string[]): void {
+  for (const id of ids) {}
+  while (next() < 3) {}
+}
+''',
 	"src/lines.ts" = '''
 export function lines(ids: string[]): string {
   let out = "";
@@ -111,6 +221,34 @@ export function lines(ids: string[]): string {
   return out;
 }
 ''',
+	"src/orders.ts" = '''
+export type Order = { id: string; total: number };
+
+export function process(order: Order): number {
+  const tax = order.total * 0.2;
+
+  console.debug("tax", tax); // temporary
+
+  // keep the rounding rule in one place
+  const rounded = Math.round(tax * 100) / 100;
+  console.warn("rounded", rounded);
+  return order.total + rounded;
+}
+
+export function summarize(orders: Order[]): number {
+  return orders.reduce((sum, order) => {
+    return sum + order.total;
+  }, 0);
+}
+
+export const trace = (message: string) => console.log(message);
+
+export function describe(order: Order): string {
+  const logged = console.log("describing", order.id);
+  void logged;
+  return `order ${order.id}`;
+}
+''',
 }
 
 
@@ -118,7 +256,7 @@ export function lines(ids: string[]): string {
 name = "a brace-less if: whole if when the condition is pure and there is no else, else {}"
 input = {}
 options = {
-	files = "src/guards.ts",
+	files = "src/**",
 	typecheck = true,
 }
 output = {
@@ -150,6 +288,47 @@ export function loop(ids: string[]): void {
   while (next() < 3) {}
 }
 ''',
+	"src/lines.ts" = '''
+export function lines(ids: string[]): string {
+  let out = "";
+
+  for (const id of ids) {
+    out += id;
+  }
+
+  out += "!";
+
+  return out;
+}
+''',
+	"src/orders.ts" = '''
+export type Order = { id: string; total: number };
+
+export function process(order: Order): number {
+  const tax = order.total * 0.2;
+
+  console.debug("tax", tax); // temporary
+
+  // keep the rounding rule in one place
+  const rounded = Math.round(tax * 100) / 100;
+  console.warn("rounded", rounded);
+  return order.total + rounded;
+}
+
+export function summarize(orders: Order[]): number {
+  return orders.reduce((sum, order) => {
+    return sum + order.total;
+  }, 0);
+}
+
+export const trace = (message: string) => console.log(message);
+
+export function describe(order: Order): string {
+  const logged = console.log("describing", order.id);
+  void logged;
+  return `order ${order.id}`;
+}
+''',
 }
 
 
@@ -163,7 +342,7 @@ export function f(n: number): number {
 }
 '''
 options = {
-	files = "src/a.ts",
+	files = "src/**",
 }
 output = '''
 export function f(n: number): number {
@@ -184,7 +363,7 @@ export function f(n: number): number {
 }
 '''
 options = {
-	files = "src/a.ts",
+	files = "src/**",
 }
 output = '''
 export function f(n: number): number {
@@ -313,7 +492,7 @@ export function f(a: boolean, b: boolean): void {
 }
 '''
 options = {
-	files = "src/a.ts",
+	files = "src/**",
 	typecheck = true,
 }
 output = '''
@@ -352,7 +531,7 @@ export function f(): number {
 }
 '''
 options = {
-	files = "src/a.ts",
+	files = "src/**",
 }
 output = '''
 export function f(): number {
