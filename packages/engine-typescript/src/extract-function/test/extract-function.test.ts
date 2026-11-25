@@ -7,14 +7,15 @@ import { RefactorError } from "@jig/core";
 import { workspace } from "../../../test/helpers.ts";
 import { main } from "../../main.ts";
 
-type Options = { lines: string; name: string; params: string; returns?: string };
+type Options = { lines: string; name: string; params: string; returns?: string; files?: Record<string, string> };
 
 /**
  * Each case: `input` becomes src/a.ts, `options` are the flags, `output` is src/a.ts afterwards.
+ * `options.files` (not a flag) writes more files next to it, by path.
  * A refusal is thrown again as "<code>: <message>", so a case's `throws` pattern can name the code.
  */
 async function extractFunction(input: string, options: Options): Promise<string> {
-  const dir = await workspace("examples/extract-function", { "src/a.ts": input });
+  const dir = await workspace("examples/extract-function", { ...options.files, "src/a.ts": input });
   const flags = ["--file", "src/a.ts", "--lines", options.lines, "--name", options.name, "--params", options.params];
   if (options.returns !== undefined) flags.push("--returns", options.returns);
   try {

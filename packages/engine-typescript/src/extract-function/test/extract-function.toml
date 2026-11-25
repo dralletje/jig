@@ -334,6 +334,58 @@ export function f(a: number) {
 }
 """
 
+[[suites.tests]]
+name = "a property declared in another file, at offsets that fall inside the lines, is not a declaration of theirs"
+input = """
+import type { State } from "./state.ts";
+
+export function f(state: State) {
+  if (!state.started) return 0;
+  const outcome = state.outcome;
+  const doubled = outcome * 2;
+  console.log(doubled);
+  return state.started ? 1 : 2;
+}
+"""
+options = { lines = "6", name = "double", params = "outcome", returns = "doubled", files = { "src/state.ts" = "// xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nexport type State = { readonly started: false } | { readonly started: true; outcome: number };\n" } }
+output = """
+import type { State } from "./state.ts";
+
+function double(outcome: number) {
+  const doubled = outcome * 2;
+  return doubled;
+}
+
+export function f(state: State) {
+  if (!state.started) return 0;
+  const outcome = state.outcome;
+  const doubled = double(outcome);
+  console.log(doubled);
+  return state.started ? 1 : 2;
+}
+"""
+
+[[suites.tests]]
+name = "a property of an object the lines declare, read after them, is not a declaration of theirs"
+input = """
+export function f(a: number) {
+  const box = { value: a };
+  console.log(box.value);
+}
+"""
+options = { lines = "2", name = "makeBox", params = "a", returns = "box" }
+output = """
+function makeBox(a: number) {
+  const box = { value: a };
+  return box;
+}
+
+export function f(a: number) {
+  const box = makeBox(a);
+  console.log(box.value);
+}
+"""
+
 [[suites]]
 name = "refused"
 

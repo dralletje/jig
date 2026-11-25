@@ -65,7 +65,9 @@ function sameSet(a: string[], b: string[]): { missing: string[]; extra: string[]
   return { missing: b.filter((n) => !a.includes(n)), extra: a.filter((n) => !b.includes(n)) };
 }
 
-const inside = (n: ts.Node, container: { pos: number; end: number }): boolean => n.pos >= container.pos && n.end <= container.end;
+/** Whether `n` lies within `container`; positions of another file never do. */
+const inside = (n: ts.Node, container: { pos: number; end: number }, sf: ts.SourceFile): boolean =>
+  n.getSourceFile() === sf && n.pos >= container.pos && n.end <= container.end;
 
 function isFunctionLike(typescript: typeof ts, n: ts.Node): boolean {
   return (
@@ -260,7 +262,7 @@ export const extractFunctionAction: Action<ExtractFunctionParams, TsEngine> = {
       if (typescript.isIdentifier(node)) {
         const sym = valueSymbol(typescript, checker, node);
         const decls = sym?.declarations ?? [];
-        const local = decls.some((d) => inside(d, outer) && !inside(d, range));
+        const local = decls.some((d) => inside(d, outer, sf) && !inside(d, range, sf));
         if (sym && local) {
           if (sym.flags & typescript.SymbolFlags.Type && !(sym.flags & typescript.SymbolFlags.Value)) {
             problems.push(`the local type ${node.text} (line ${engine.location(node).line})`);
@@ -292,10 +294,10 @@ export const extractFunctionAction: Action<ExtractFunctionParams, TsEngine> = {
     const outs = new Map<string, ts.VariableDeclaration>();
     const badOuts = new Set<string>();
     const visitAfter = (node: ts.Node): void => {
-      if (inside(node, range)) return;
+      if (inside(node, range, sf)) return;
       if (typescript.isIdentifier(node)) {
         const sym = valueSymbol(typescript, checker, node);
-        const decl = sym?.declarations?.find((d) => inside(d, range));
+        const decl = sym && sym.flags & (typescript.SymbolFlags.Variable | typescript.SymbolFlags.Function | typescript.SymbolFlags.Class | typescript.SymbolFlags.Enum) ? sym.declarations?.find((d) => inside(d, range, sf)) : undefined;
         if (decl) {
           const ok =
             typescript.isVariableDeclaration(decl) &&

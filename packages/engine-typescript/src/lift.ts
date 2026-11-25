@@ -78,7 +78,7 @@ function captures(
       if (isArrow && !inOwnFunction && node.text === "arguments") out.set("arguments", null);
       const sym = checker.getSymbolAtLocation(node);
       for (const decl of sym?.declarations ?? []) {
-        if (inside(decl, outer) && !inside(decl, lift.statement)) out.set(node.text, decl);
+        if (decl.getSourceFile() === outer.getSourceFile() && inside(decl, outer) && !inside(decl, lift.statement)) out.set(node.text, decl);
       }
     }
     const ownFunction =
