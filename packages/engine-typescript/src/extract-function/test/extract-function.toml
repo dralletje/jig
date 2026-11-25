@@ -528,7 +528,7 @@ options = {
 	name = "double",
 	params = "outcome",
 	returns = "doubled",
-	files = {
+	extra_files = {
 		"src/state.ts" = '''
 // xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export type State = { readonly started: false } | { readonly started: true; outcome: number };

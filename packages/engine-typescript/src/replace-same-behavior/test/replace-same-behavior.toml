@@ -350,7 +350,7 @@ if (n < 0) return;
 const m = n < 0 ? null : n + 1;
   if (m === null) return;
   console.log(m);''',
-	files = {
+	extra_files = {
 		"tsconfig.json" = "{ \"compilerOptions\": { \"strict\": false, \"noEmit\": true, \"module\": \"esnext\", \"moduleResolution\": \"bundler\", \"target\": \"esnext\", \"skipLibCheck\": true, \"types\": [] }, \"include\": [\"src\"] }",
 	},
 }
