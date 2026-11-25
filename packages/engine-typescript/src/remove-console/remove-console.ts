@@ -1,9 +1,9 @@
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
-import type { TsEngine } from "./engine.ts";
-import { diagnostics, introduced, matchFiles, notHandled, unavailable, list as globList } from "./shared.ts";
-import type { NotHandled } from "./shared.ts";
+import type { TsEngine } from "../engine.ts";
+import { diagnostics, introduced, matchFiles, notHandled, unavailable, list as globList } from "../shared.ts";
+import type { NotHandled } from "../shared.ts";
 
 /**
  * remove-console: `console.<method>(…)` calls that are whole expression statements are

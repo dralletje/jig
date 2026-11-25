@@ -1,8 +1,8 @@
 import type { Action } from "@jig/core";
 import type ts from "typescript";
-import type { TsEngine } from "./engine.ts";
-import { atText, diagnostics, findAt, introduced, parseAt, required, unavailable } from "./shared.ts";
-import type { At } from "./shared.ts";
+import type { TsEngine } from "../engine.ts";
+import { atText, diagnostics, findAt, introduced, parseAt, required, unavailable } from "../shared.ts";
+import type { At } from "../shared.ts";
 
 export type RemoveUnusedVariableParams = At;
 

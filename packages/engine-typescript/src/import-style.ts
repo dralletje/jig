@@ -1,23 +1,16 @@
-import { dirname, relative, resolve, sep } from "node:path";
+import { sep } from "node:path";
 import { RefactorError, listLines, matchesAnyGlob, plural } from "@jig/core";
-import type { Action } from "@jig/core";
 import type ts from "typescript";
 import type { TsEngine } from "./engine.ts";
 import {
   diagnostics,
-  list as globList,
   importSpecifiers,
-  importsOf,
   introduced,
   matchFiles,
   namedPaths,
-  nearestPackageJson,
   notHandled,
-  outside,
-  slashed,
   spelledPath,
   styleOf,
-  unavailable,
   usesExactKey,
 } from "./shared.ts";
 import type { NotHandled } from "./shared.ts";
@@ -169,7 +162,7 @@ function planFile(engine: TsEngine, file: string, targets: string[], to: TargetS
 }
 
 /** Plans every file, writes the rewrites, puts back a file that would gain errors, and reports. */
-async function sweepImports(engine: TsEngine, files: string[], targets: string[], to: TargetStyle): Promise<{ summary: string }> {
+export async function sweepImports(engine: TsEngine, files: string[], targets: string[], to: TargetStyle): Promise<{ summary: string }> {
   // Plan everything first, so a refusal (missing configuration) leaves nothing written.
   const planned: Planned[] = [];
   const misses: NotHandled[] = [];
@@ -229,253 +222,3 @@ async function sweepImports(engine: TsEngine, files: string[], targets: string[]
       (misses.length > 0 ? `\n\n${notHandled(misses)}` : ""),
   };
 }
-
-// ---- imports-to-relative ----
-
-export type ImportsToRelativeParams = { files: string[]; targets: string[] };
-
-export const importsToRelativeAction: Action<ImportsToRelativeParams, TsEngine> = {
-  id: "imports-to-relative",
-  kind: "sweep",
-  summary: "Rewrites alias and subpath imports as relative imports (../lib/date) that resolve to the same file.",
-  flags: [
-    { name: "--files", type: "globs", required: true, description: "The importing files to rewrite, as comma-separated globs from the repo root." },
-    {
-      name: "--targets",
-      type: "globs",
-      required: true,
-      description: "Only imports that resolve to a file matching these comma-separated globs change; \"**\" for every file.",
-    },
-  ],
-  parseParams: (raw) => ({ files: globList(raw, "files"), targets: globList(raw, "targets") }),
-  describe: (p) => `${p.files.join(", ")} importing ${p.targets.join(", ")}`,
-
-  async run(engine, p) {
-    return sweepImports(engine, p.files, p.targets, {
-      style: "relative",
-      label: "relative imports",
-      resolveHint: "",
-      writerFor: (file) => {
-        const from = engine.absPath(file);
-        const project = engine.project(file);
-        const projectFolder = engine.absPath(project.folder);
-        return (path, target) => {
-          if (outside(relative(projectFolder, target))) {
-            return {
-              miss: `${engine.relPath(target)} is outside the project folder ${project.folder}`,
-              instructions: `A relative import from ${file} would leave its project. Leave this import as it is.`,
-            };
-          }
-          let specifier = slashed(relative(dirname(from), path));
-          if (specifier === "") specifier = ".";
-          else if (specifier !== ".." && !specifier.startsWith("../")) specifier = `./${specifier}`;
-          return { specifier };
-        };
-      },
-    });
-  },
-};
-
-// ---- imports-to-alias ----
-
-export type ImportsToAliasParams = { files: string[]; targets: string[]; alias: string };
-
-export const importsToAliasAction: Action<ImportsToAliasParams, TsEngine> = {
-  id: "imports-to-alias",
-  kind: "sweep",
-  summary: "Rewrites relative and subpath imports through a tsconfig paths alias (@/lib/date) that resolves to the same file.",
-  flags: [
-    { name: "--files", type: "globs", required: true, description: "The importing files to rewrite, as comma-separated globs from the repo root." },
-    {
-      name: "--targets",
-      type: "globs",
-      required: true,
-      description: "Only imports that resolve to a file matching these comma-separated globs change; \"**\" for every file.",
-    },
-    {
-      name: "--alias",
-      type: "text",
-      required: true,
-      description:
-        "The alias up to its \"*\", ending in \"/\": \"@/\" uses the paths entry \"@/*\". The importer's tsconfig must have that entry, with one target \"<folder>/*\".",
-    },
-  ],
-  parseParams: (raw) => {
-    const files = globList(raw, "files");
-    const targets = globList(raw, "targets");
-    const alias = raw.alias;
-    if (alias === undefined || alias === "") throw new RefactorError("INVALID_ARGS", "Missing --alias. Pass the tsconfig paths alias up to its \"*\" (for example @/) and run again.");
-    if (!alias.endsWith("/") || alias.startsWith(".") || alias.startsWith("#") || /["'`\\\s*]/.test(alias)) {
-      throw new RefactorError(
-        "INVALID_ARGS",
-        `--alias ${JSON.stringify(alias)} must be the prefix of a tsconfig paths key up to its "*", ending in "/" (for example "@/" for "@/*"); ` +
-          `not relative, not starting with "#" (that is imports-to-subpath). Pass it and run again.`,
-      );
-    }
-    return { files, targets, alias };
-  },
-  describe: (p) => `${p.files.join(", ")} importing ${p.targets.join(", ")} as ${p.alias}`,
-
-  async run(engine, p) {
-    const key = `${p.alias}*`;
-    /** Project folder → the alias folder (absolute). */
-    const folders = new Map<string, string>();
-    return sweepImports(engine, p.files, p.targets, {
-      style: "alias",
-      label: `\`${p.alias}\` imports`,
-      resolveHint: "",
-      writerFor: (file) => {
-        const project = engine.project(file);
-        let aliasFolder = folders.get(project.folder);
-        if (aliasFolder === undefined) {
-          const options = project.service.getProgram()?.getCompilerOptions() ?? {};
-          const where = project.tsconfig ?? "the repo root (no tsconfig.json above it)";
-          const entry = options.paths?.[key];
-          if (entry === undefined) {
-            const keys = Object.keys(options.paths ?? {});
-            throw new RefactorError(
-              "INVALID_ARGS",
-              `${file}: its project, ${where}, has no compilerOptions.paths entry ${JSON.stringify(key)}` +
-                (keys.length > 0 ? ` (it has ${keys.map((k) => JSON.stringify(k)).join(", ")})` : "") +
-                `. Add for example "paths": { ${JSON.stringify(key)}: ["./src/*"] } to it, or pass the alias it has, then run again. ` +
-                `imports-to-alias does not change tsconfig.json.`,
-            );
-          }
-          if (entry.length !== 1 || !entry[0]?.endsWith("/*")) {
-            unavailable(
-              `${where}: paths ${JSON.stringify(key)} must have exactly one target of the form "<folder>/*" (it is ${JSON.stringify(entry)}). ` +
-                `Change it to one folder, or pass another --alias, then run again.`,
-            );
-          }
-          const base = options.baseUrl ?? options.pathsBasePath;
-          if (typeof base !== "string") unavailable(`${where}: cannot tell what its paths are relative to. Set baseUrl or fix the file, then run again.`);
-          aliasFolder = resolve(base, (entry[0] as string).slice(0, -2));
-          folders.set(project.folder, aliasFolder);
-        }
-        const folder = aliasFolder;
-        return (path, target) => {
-          const rest = relative(folder, path);
-          if (outside(rest)) {
-            return {
-              miss: `${engine.relPath(target)} is outside ${engine.relPath(folder)}, the folder of ${key}`,
-              instructions: `The import of ${engine.relPath(target)} in ${file} cannot be written with ${p.alias}. Leave it as it is.`,
-            };
-          }
-          if (rest === "") {
-            return {
-              miss: `the import of ${engine.relPath(target)} names ${engine.relPath(folder)} itself, the folder of ${key}`,
-              instructions: `An alias import of the alias folder itself is not written. Leave this import in ${file} as it is.`,
-            };
-          }
-          return { specifier: `${p.alias}${slashed(rest)}` };
-        };
-      },
-    });
-  },
-};
-
-// ---- imports-to-subpath ----
-
-export type ImportsToSubpathParams = { files: string[]; targets: string[]; prefix: string };
-
-export const importsToSubpathAction: Action<ImportsToSubpathParams, TsEngine> = {
-  id: "imports-to-subpath",
-  kind: "sweep",
-  summary: "Rewrites relative and alias imports as package.json subpath imports (#/lib/date) that resolve to the same file.",
-  flags: [
-    { name: "--files", type: "globs", required: true, description: "The importing files to rewrite, as comma-separated globs from the repo root." },
-    {
-      name: "--targets",
-      type: "globs",
-      required: true,
-      description: "Only imports that resolve to a file matching these comma-separated globs change; \"**\" for every file.",
-    },
-    {
-      name: "--prefix",
-      type: "text",
-      required: true,
-      description:
-        "The subpath prefix up to its \"*\", starting with \"#\" and ending in \"/\": \"#/\" uses the imports entry \"#/*\". The importer's nearest package.json must map it to \"./<folder>/*\".",
-    },
-  ],
-  parseParams: (raw) => {
-    const files = globList(raw, "files");
-    const targets = globList(raw, "targets");
-    const prefix = raw.prefix;
-    if (prefix === undefined || prefix === "") throw new RefactorError("INVALID_ARGS", "Missing --prefix. Pass the package.json imports prefix up to its \"*\" (for example #/) and run again.");
-    if (!prefix.startsWith("#") || !prefix.endsWith("/") || /["'`\\\s*]/.test(prefix)) {
-      throw new RefactorError(
-        "INVALID_ARGS",
-        `--prefix ${JSON.stringify(prefix)} must be the prefix of a package.json imports key up to its "*", starting with "#" and ending in "/" ` +
-          `(for example "#/" for "#/*"). Pass it and run again.`,
-      );
-    }
-    return { files, targets, prefix };
-  },
-  describe: (p) => `${p.files.join(", ")} importing ${p.targets.join(", ")} as ${p.prefix}`,
-
-  async run(engine, p) {
-    const key = `${p.prefix}*`;
-    /** package.json → the folder its key maps to (absolute). */
-    const folders = new Map<string, string>();
-    return sweepImports(engine, p.files, p.targets, {
-      style: "subpath",
-      label: `\`${p.prefix}\` subpath imports`,
-      resolveHint:
-        "Subpath imports name files exactly (no extension is added, no index file is found), and need moduleResolution " +
-        "\"bundler\", \"node16\" or \"nodenext\". ",
-      writerFor: (file) => {
-        const packageJson = nearestPackageJson(engine, file);
-        if (packageJson === null) {
-          throw new RefactorError(
-            "INVALID_ARGS",
-            `${file}: there is no package.json at or above it to hold "imports" ${JSON.stringify(key)}. ` +
-              `Add one with "imports": { ${JSON.stringify(key)}: "./src/*" }, then run again. imports-to-subpath does not change package.json.`,
-          );
-        }
-        let prefixFolder = folders.get(packageJson);
-        if (prefixFolder === undefined) {
-          try {
-            JSON.parse(engine.read(packageJson) ?? "");
-          } catch {
-            return unavailable(`${packageJson} is not valid JSON. Fix it, then run again.`);
-          }
-          const value = importsOf(engine, packageJson)?.[key];
-          if (value === undefined) {
-            throw new RefactorError(
-              "INVALID_ARGS",
-              `${packageJson}, the nearest package.json to ${file}, has no "imports" entry ${JSON.stringify(key)}. ` +
-                `Add for example "imports": { ${JSON.stringify(key)}: "./src/*" } to it, or pass the prefix it has, then run again. ` +
-                `imports-to-subpath does not change package.json.`,
-            );
-          }
-          if (typeof value !== "string" || !value.startsWith("./") || !value.endsWith("/*") || value.indexOf("*") !== value.length - 1) {
-            return unavailable(
-              `${packageJson}: "imports" ${JSON.stringify(key)} must map to one folder, "./<folder>/*" (it is ${JSON.stringify(value)}). ` +
-                `Change it, or pass another --prefix, then run again.`,
-            );
-          }
-          prefixFolder = resolve(engine.absPath(dirname(packageJson)), value.slice(0, -2));
-          folders.set(packageJson, prefixFolder);
-        }
-        const mapped = prefixFolder;
-        return (path, target) => {
-          const rest = relative(mapped, path);
-          if (outside(rest)) {
-            return {
-              miss: `${engine.relPath(target)} is outside ${engine.relPath(mapped)}, the folder of ${key}`,
-              instructions: `The import of ${engine.relPath(target)} in ${file} cannot be written with ${p.prefix}. Leave it as it is.`,
-            };
-          }
-          if (rest === "") {
-            return {
-              miss: `the import of ${engine.relPath(target)} names ${engine.relPath(mapped)} itself, the folder of ${key}`,
-              instructions: `A subpath import of the prefix folder itself is not written. Leave this import in ${file} as it is.`,
-            };
-          }
-          return { specifier: `${p.prefix}${slashed(rest)}` };
-        };
-      },
-    });
-  },
-};

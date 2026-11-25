@@ -1,5 +1,6 @@
 import { basename, dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { RefactorError, listFiles, matchesAnyGlob } from "@jig/core";
+import type { DeclKind } from "@jig/core";
 import type ts from "typescript";
 import type { TsEngine } from "./engine.ts";
 
@@ -360,4 +361,21 @@ export function findAt<T>(
     );
   }
   return (found[0] as AtCandidate<T>).item;
+}
+
+const KINDS: DeclKind[] = ["function", "class", "interface", "type", "enum", "variable"];
+
+/** `--kind`, when given: one of the declaration kinds, else `INVALID_ARGS`. */
+export function kindParam(raw: Record<string, string | undefined>): { kind?: DeclKind } {
+  const kind = raw.kind;
+  if (kind === undefined) return {};
+  if (!KINDS.includes(kind as DeclKind)) {
+    throw new RefactorError("INVALID_ARGS", `--kind must be one of ${KINDS.join("|")}, not ${JSON.stringify(kind)}.`);
+  }
+  return { kind: kind as DeclKind };
+}
+
+/** The module an import declaration imports from, without its quotes. */
+export function moduleName(declaration: ts.ImportDeclaration): string {
+  return declaration.moduleSpecifier.getText().slice(1, -1);
 }

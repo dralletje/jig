@@ -1,9 +1,9 @@
 import { RefactorError } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
-import { extractAction } from "./actions.ts";
-import type { TsEngine } from "./engine.ts";
-import { names, required } from "./shared.ts";
+import { extractAction } from "../extract/extract.ts";
+import type { TsEngine } from "../engine.ts";
+import { names, required } from "../shared.ts";
 
 export type LiftParams = { file: string; in: string; symbol: string; to?: string };
 

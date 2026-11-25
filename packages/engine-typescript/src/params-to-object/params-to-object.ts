@@ -1,8 +1,8 @@
 import { RefactorError, plural } from "@jig/core";
 import type { Action, Decl } from "@jig/core";
 import type ts from "typescript";
-import type { TsEngine } from "./engine.ts";
-import { byString, diagnostics, introduced, required, unavailable } from "./shared.ts";
+import type { TsEngine } from "../engine.ts";
+import { byString, diagnostics, introduced, required, unavailable } from "../shared.ts";
 
 /**
  * params-to-object: a top-level function's positional parameters become one destructured

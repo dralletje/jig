@@ -1,31 +1,46 @@
 import { parseArgs } from "node:util";
 import { RefactorError, actionHelp, imageHelp, okReport, writeChanges } from "@jig/core";
 import type { Action, ImageHelp, Report } from "@jig/core";
-import { extractAction, renameAction } from "./actions.ts";
-import { removeBarrelsAction } from "./barrels.ts";
-import { removeConsoleAction } from "./console.ts";
-import { convertFunctionAction } from "./convert-function.ts";
-import { defaultToNamedAction } from "./default-to-named.ts";
+import { extractAction } from "./extract/extract.ts";
+import { renameAction } from "./rename/rename.ts";
+import { removeBarrelsAction } from "./remove-barrels/remove-barrels.ts";
+import { removeConsoleAction } from "./remove-console/remove-console.ts";
+import { convertFunctionAction } from "./convert-function/convert-function.ts";
+import { defaultToNamedAction } from "./default-to-named/default-to-named.ts";
 import { TsEngine } from "./engine.ts";
-import { addImportExtensionsAction } from "./extensions.ts";
-import { moveFileAction, organizeImportsAction } from "./files.ts";
-import { importTypeAction, namespaceToNamedAction } from "./imports.ts";
+import { addImportExtensionsAction } from "./add-import-extensions/add-import-extensions.ts";
+import { moveFileAction } from "./move-file/move-file.ts";
+import { organizeImportsAction } from "./organize-imports/organize-imports.ts";
+import { importTypeAction } from "./import-type/import-type.ts";
+import { namespaceToNamedAction } from "./namespace-to-named/namespace-to-named.ts";
 import { extractFunctionAction } from "./extract-function/extract-function.ts";
-import { inlineFunctionAction } from "./inline.ts";
-import { liftOutAction } from "./lift.ts";
-import { paramsToObjectAction } from "./params.ts";
-import { inferReturnTypesAction } from "./return-types.ts";
-import { renameFilesAction } from "./rename-files.ts";
+import { inlineFunctionAction } from "./inline-function/inline-function.ts";
+import { liftOutAction } from "./lift-out/lift-out.ts";
+import { paramsToObjectAction } from "./params-to-object/params-to-object.ts";
+import { inferReturnTypesAction } from "./infer-return-types/infer-return-types.ts";
+import { renameFilesAction } from "./rename-files/rename-files.ts";
 import { replaceSameBehaviorAction } from "./replace-same-behavior/replace-same-behavior.ts";
-import { templateStringAction } from "./template-string.ts";
-import { removeUnusedVariableAction } from "./unused-variable.ts";
+import { templateStringAction } from "./template-string/template-string.ts";
+import { removeUnusedVariableAction } from "./remove-unused-variable/remove-unused-variable.ts";
 
 // The beta image (JIG_TYPESCRIPT=7.1.0-beta) runs duplicate-folder, move-file, rename-files and imports-to-* on
 // TypeScript 7.1.0-beta, which only that image installs. Every other build runs everything on TypeScript 6.
-const { importsToAliasAction, importsToRelativeAction, importsToSubpathAction } =
-  process.env.JIG_TYPESCRIPT === "7.1.0-beta" ? await import("./ts7/import-style.ts") : await import("./import-style.ts");
+const { importsToRelativeAction } =
+  process.env.JIG_TYPESCRIPT === "7.1.0-beta"
+    ? await import("./ts7/import-style.ts")
+    : await import("./imports-to-relative/imports-to-relative.ts");
+const { importsToAliasAction } =
+  process.env.JIG_TYPESCRIPT === "7.1.0-beta"
+    ? await import("./ts7/import-style.ts")
+    : await import("./imports-to-alias/imports-to-alias.ts");
+const { importsToSubpathAction } =
+  process.env.JIG_TYPESCRIPT === "7.1.0-beta"
+    ? await import("./ts7/import-style.ts")
+    : await import("./imports-to-subpath/imports-to-subpath.ts");
 const { duplicateFolderAction } =
-  process.env.JIG_TYPESCRIPT === "7.1.0-beta" ? await import("./ts7/relocate.ts") : await import("./relocate.ts");
+  process.env.JIG_TYPESCRIPT === "7.1.0-beta"
+    ? await import("./ts7/relocate.ts")
+    : await import("./duplicate-folder/duplicate-folder.ts");
 
 export const ACTIONS: Action[] = [
   renameAction,

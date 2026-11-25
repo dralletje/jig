@@ -814,10 +814,10 @@ description of every action):
 | `swift/cli/Tests/IntegrationTests` | end-to-end tests that run `dist/jig`, and the test-only probe image (`probe/`) |
 | `packages/core` | shared types (`Action`, `ActionResult`), errors, the report v1 (`okReport`) and entrypoint helper |
 | `schemas/` | the JSON Schemas of the image report and the binary's output, and example documents |
-| `packages/engine-typescript` | `TsEngine` (TypeScript 6 language service), the typescript actions and their image entrypoint |
+| `packages/engine-typescript` | `TsEngine` (TypeScript 6 language service), the typescript actions and their image entrypoint. Each action is `src/<id>/<id>.ts` with its cases in `src/<id>/test/<id>.toml`; code several actions share is in `src/shared.ts`, `src/relocate.ts` (moving files) and `src/import-style.ts` (rewriting specifiers), and the TypeScript 7.1 versions for the beta image in `src/ts7/` |
 | `packages/action-prettier` | the format action and its image entrypoint |
 | `packages/action-codemod` | the published-codemod entrypoint (jscodeshift runner, one action per transform) and its table of transforms, their kinds and descriptions, and of the image carrying each package |
-| `packages/test-utils` | `makeRepo`, `readTree`, fixtures |
+| `packages/test-utils` | `makeRepo`, `readTree`, fixtures, and `actionToml`: the one shape of every action's TOML cases (input files, flags, changed files or a refusal) |
 | `examples/` | small example repos used by the tests and as CLI demos (see below) |
 | `containers/` | one Containerfile per image |
 | `scripts/` | `build-images.sh`, `update-lockfiles.sh`, `build-binary.sh`, `test-packages.sh`, `test-swift.sh` |

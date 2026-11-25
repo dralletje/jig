@@ -1,9 +1,9 @@
 import { RefactorError, listFiles, listLines, matchesAnyGlob, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
-import type { TsEngine } from "./engine.ts";
-import { TS_FILE, byString, diagnostics, list as globList, introduced, matchFiles, notHandled } from "./shared.ts";
-import type { NotHandled } from "./shared.ts";
+import type { TsEngine } from "../engine.ts";
+import { TS_FILE, byString, diagnostics, list as globList, introduced, matchFiles, notHandled } from "../shared.ts";
+import type { NotHandled } from "../shared.ts";
 
 /**
  * default-to-named: `export default` of a named function, class, interface or local value

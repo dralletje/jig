@@ -2,7 +2,7 @@ import { RefactorError } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
 import type { TsEngine } from "../engine.ts";
-import { attachedStart, lineSpan } from "../lift.ts";
+import { attachedStart, lineSpan } from "../lift-out/lift-out.ts";
 import { diagnostics, introduced, names, required, unavailable } from "../shared.ts";
 
 /**

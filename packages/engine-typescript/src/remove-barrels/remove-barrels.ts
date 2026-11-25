@@ -2,8 +2,8 @@ import { basename, isAbsolute, posix, resolve } from "node:path";
 import { listFiles, listLines, plural } from "@jig/core";
 import type { Action, ActionResult } from "@jig/core";
 import type ts from "typescript";
-import type { TsEngine } from "./engine.ts";
-import { TS_FILE, byString, diagnostics, list as globList, introduced, matchFiles, unavailable } from "./shared.ts";
+import type { TsEngine } from "../engine.ts";
+import { TS_FILE, byString, diagnostics, list as globList, introduced, matchFiles, unavailable } from "../shared.ts";
 
 /**
  * remove-barrels: imports through a barrel (an `index.ts`/`index.tsx` that only re-exports)

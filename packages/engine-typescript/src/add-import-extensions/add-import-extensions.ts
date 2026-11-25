@@ -2,8 +2,8 @@ import { extname } from "node:path";
 import { listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
-import type { Project, TsEngine } from "./engine.ts";
-import { byString, diagnostics, list as globList, introduced, matchFiles, unavailable } from "./shared.ts";
+import type { Project, TsEngine } from "../engine.ts";
+import { byString, diagnostics, list as globList, introduced, matchFiles, unavailable } from "../shared.ts";
 
 /**
  * add-import-extensions: relative imports, re-exports and dynamic `import()`s with a string

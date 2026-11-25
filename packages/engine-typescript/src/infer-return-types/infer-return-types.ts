@@ -1,9 +1,9 @@
 import { RefactorError, listLines, plural } from "@jig/core";
 import type { Action } from "@jig/core";
 import type ts from "typescript";
-import type { TsEngine } from "./engine.ts";
-import { diagnostics, list as globList, introduced, matchFiles, notHandled, unavailable } from "./shared.ts";
-import type { NotHandled } from "./shared.ts";
+import type { TsEngine } from "../engine.ts";
+import { diagnostics, list as globList, introduced, matchFiles, notHandled, unavailable } from "../shared.ts";
+import type { NotHandled } from "../shared.ts";
 
 /**
  * infer-return-types: functions and methods without a return type annotation get the type
