@@ -1,0 +1,380 @@
+# remove-console: the console.<method> statements (default: log) in --files are removed; --methods
+# names others. A call used as a value is left, a brace-less if body is replaced by {} (or the whole
+# if goes when its condition is pure and it has no else), comments on a removed line go with it, and
+# no stray blank lines or whitespace-only lines are left. Refused when nothing could be removed, or
+# when the removal would introduce a type error.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards; a table
+# input and output are files by path, the output holding every changed file.
+
+name = "remove-console"
+
+
+[[suites]]
+name = "remove-console on examples/remove-console"
+
+
+[[suites.tests]]
+name = "console.log statements go, other methods stay, calls used as values are left"
+input = {}
+options = {
+	files = "src/orders.ts",
+	typecheck = true,
+}
+output = {
+	"src/orders.ts" = '''
+export type Order = { id: string; total: number };
+
+export function process(order: Order): number {
+  const tax = order.total * 0.2;
+
+  console.debug("tax", tax); // temporary
+
+  // keep the rounding rule in one place
+  const rounded = Math.round(tax * 100) / 100;
+  console.warn("rounded", rounded);
+  return order.total + rounded;
+}
+
+export function summarize(orders: Order[]): number {
+  return orders.reduce((sum, order) => {
+    return sum + order.total;
+  }, 0);
+}
+
+export const trace = (message: string) => console.log(message);
+
+export function describe(order: Order): string {
+  const logged = console.log("describing", order.id);
+  void logged;
+  return `order ${order.id}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "--methods log,debug covers both"
+input = {}
+options = {
+	files = "src/orders.ts",
+	methods = ["log", "debug"],
+}
+output = {
+	"src/orders.ts" = '''
+export type Order = { id: string; total: number };
+
+export function process(order: Order): number {
+  const tax = order.total * 0.2;
+
+  // keep the rounding rule in one place
+  const rounded = Math.round(tax * 100) / 100;
+  console.warn("rounded", rounded);
+  return order.total + rounded;
+}
+
+export function summarize(orders: Order[]): number {
+  return orders.reduce((sum, order) => {
+    return sum + order.total;
+  }, 0);
+}
+
+export const trace = (message: string) => console.log(message);
+
+export function describe(order: Order): string {
+  const logged = console.log("describing", order.id);
+  void logged;
+  return `order ${order.id}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "comments on the removed line go with it; own-line comments stay; no stray blank lines"
+input = {}
+options = {
+	files = "src/lines.ts",
+}
+output = {
+	"src/lines.ts" = '''
+export function lines(ids: string[]): string {
+  let out = "";
+
+  for (const id of ids) {
+    out += id;
+  }
+
+  out += "!";
+
+  return out;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a brace-less if: whole if when the condition is pure and there is no else, else {}"
+input = {}
+options = {
+	files = "src/guards.ts",
+	typecheck = true,
+}
+output = {
+	"src/guards.ts" = '''
+let calls = 0;
+
+function next(): number {
+  calls += 1;
+  return calls;
+}
+
+export function pureGuard(verbose: boolean, id: string): string {
+  return id;
+}
+
+export function guardWithElse(verbose: boolean, id: string): string {
+  if (verbose) {}
+  else id = id.trim();
+  return id;
+}
+
+export function sideEffectGuard(id: string): string {
+  if (next() > 1) {}
+  return id;
+}
+
+export function loop(ids: string[]): void {
+  for (const id of ids) {}
+  while (next() < 3) {}
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "statements sharing a blank line are all removed"
+input = '''
+export function f(n: number): number {
+  console.log(1);
+
+  console.log(2);
+}
+'''
+options = {
+	files = "src/a.ts",
+}
+output = '''
+export function f(n: number): number {
+}
+'''
+
+
+[[suites.tests]]
+name = "adjacent removed statements with blank lines around leave no double blank line"
+input = '''
+export function f(n: number): number {
+  const a = n;
+
+  console.log(1);
+  console.log(2);
+
+  return a;
+}
+'''
+options = {
+	files = "src/a.ts",
+}
+output = '''
+export function f(n: number): number {
+  const a = n;
+
+  return a;
+}
+'''
+
+
+[[suites.tests]]
+name = "when every call is a value, it is NO_CHANGES"
+input = '''
+export const a = (m: string) => console.log(m);
+export const b = (m: string) => console.log(m + 1);
+'''
+options = {
+	files = "src/a.ts",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a second run changes nothing"
+input = {
+	"src/orders.ts" = '''
+export type Order = { id: string; total: number };
+
+export function process(order: Order): number {
+  const tax = order.total * 0.2;
+
+  console.debug("tax", tax); // temporary
+
+  // keep the rounding rule in one place
+  const rounded = Math.round(tax * 100) / 100;
+  console.warn("rounded", rounded);
+  return order.total + rounded;
+}
+
+export function summarize(orders: Order[]): number {
+  return orders.reduce((sum, order) => {
+    return sum + order.total;
+  }, 0);
+}
+
+export const trace = (message: string) => console.log(message);
+
+export function describe(order: Order): string {
+  const logged = console.log("describing", order.id);
+  void logged;
+  return `order ${order.id}`;
+}
+''',
+	"src/lines.ts" = '''
+export function lines(ids: string[]): string {
+  let out = "";
+
+  for (const id of ids) {
+    out += id;
+  }
+
+  out += "!";
+
+  return out;
+}
+''',
+	"src/guards.ts" = '''
+let calls = 0;
+
+function next(): number {
+  calls += 1;
+  return calls;
+}
+
+export function pureGuard(verbose: boolean, id: string): string {
+  return id;
+}
+
+export function guardWithElse(verbose: boolean, id: string): string {
+  if (verbose) {}
+  else id = id.trim();
+  return id;
+}
+
+export function sideEffectGuard(id: string): string {
+  if (next() > 1) {}
+  return id;
+}
+
+export function loop(ids: string[]): void {
+  for (const id of ids) {}
+  while (next() < 3) {}
+}
+''',
+}
+options = {
+	files = "src/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a console that is not the global one is left alone"
+input = '''
+export function f(console: { log(x: string): void }): void {
+  console.log("mine");
+}
+'''
+options = {
+	files = "src/**",
+}
+output = '''
+export function f(console: { log(x: string): void }): void {
+  console.log("mine");
+}
+'''
+
+
+[[suites.tests]]
+name = "else-if branches and nested ifs keep valid syntax"
+input = '''
+export function f(a: boolean, b: boolean): void {
+  if (a) console.log(1);
+  else if (b) console.log(2);
+  if (a) if (b) console.log(3);
+}
+'''
+options = {
+	files = "src/a.ts",
+	typecheck = true,
+}
+output = '''
+export function f(a: boolean, b: boolean): void {
+  if (a) {}
+  else {}
+}
+'''
+
+
+[[suites.tests]]
+name = "a removal that would introduce an error refuses and writes nothing"
+input = '''
+export function f(): void {
+  const x = 1;
+  console.log(x);
+}
+'''
+options = {
+	files = "src/a.ts",
+	extra_files = {
+		"tsconfig.json" = '''
+{ "compilerOptions": { "strict": true, "noEmit": true, "noUnusedLocals": true, "lib": ["esnext", "dom"], "types": [] }, "include": ["src"] }
+''',
+	},
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a line whose statements are all removed does not stay behind as spaces"
+input = '''
+export function f(): number {
+  console.log(1); console.log(2);
+  return 1;
+}
+'''
+options = {
+	files = "src/a.ts",
+}
+output = '''
+export function f(): number {
+  return 1;
+}
+'''
+
+
+[[suites.tests]]
+name = "bad arguments: a method name with a space"
+input = {}
+options = {
+	files = "src/**",
+	methods = "lo g",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "bad arguments: files that match nothing"
+input = {}
+options = {
+	files = "nothing/**",
+}
+throws = "^NO_CHANGES: "

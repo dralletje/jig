@@ -1,0 +1,304 @@
+# params-to-object: the parameters of --symbol in --file become one destructured object parameter, and
+# every call in the repo is rewritten to pass an object. Refused when a call cannot be rewritten (a
+# spread argument, the function handed over as a value), and for overloads, rest and destructured
+# parameters, functions without parameters, and symbols that are not functions.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards.
+
+name = "params-to-object"
+
+
+[[suites]]
+name = "params-to-object on examples/params-to-object"
+
+
+[[suites.tests]]
+name = "a function with three params called from two files: declaration and calls are rewritten"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "shippingCost",
+	typecheck = true,
+}
+output = {
+	"src/checkout.ts" = '''
+import { parcelLabel, shippingCost } from "./shipping";
+
+export function checkout(weightKg: number, distanceKm: number): string {
+  const standard = shippingCost({ weightKg, distanceKm, express: false });
+  const fast = shippingCost({ weightKg, distanceKm, express: true });
+  return `${parcelLabel("order")}: ${standard.toFixed(2)} or ${fast.toFixed(2)} (fast)`;
+}
+''',
+	"src/reports.ts" = '''
+import { parcelLabel, shippingCost, totalWeight } from "./shipping";
+
+export function weeklyReport(weights: number[]): string[] {
+  const lines = weights.map((w) => `${parcelLabel("w", "[", "]")} ${shippingCost({ weightKg: w, distanceKm: 120, express: false })}`);
+  lines.push(`total ${totalWeight(...weights)}`);
+  return lines;
+}
+''',
+	"src/shipping.ts" = '''
+export type Zone = "domestic" | "europe" | "world";
+
+/** What a parcel costs to send: a base rate per kilometre, plus a surcharge when it is urgent. */
+export function shippingCost({ weightKg, distanceKm, express }: { weightKg: number; distanceKm: number; express: boolean; }): number {
+  const base = weightKg * 0.4 + distanceKm * 0.05;
+  return express ? base * 1.5 : base;
+}
+
+/** A label line for a parcel: the prefix and suffix are optional. */
+export function parcelLabel(name: string, prefix = "#", suffix?: string): string {
+  return `${prefix}${name}${suffix ?? ""}`;
+}
+
+export function describeZone(zone: Zone): string {
+  return zone === "domestic" ? "inside the country" : zone === "europe" ? "inside Europe" : "overseas";
+}
+
+export function totalWeight(...weights: number[]): number {
+  return weights.reduce((sum, w) => sum + w, 0);
+}
+
+export function parseWeight(text: string): number;
+export function parseWeight(text: string, unit: "kg" | "g"): number;
+export function parseWeight(text: string, unit: "kg" | "g" = "kg"): number {
+  const value = Number.parseFloat(text);
+  return unit === "g" ? value / 1000 : value;
+}
+
+export function notify(address: string, message: string): string {
+  return `to ${address}: ${message}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "optional and default parameters stay optional, with their defaults"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "parcelLabel",
+	typecheck = true,
+}
+output = {
+	"src/checkout.ts" = '''
+import { parcelLabel, shippingCost } from "./shipping";
+
+export function checkout(weightKg: number, distanceKm: number): string {
+  const standard = shippingCost(weightKg, distanceKm, false);
+  const fast = shippingCost(weightKg, distanceKm, true);
+  return `${parcelLabel({ name: "order" })}: ${standard.toFixed(2)} or ${fast.toFixed(2)} (fast)`;
+}
+''',
+	"src/reports.ts" = '''
+import { parcelLabel, shippingCost, totalWeight } from "./shipping";
+
+export function weeklyReport(weights: number[]): string[] {
+  const lines = weights.map((w) => `${parcelLabel({ name: "w", prefix: "[", suffix: "]" })} ${shippingCost(w, 120, false)}`);
+  lines.push(`total ${totalWeight(...weights)}`);
+  return lines;
+}
+''',
+	"src/shipping.ts" = '''
+export type Zone = "domestic" | "europe" | "world";
+
+/** What a parcel costs to send: a base rate per kilometre, plus a surcharge when it is urgent. */
+export function shippingCost(weightKg: number, distanceKm: number, express: boolean): number {
+  const base = weightKg * 0.4 + distanceKm * 0.05;
+  return express ? base * 1.5 : base;
+}
+
+/** A label line for a parcel: the prefix and suffix are optional. */
+export function parcelLabel({ name, prefix = "#", suffix }: { name: string; prefix?: string; suffix?: string; }): string {
+  return `${prefix}${name}${suffix ?? ""}`;
+}
+
+export function describeZone(zone: Zone): string {
+  return zone === "domestic" ? "inside the country" : zone === "europe" ? "inside Europe" : "overseas";
+}
+
+export function totalWeight(...weights: number[]): number {
+  return weights.reduce((sum, w) => sum + w, 0);
+}
+
+export function parseWeight(text: string): number;
+export function parseWeight(text: string, unit: "kg" | "g"): number;
+export function parseWeight(text: string, unit: "kg" | "g" = "kg"): number {
+  const value = Number.parseFloat(text);
+  return unit === "g" ? value / 1000 : value;
+}
+
+export function notify(address: string, message: string): string {
+  return `to ${address}: ${message}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a const arrow function works too"
+input = {
+	"src/area.ts" = '''
+export const area = (width: number, height: number): number => width * height;
+''',
+	"src/use-area.ts" = '''
+import { area } from "./area";
+
+export const big = area(10, 20);
+''',
+}
+options = {
+	file = "src/area.ts",
+	symbol = "area",
+	typecheck = true,
+}
+output = {
+	"src/area.ts" = '''
+export const area = ({ width, height }: { width: number; height: number; }): number => width * height;
+''',
+	"src/use-area.ts" = '''
+import { area } from "./area";
+
+export const big = area({ width: 10, height: 20 });
+''',
+}
+
+
+[[suites.tests]]
+name = "a local `export { f }` is not a blocking use; the function and its calls are converted"
+input = '''
+function sum(a: number, b: number): number {
+  return a + b;
+}
+
+export { sum };
+export const three = sum(1, 2);
+'''
+options = {
+	file = "src/a.ts",
+	symbol = "sum",
+}
+output = '''
+function sum({ a, b }: { a: number; b: number; }): number {
+  return a + b;
+}
+
+export { sum };
+export const three = sum({ a: 1, b: 2 });
+'''
+
+
+[[suites.tests]]
+name = "a function used as a callback value is refused"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "notify",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "overloads are refused"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "parseWeight",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a rest parameter is refused"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "totalWeight",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a function without parameters is refused"
+input = '''
+export function none(): number {
+  return 1;
+}
+'''
+options = {
+	file = "src/a.ts",
+	symbol = "none",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a non-function is refused"
+input = '''
+export const limit = 10;
+'''
+options = {
+	file = "src/a.ts",
+	symbol = "limit",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a type is not a function: SYMBOL_NOT_FOUND"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "Zone",
+}
+throws = "^SYMBOL_NOT_FOUND: "
+
+
+[[suites.tests]]
+name = "a missing symbol is SYMBOL_NOT_FOUND"
+input = {}
+options = {
+	file = "src/shipping.ts",
+	symbol = "nope",
+}
+throws = "^SYMBOL_NOT_FOUND: "
+
+
+[[suites.tests]]
+name = "a call TypeScript cannot rewrite (a spread argument) is refused"
+input = {
+	"src/pair.ts" = '''
+export function pair(left: string, right: string): string {
+  return left + right;
+}
+''',
+	"src/use-pair.ts" = '''
+import { pair } from "./pair";
+
+const args: [string, string] = ["a", "b"];
+export const joined = pair(...args);
+''',
+}
+options = {
+	file = "src/pair.ts",
+	symbol = "pair",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a destructured parameter is refused"
+input = '''
+export function dist({ x, y }: { x: number; y: number }, scale: number): number {
+  return (x + y) * scale;
+}
+'''
+options = {
+	file = "src/a.ts",
+	symbol = "dist",
+}
+throws = "^REFACTOR_UNAVAILABLE: "

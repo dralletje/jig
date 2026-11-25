@@ -1,0 +1,250 @@
+# template-string: the string concatenation at --at (<path>:<line>[:<column>]) becomes a template
+# literal. A line with more than one concatenation needs a column. Operands whose string form is not
+# obvious (objects, with valueOf vs toString) and chains with a comment are refused.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards.
+
+name = "template-string"
+
+
+[[suites]]
+name = "template-string"
+
+
+[[suites.tests]]
+name = "`\"Hi \" + name + \"!\"` becomes a template literal"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:2",
+}
+output = '''
+export function greet(name: string): string {
+  return `Hi ${name}!`;
+}
+'''
+
+
+[[suites.tests]]
+name = "nested parentheses and a number operand"
+input = '''
+export function describe(name: string, count: number): string {
+  return "User " + (name + " has ") + count + " items";
+}
+'''
+options = {
+	at = "src/a.ts:2",
+}
+output = '''
+export function describe(name: string, count: number): string {
+  return `User ${name + " has "}${count} items`;
+}
+'''
+
+
+[[suites.tests]]
+name = "a line with two concatenations needs a column"
+input = '''
+export function twice(a: string, b: string): string[] {
+  return ["x" + a, "y" + b];
+}
+'''
+options = {
+	at = "src/a.ts:2",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "a line with two concatenations: the column picks one"
+input = '''
+export function twice(a: string, b: string): string[] {
+  return ["x" + a, "y" + b];
+}
+'''
+options = {
+	at = "src/a.ts:2:20",
+}
+output = '''
+export function twice(a: string, b: string): string[] {
+  return ["x" + a, `y${b}`];
+}
+'''
+
+
+[[suites.tests]]
+name = "no concatenation on the line is refused"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:1",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "no concatenation at the column is refused"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:1:5",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "a + chain without a string is refused"
+input = '''
+export function total(a: number, b: number): number {
+  return a + b;
+}
+'''
+options = {
+	at = "src/a.ts:2",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "bad --at: no line"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "bad --at: a line that is not a number"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:x",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "bad --at: line 0"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:0",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "bad --at: column 0"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:2:0",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "bad --at: a column past the end of the line"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:2:200",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "bad --at: a line past the end of the file"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {
+	at = "src/a.ts:99",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "no --at at all"
+input = '''
+export function greet(name: string): string {
+  return "Hi " + name + "!";
+}
+'''
+options = {}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "an object operand (valueOf vs toString) is refused, so the output stays the same"
+input = '''
+export const o = { toString() { return 'o'; }, valueOf() { return 1; } };
+export function f(): string {
+  return 'a' + o;
+}
+'''
+options = {
+	at = "src/a.ts:3",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "primitive unions, literals and enums still convert"
+input = '''
+enum E { A = 1 }
+export function f(a: string | number | null, b: 'x' | 2n, c: boolean | undefined, d: E): string {
+  return 'p' + a + b + c + d;
+}
+'''
+options = {
+	at = "src/a.ts:3",
+}
+output = '''
+enum E { A = 1 }
+export function f(a: string | number | null, b: 'x' | 2n, c: boolean | undefined, d: E): string {
+  return `p${a}${b}${c}${d}`;
+}
+'''
+
+
+[[suites.tests]]
+name = "a comment inside the chain is refused, not moved into ${}"
+input = '''
+export function f(x: string): string {
+  return "a" + /* keep */ x + "b";
+}
+'''
+options = {
+	at = "src/a.ts:2",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
