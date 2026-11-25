@@ -1,0 +1,378 @@
+# replace-same-behavior: the code at --at (exactly --before) becomes --after, only when a rule proves
+# the two behave the same. The only rule so far is fold-guard:
+#
+#   if (C) return R;               const d = C ? null : E;
+#   use(..., E, ...);       →      if (d === null) return R;
+#                                  use(..., d, ...);
+#
+# input   = the source of src/a.ts
+# options = the flags: at (without the path: <line>:<column>-<line>:<column>, the end just after the
+#           last character), before, after; `files` (not a flag) writes more files by path
+# output  = src/a.ts afterwards
+# throws  = "^<ERROR_CODE>: ..." (the test throws a RefactorError again as "<code>: <message>")
+
+
+[[suites]]
+name = "fold-guard"
+
+
+[[suites.tests]]
+name = "a guard and a choice inside a call's arguments (the proposal's example)"
+input = '''
+const OUTCOME = { ELIGIBLE: "eligible", OUT_OF_RANGE: "out-of-range", OTHER: "other" } as const;
+type Outcome = (typeof OUTCOME)[keyof typeof OUTCOME];
+const REASON = { BELOW: "below", AFTER: "after" } as const;
+
+declare function settle(id: string, reason: string, outcome: Outcome): Promise<void>;
+
+export async function choose(id: string, outcome: Outcome) {
+  if (outcome === OUTCOME.ELIGIBLE) {
+    return "not-retryable";
+  }
+  await settle(
+    id,
+    outcome === OUTCOME.OUT_OF_RANGE ? REASON.BELOW : REASON.AFTER,
+    outcome,
+  );
+  return null;
+}
+'''
+options = {
+	at = "8:3-15:5",
+	before = '''
+if (outcome === OUTCOME.ELIGIBLE) {
+    return "not-retryable";
+  }
+  await settle(
+    id,
+    outcome === OUTCOME.OUT_OF_RANGE ? REASON.BELOW : REASON.AFTER,
+    outcome,
+  );''',
+	after = '''
+const decision =
+    outcome === OUTCOME.ELIGIBLE
+      ? null
+      : outcome === OUTCOME.OUT_OF_RANGE
+        ? REASON.BELOW
+        : REASON.AFTER;
+  if (decision === null) return "not-retryable";
+  await settle(id, decision, outcome);''',
+}
+output = '''
+const OUTCOME = { ELIGIBLE: "eligible", OUT_OF_RANGE: "out-of-range", OTHER: "other" } as const;
+type Outcome = (typeof OUTCOME)[keyof typeof OUTCOME];
+const REASON = { BELOW: "below", AFTER: "after" } as const;
+
+declare function settle(id: string, reason: string, outcome: Outcome): Promise<void>;
+
+export async function choose(id: string, outcome: Outcome) {
+  const decision =
+    outcome === OUTCOME.ELIGIBLE
+      ? null
+      : outcome === OUTCOME.OUT_OF_RANGE
+        ? REASON.BELOW
+        : REASON.AFTER;
+  if (decision === null) return "not-retryable";
+  await settle(id, decision, outcome);
+  return null;
+}
+'''
+
+
+[[suites.tests]]
+name = "a bare return, the value in a variable's initializer"
+input = '''
+export function f(n: number) {
+  if (n < 0) return;
+  const size = n > 10 ? "big" : "small";
+  console.log(size);
+}
+'''
+options = {
+	at = "2:3-3:41",
+	before = '''
+if (n < 0) return;
+  const size = n > 10 ? "big" : "small";''',
+	after = '''
+const checked = n < 0 ? null : n > 10 ? "big" : "small";
+  if (checked === null) return;
+  const size = checked;''',
+}
+output = '''
+export function f(n: number) {
+  const checked = n < 0 ? null : n > 10 ? "big" : "small";
+  if (checked === null) return;
+  const size = checked;
+  console.log(size);
+}
+'''
+
+
+[[suites]]
+name = "refused"
+
+
+[[suites.tests]]
+name = "--before is not the code at --at"
+input = '''
+export function f(n: number) {
+  if (n < 0) return;
+  console.log(n + 1);
+}
+'''
+options = {
+	at = "2:3-3:22",
+	before = '''
+if (n < 0) return;
+  console.log(n + 2);''',
+	after = '''
+const m = n < 0 ? null : n + 2;
+  if (m === null) return;
+  console.log(m);''',
+}
+throws = "^INVALID_ARGS: --before is not the code"
+
+
+[[suites.tests]]
+name = "the condition changed"
+input = '''
+export function f(n: number) {
+  if (n < 0) return;
+  console.log(n + 1);
+}
+'''
+options = {
+	at = "2:3-3:22",
+	before = '''
+if (n < 0) return;
+  console.log(n + 1);''',
+	after = '''
+const m = n <= 0 ? null : n + 1;
+  if (m === null) return;
+  console.log(m);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: Cannot show .*fold-guard: its condition is not the guard's condition"
+
+
+[[suites.tests]]
+name = "a statement between the guard and the use"
+input = '''
+export function f(n: number) {
+  if (n < 0) return;
+  console.log("checked");
+  console.log(n + 1);
+}
+'''
+options = {
+	at = "2:3-4:22",
+	before = '''
+if (n < 0) return;
+  console.log("checked");
+  console.log(n + 1);''',
+	after = '''
+const m = n < 0 ? null : n + 1;
+  if (m === null) return;
+  console.log("checked");
+  console.log(m);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*2 statements before, 3 after"
+
+
+[[suites.tests]]
+name = "a guard with an else"
+input = '''
+export function f(n: number) {
+  if (n < 0) return; else console.log("ok");
+  console.log(n + 1);
+}
+'''
+options = {
+	at = "2:3-3:22",
+	before = '''
+if (n < 0) return; else console.log("ok");
+  console.log(n + 1);''',
+	after = '''
+const m = n < 0 ? null : n + 1;
+  if (m === null) return;
+  console.log(m);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*not `if \\(C\\) return R;`"
+
+
+[[suites.tests]]
+name = "E calls a function"
+input = '''
+declare function format(n: number): string;
+export function f(n: number) {
+  if (n < 0) return;
+  console.log(format(n));
+}
+'''
+options = {
+	at = "3:3-4:26",
+	before = '''
+if (n < 0) return;
+  console.log(format(n));''',
+	after = '''
+const text = n < 0 ? null : format(n);
+  if (text === null) return;
+  console.log(text);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*E does more than read"
+
+
+[[suites.tests]]
+name = "a call runs before E in its statement"
+input = '''
+declare function nextId(): string;
+declare function save(id: string, n: number): void;
+export function f(n: number) {
+  if (n < 0) return;
+  save(nextId(), n + 1);
+}
+'''
+options = {
+	at = "4:3-5:25",
+	before = '''
+if (n < 0) return;
+  save(nextId(), n + 1);''',
+	after = '''
+const m = n < 0 ? null : n + 1;
+  if (m === null) return;
+  save(nextId(), m);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*cannot move up to the guard: before it"
+
+
+[[suites.tests]]
+name = "E can be null"
+input = '''
+export function f(label: string | null, skip: boolean) {
+  if (skip) return;
+  console.log(label);
+}
+'''
+options = {
+	at = "2:3-3:22",
+	before = '''
+if (skip) return;
+  console.log(label);''',
+	after = '''
+const shown = skip ? null : label;
+  if (shown === null) return;
+  console.log(shown);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*can be null"
+
+
+[[suites.tests]]
+name = "E on the right of &&, which may not run"
+input = '''
+export function f(n: number, ready: boolean) {
+  if (n < 0) return;
+  console.log(ready && n + 1);
+}
+'''
+options = {
+	at = "2:3-3:31",
+	before = '''
+if (n < 0) return;
+  console.log(ready && n + 1);''',
+	after = '''
+const m = n < 0 ? null : n + 1;
+  if (m === null) return;
+  console.log(ready && m);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*on the right of &&"
+
+
+[[suites.tests]]
+name = "E reads a getter"
+input = '''
+class Counter {
+  get next(): number {
+    return 1;
+  }
+}
+export function f(c: Counter, stop: boolean) {
+  if (stop) return;
+  console.log(c.next);
+}
+'''
+options = {
+	at = "7:3-8:23",
+	before = '''
+if (stop) return;
+  console.log(c.next);''',
+	after = '''
+const n = stop ? null : c.next;
+  if (n === null) return;
+  console.log(n);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*reads a getter"
+
+
+[[suites.tests]]
+name = "the new name is already taken"
+input = '''
+export function f(n: number, m: number) {
+  if (n < 0) return;
+  console.log(n + m);
+}
+'''
+options = {
+	at = "2:3-3:22",
+	before = '''
+if (n < 0) return;
+  console.log(n + m);''',
+	after = '''
+const m = n < 0 ? null : n + m;
+  if (m === null) return;
+  console.log(m);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*\\bm is already a name"
+
+
+[[suites.tests]]
+name = "strictNullChecks off"
+input = '''
+export function f(n: number) {
+  if (n < 0) return;
+  console.log(n + 1);
+}
+'''
+options = {
+	at = "2:3-3:22",
+	before = '''
+if (n < 0) return;
+  console.log(n + 1);''',
+	after = '''
+const m = n < 0 ? null : n + 1;
+  if (m === null) return;
+  console.log(m);''',
+	files = {
+		"tsconfig.json" = "{ \"compilerOptions\": { \"strict\": false, \"noEmit\": true, \"module\": \"esnext\", \"moduleResolution\": \"bundler\", \"target\": \"esnext\", \"skipLibCheck\": true, \"types\": [] }, \"include\": [\"src\"] }",
+	},
+}
+throws = "^REFACTOR_UNAVAILABLE: .*strictNullChecks is off"
+
+
+[[suites.tests]]
+name = "the same behavior, but a narrowing the use relied on is gone"
+input = '''
+export function f(s: string | null, n: number) {
+  if (s === null) return;
+  console.log(s.length + n * 2);
+}
+'''
+options = {
+	at = "2:3-3:33",
+	before = '''
+if (s === null) return;
+  console.log(s.length + n * 2);''',
+	after = '''
+const twice = s === null ? null : n * 2;
+  if (twice === null) return;
+  console.log(s.length + twice);''',
+}
+throws = "^REFACTOR_UNAVAILABLE: .*behaves the same \\(fold-guard\\) but introduces type errors"

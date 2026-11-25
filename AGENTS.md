@@ -67,6 +67,12 @@ When it is unclear whether an input or case should be allowed (an empty folder t
 an edge case nobody asked about), refuse it with clear instructions. It can be allowed later, once the
 owner decides it is really fine; a refusal is easy to lift, while silently doing something odd is not.
 
+## Assumed: `valueOf` and `toString` do nothing special
+
+When an action has to know whether code only reads (to move it, reorder it or prove two versions
+behave the same), it assumes `valueOf` and `toString` have no side effects and give the same result
+every time. So `a + b`, `a < b`, `-a` and `${a}` count as plain reads even when `a` is an object.
+
 ## Language split
 
 The host binary (`jig`) is Swift, built as a single static binary. Actions stay in whatever

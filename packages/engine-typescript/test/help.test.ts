@@ -9,7 +9,7 @@ import { ACTIONS, help, main } from "../src/main.ts";
 function fakeValue(flag: Flag): string {
   if (flag.type === "choice") return flag.choices[0]!.name;
   if (flag.type === "path" || flag.type === "paths" || flag.type === "globs") return "src/a.ts";
-  if (flag.name === "--at") return "src/a.ts:12:20";
+  if (flag.name === "--at") return flag.description.includes("<line>:<column>-<line>:<column>") ? "src/a.ts:12:3-14:4" : "src/a.ts:12:20";
   if (flag.name === "--lines") return "12-20";
   if (flag.name === "--alias") return "@/";
   if (flag.name === "--prefix") return "#/";

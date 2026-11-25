@@ -5,6 +5,8 @@ export type { RenameParams, ExtractParams } from "./actions.ts";
 export { liftOutAction } from "./lift.ts";
 export { extractFunctionAction } from "./extract-function/extract-function.ts";
 export type { ExtractFunctionParams } from "./extract-function/extract-function.ts";
+export { replaceSameBehaviorAction } from "./replace-same-behavior/replace-same-behavior.ts";
+export type { ReplaceParams } from "./replace-same-behavior/replace-same-behavior.ts";
 export type { LiftParams } from "./lift.ts";
 export { moveFileAction, organizeImportsAction } from "./files.ts";
 export type { MoveFileParams, OrganizeImportsParams } from "./files.ts";

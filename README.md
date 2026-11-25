@@ -505,7 +505,7 @@ commits:
 
 | Kind | Meaning | Actions |
 |---|---|---|
-| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `extract-function`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
+| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `extract-function`, `replace-same-behavior`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
 | `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
@@ -633,6 +633,21 @@ as written, else the checker's. It refuses (`REFACTOR_UNAVAILABLE`) when:
 - the returned declarations mix `let` and `const`;
 - the result would introduce type errors.
 
+## replace-same-behavior
+
+Replaces the code at `--at <path>:<line>:<column>-<line>:<column>` (the end just after its last
+character), which must be exactly `--before`, with `--after`, but only when a known rule proves the two
+behave the same. Formatting and comments do not matter to the proof. A rule that does not apply says
+why, and the action refuses (`REFACTOR_UNAVAILABLE`) with every rule's reason; one whose result
+introduces type errors (often a narrowing the old code had) is refused too. The rules so far:
+
+- `fold-guard`: `if (C) return R;` followed by one statement using an expression `E` becomes
+  `const d = C ? null : E;`, `if (d === null) return R;` and that statement using `d`. It holds when
+  `d` is a new name, `strictNullChecks` is on and `E` can never be `null`, `E` only reads (names,
+  property reads that are not getters, literals, operators that do not assign, conditionals), and `E`
+  runs exactly once right after the guard: not behind `&&`/`||`/`??`/`?:`/`?.`, and only reads before
+  it in its statement. `valueOf` and `toString` are assumed to do nothing special.
+
 ## Actions
 
 Every action is `<image> <action> [flags]`. The tables give the kind, the flags and what it does, with
@@ -651,6 +666,7 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 | `extract` | `--file --symbols a,b --to [--kind]` | moves top-level declarations to another file (TS "Move to file"), imports follow; refuses `import.meta`, re-exports not rewritten |
 | `lift-out` | `--file --in --symbol [--to]` | lifts a nested function or `const` to module level, with the locals it uses ([details](#lift-out)); refuses parameters, `let`/`var`, side effects, name clashes |
 | `extract-function` | `--file --lines --name --params [--returns]` | turns whole statements inside a function into a new module-level function and a call to it ([details](#extract-function)); refuses mismatched `--params`/`--returns`, outer assignments, `return`/`await`/`break` leaving the lines |
+| `replace-same-behavior` | `--at --before --after` | replaces exact code with new code when a known rule proves they behave the same ([details](#replace-same-behavior)); one rule so far, `fold-guard` |
 | `move-file` | `--file --to` | moves or renames a file, rewriting the imports of and in it (the core described below, with a group of one file); `--to` must be free |
 | `duplicate-folder` | `--from --to` | copies every file under the folder `--from` (any type: `.ts`, `.css`, images, declaration files) byte for byte to the same place under the new folder `--to` (`src/old/x/y.ts` to `<to>/x/y.ts`); the copies' imports of each other point at the copies, their other imports are adjusted to the new place, each in its own style and extension form, and files outside the copies still import the originals |
 | `remove-barrels` | `--files` | imports through a barrel (an `index.ts` that only re-exports) come from the defining module, barrels nothing imports any more are deleted; a barrel imported by non-TypeScript files stays, other packages' barrels are left, re-export cycles are refused |

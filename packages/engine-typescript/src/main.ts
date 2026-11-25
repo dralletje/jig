@@ -16,6 +16,7 @@ import { liftOutAction } from "./lift.ts";
 import { paramsToObjectAction } from "./params.ts";
 import { inferReturnTypesAction } from "./return-types.ts";
 import { renameFilesAction } from "./rename-files.ts";
+import { replaceSameBehaviorAction } from "./replace-same-behavior/replace-same-behavior.ts";
 import { templateStringAction } from "./template-string.ts";
 import { removeUnusedVariableAction } from "./unused-variable.ts";
 
@@ -50,6 +51,7 @@ export const ACTIONS: Action[] = [
   convertFunctionAction,
   defaultToNamedAction,
   inlineFunctionAction,
+  replaceSameBehaviorAction,
 ];
 
 /** What the image prints for `--help`: its actions, their summaries and flags. */
