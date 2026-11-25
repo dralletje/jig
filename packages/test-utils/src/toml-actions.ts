@@ -16,15 +16,15 @@ export type RunAction = (argv: string[], dir: string) => Promise<unknown>;
 export type TypeErrors = (dir: string, file: string) => Promise<string[]>;
 
 /** Options of a case that are not flags. */
-const NOT_FLAGS = ["fixture", "files", "typecheck"];
+const NOT_FLAGS = ["fixture", "extra_files", "typecheck"];
 
 /**
  * Registers the cases of one action's TOML file with node:test. Every case has the same shape:
  *
  * - `input`: a string, which becomes `src/a.ts`; or a table of files by path (`{}` for none).
  * - `options`: the flags, in order: `lines = "2-3"` passes `--lines 2-3`, a list is comma-separated.
- *   Not flags: `fixture` (the example folder to start from instead of `defaults.fixture`), `files`
- *   (more files by path, written before `input`), `typecheck = true` (the changed TypeScript files must
+ *   Not flags: `fixture` (the example folder to start from instead of `defaults.fixture`), `extra_files`
+ *   (more files by path, written before `input`; not `files`, which is a flag of many actions), `typecheck = true` (the changed TypeScript files must
  *   have no type errors afterwards).
  * - `output`: for a string `input`, `src/a.ts` afterwards; for a table, every file that changed, by
  *   path (`false` for one that was deleted).
@@ -39,7 +39,7 @@ export async function actionToml(
   const runCase = async (input: TomlValue, options: Record<string, TomlValue>): Promise<TomlValue> => {
     const dir = await makeRepo(typeof options.fixture === "string" ? options.fixture : defaults.fixture);
     const written = {
-      ...(options.files as Record<string, string> | undefined),
+      ...(options.extra_files as Record<string, string> | undefined),
       ...(typeof input === "string" ? { "src/a.ts": input } : (input as Record<string, string>)),
     };
     for (const [path, content] of Object.entries(written)) {
@@ -73,7 +73,8 @@ export async function actionToml(
       }
     }
     if (typeof input === "string") return after["src/a.ts"] ?? false;
-    return Object.fromEntries(changed.map((p) => [p, after[p] ?? false]));
+    // A table as toml-tests parses it: without a prototype, or deepStrictEqual never matches.
+    return Object.assign(Object.create(null), Object.fromEntries(changed.map((p) => [p, after[p] ?? false])));
   };
 
   toml_test(await readFile(tomlFile, "utf8"), runCase, { describe, it, equal: assert.deepStrictEqual }, tomlFile);
