@@ -1,0 +1,518 @@
+# extract-function: whole statements of a function become a new module-level function, right
+# above the top-level declaration they came from.
+#
+# input   = the source of src/a.ts
+# options = the flags: lines, name, params, returns (optional)
+# output  = src/a.ts afterwards
+# throws  = "^<ERROR_CODE>: ..." (the test throws a RefactorError again as "<code>: <message>")
+#
+# --params and --returns are checked, never inferred: they name exactly the locals the lines read
+# from the function around them, and exactly the locals the lines declare that later code uses.
+
+name = "extract-function"
+
+[[suites]]
+name = "params"
+
+[[suites.tests]]
+name = "positional"
+input = """
+type User = { name: string };
+
+export function report(user: User, items: string[]) {
+  const header = `Report for ${user.name}`;
+  console.log(header);
+  console.log(items.length);
+}
+"""
+options = { lines = "4-5", name = "printHeader", params = "user" }
+output = """
+type User = { name: string };
+
+function printHeader(user: User) {
+  const header = `Report for ${user.name}`;
+  console.log(header);
+}
+
+export function report(user: User, items: string[]) {
+  printHeader(user);
+  console.log(items.length);
+}
+"""
+
+[[suites.tests]]
+name = "one object"
+input = """
+type User = { name: string };
+
+export function report(user: User, items: string[]) {
+  console.log(user.name, items.length);
+}
+"""
+options = { lines = "4", name = "printSummary", params = "{ user, items }" }
+output = """
+type User = { name: string };
+
+function printSummary({ user, items }: { user: User; items: string[] }) {
+  console.log(user.name, items.length);
+}
+
+export function report(user: User, items: string[]) {
+  printSummary({ user, items });
+}
+"""
+
+[[suites.tests]]
+name = "one tuple"
+input = """
+export function point(x: number, y: number) {
+  console.log(x, y);
+}
+"""
+options = { lines = "2", name = "log", params = "[x, y]" }
+output = """
+function log([x, y]: [number, number]) {
+  console.log(x, y);
+}
+
+export function point(x: number, y: number) {
+  log([x, y]);
+}
+"""
+
+[[suites.tests]]
+name = "in the order given, not the order of use"
+input = """
+export function f(a: number, b: string) {
+  console.log(a, b);
+}
+"""
+options = { lines = "2", name = "g", params = "b, a" }
+output = """
+function g(b: string, a: number) {
+  console.log(a, b);
+}
+
+export function f(a: number, b: string) {
+  g(b, a);
+}
+"""
+
+[[suites.tests]]
+name = "none"
+input = """
+export function f() {
+  console.log("hi");
+}
+"""
+options = { lines = "2", name = "g", params = "" }
+output = """
+function g() {
+  console.log("hi");
+}
+
+export function f() {
+  g();
+}
+"""
+
+[[suites.tests]]
+name = "a type the checker works out"
+input = """
+export function f() {
+  const n = 1 + 1;
+  console.log(n);
+}
+"""
+options = { lines = "3", name = "g", params = "n" }
+output = """
+function g(n: number) {
+  console.log(n);
+}
+
+export function f() {
+  const n = 1 + 1;
+  g(n);
+}
+"""
+
+[[suites]]
+name = "returns"
+
+[[suites.tests]]
+name = "one value, a let stays a let"
+input = """
+type Item = { price: number };
+
+export function total(items: Item[]) {
+  let sum = 0;
+  for (const item of items) sum += item.price;
+  sum = sum * 1.21;
+  return sum;
+}
+"""
+options = { lines = "4-5", name = "sumPrices", params = "items", returns = "sum" }
+output = """
+type Item = { price: number };
+
+function sumPrices(items: Item[]) {
+  let sum = 0;
+  for (const item of items) sum += item.price;
+  return sum;
+}
+
+export function total(items: Item[]) {
+  let sum = sumPrices(items);
+  sum = sum * 1.21;
+  return sum;
+}
+"""
+
+[[suites.tests]]
+name = "one object"
+input = """
+export function stats(values: number[]) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return `${min}-${max}`;
+}
+"""
+options = { lines = "2-3", name = "range", params = "values", returns = "{ min, max }" }
+output = """
+function range(values: number[]) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return { min, max };
+}
+
+export function stats(values: number[]) {
+  const { min, max } = range(values);
+  return `${min}-${max}`;
+}
+"""
+
+[[suites.tests]]
+name = "one tuple, typed so it destructures"
+input = """
+export function stats(values: number[]) {
+  const min = Math.min(...values);
+  const label = `of ${values.length}`;
+  return `${min} ${label}`;
+}
+"""
+options = { lines = "2-3", name = "summary", params = "values", returns = "[min, label]" }
+output = """
+function summary(values: number[]): [number, string] {
+  const min = Math.min(...values);
+  const label = `of ${values.length}`;
+  return [min, label];
+}
+
+export function stats(values: number[]) {
+  const [min, label] = summary(values);
+  return `${min} ${label}`;
+}
+"""
+
+[[suites]]
+name = "where the lines are"
+
+[[suites.tests]]
+name = "inside a nested block keeps that block's indentation at the call"
+input = """
+export function f(xs: number[]) {
+  for (const x of xs) {
+    const doubled = x * 2;
+    console.log(doubled);
+  }
+}
+"""
+options = { lines = "3-4", name = "logDoubled", params = "x" }
+output = """
+function logDoubled(x: number) {
+  const doubled = x * 2;
+  console.log(doubled);
+}
+
+export function f(xs: number[]) {
+  for (const x of xs) {
+    logDoubled(x);
+  }
+}
+"""
+
+[[suites.tests]]
+name = "a loop with its own break moves whole"
+input = """
+export function f(xs: number[]) {
+  for (const x of xs) {
+    if (x < 0) break;
+    console.log(x);
+  }
+}
+"""
+options = { lines = "2-5", name = "logUntilNegative", params = "xs" }
+output = """
+function logUntilNegative(xs: number[]) {
+  for (const x of xs) {
+    if (x < 0) break;
+    console.log(x);
+  }
+}
+
+export function f(xs: number[]) {
+  logUntilNegative(xs);
+}
+"""
+
+[[suites.tests]]
+name = "a const arrow function at top level, below its doc comment"
+input = """
+/** Logs twice. */
+export const f = (a: number) => {
+  console.log(a);
+  console.log(a);
+};
+"""
+options = { lines = "3-4", name = "logTwice", params = "a" }
+output = """
+function logTwice(a: number) {
+  console.log(a);
+  console.log(a);
+}
+
+/** Logs twice. */
+export const f = (a: number) => {
+  logTwice(a);
+};
+"""
+
+[[suites.tests]]
+name = "a return inside a nested function is fine"
+input = """
+export function f(xs: number[]) {
+  const ys = xs.map((x) => {
+    return x + 1;
+  });
+  console.log(ys);
+}
+"""
+options = { lines = "2-4", name = "increment", params = "xs", returns = "ys" }
+output = """
+function increment(xs: number[]) {
+  const ys = xs.map((x) => {
+    return x + 1;
+  });
+  return ys;
+}
+
+export function f(xs: number[]) {
+  const ys = increment(xs);
+  console.log(ys);
+}
+"""
+
+[[suites.tests]]
+name = "comment lines in the range move along"
+input = """
+export function f(a: number) {
+  // Log it twice.
+  console.log(a);
+  console.log(a);
+}
+"""
+options = { lines = "2-4", name = "logTwice", params = "a" }
+output = """
+function logTwice(a: number) {
+  // Log it twice.
+  console.log(a);
+  console.log(a);
+}
+
+export function f(a: number) {
+  logTwice(a);
+}
+"""
+
+[[suites]]
+name = "refused"
+
+[[suites.tests]]
+name = "a parameter narrowed before the lines would not type-check in the new function"
+input = """
+export function f(a: string | null) {
+  if (a === null) return;
+  console.log(a.length);
+}
+"""
+options = { lines = "3", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*type errors"
+
+[[suites.tests]]
+name = "a local the lines read is missing from --params"
+input = """
+export function f(a: number, b: number) {
+  console.log(a + b);
+}
+"""
+options = { lines = "2", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*missing from --params.*\\bb\\b"
+
+[[suites.tests]]
+name = "--params names a local the lines do not read"
+input = """
+export function f(a: number, b: number) {
+  console.log(a);
+}
+"""
+options = { lines = "2", name = "g", params = "a, b" }
+throws = "^REFACTOR_UNAVAILABLE: .*\\bb\\b.*which they do not read"
+
+[[suites.tests]]
+name = "a local declared in the lines is used after them but not in --returns"
+input = """
+export function f(a: number) {
+  const double = a * 2;
+  return double;
+}
+"""
+options = { lines = "2", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*\\bdouble\\b.*missing from --returns"
+
+[[suites.tests]]
+name = "--returns names a local later code does not use"
+input = """
+export function f(a: number) {
+  const double = a * 2;
+  console.log(double);
+}
+"""
+options = { lines = "2-3", name = "g", params = "a", returns = "double" }
+throws = "^REFACTOR_UNAVAILABLE: .*\\bdouble\\b.*does not use"
+
+[[suites.tests]]
+name = "the lines reassign a local declared before them"
+input = """
+export function f(a: number) {
+  let total = 0;
+  total = a * 2;
+  return total;
+}
+"""
+options = { lines = "3", name = "g", params = "a, total" }
+throws = "^REFACTOR_UNAVAILABLE: .*assigns.*\\btotal\\b"
+
+[[suites.tests]]
+name = "a return inside the lines"
+input = """
+export function f(a: number) {
+  if (a < 0) return 0;
+  return a;
+}
+"""
+options = { lines = "2", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*a return"
+
+[[suites.tests]]
+name = "break out of the lines"
+input = """
+export function f(xs: number[]) {
+  for (const x of xs) {
+    if (x < 0) break;
+  }
+}
+"""
+options = { lines = "3", name = "g", params = "x" }
+throws = "^REFACTOR_UNAVAILABLE: .*a break out of the lines"
+
+[[suites.tests]]
+name = "await inside the lines"
+input = """
+export async function f(p: Promise<number>) {
+  const n = await p;
+  console.log(n);
+}
+"""
+options = { lines = "2-3", name = "g", params = "p" }
+throws = "^REFACTOR_UNAVAILABLE: .*await"
+
+[[suites.tests]]
+name = "this inside the lines"
+input = """
+export function f(this: { n: number }) {
+  console.log(this.n);
+}
+"""
+options = { lines = "2", name = "g", params = "" }
+throws = "^REFACTOR_UNAVAILABLE: .*this"
+
+[[suites.tests]]
+name = "the range cuts a statement in half"
+input = """
+export function f(a: number) {
+  console.log(
+    a,
+  );
+}
+"""
+options = { lines = "2-3", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*cuts through"
+
+[[suites.tests]]
+name = "the range takes in the function's closing brace"
+input = """
+export function f(a: number) {
+  console.log(a);
+}
+"""
+options = { lines = "2-3", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: "
+
+[[suites.tests]]
+name = "statements at module level"
+input = """
+const a = 1;
+console.log(a);
+"""
+options = { lines = "2", name = "g", params = "" }
+throws = "^REFACTOR_UNAVAILABLE: .*not inside"
+
+[[suites.tests]]
+name = "--name is already taken in the module"
+input = """
+function g() {}
+export function f(a: number) {
+  console.log(a);
+}
+"""
+options = { lines = "3", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*\\bg\\b.*already"
+
+[[suites.tests]]
+name = "a generic function"
+input = """
+export function f<T>(a: T) {
+  console.log(a);
+}
+"""
+options = { lines = "2", name = "g", params = "a" }
+throws = "^REFACTOR_UNAVAILABLE: .*type parameters"
+
+[[suites]]
+name = "flags"
+
+[[suites.tests]]
+name = "--returns with two positional names"
+input = """
+export function f() {}
+"""
+options = { lines = "1", name = "g", params = "", returns = "a, b" }
+throws = "^INVALID_ARGS: "
+
+[[suites.tests]]
+name = "--lines that is not a range"
+input = """
+export function f() {}
+"""
+options = { lines = "two", name = "g", params = "" }
+throws = "^INVALID_ARGS: "

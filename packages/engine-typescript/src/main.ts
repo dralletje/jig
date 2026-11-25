@@ -10,6 +10,7 @@ import { TsEngine } from "./engine.ts";
 import { addImportExtensionsAction } from "./extensions.ts";
 import { moveFileAction, organizeImportsAction } from "./files.ts";
 import { importTypeAction, namespaceToNamedAction } from "./imports.ts";
+import { extractFunctionAction } from "./extract-function/extract-function.ts";
 import { inlineFunctionAction } from "./inline.ts";
 import { liftOutAction } from "./lift.ts";
 import { paramsToObjectAction } from "./params.ts";
@@ -29,6 +30,7 @@ export const ACTIONS: Action[] = [
   renameAction,
   extractAction,
   liftOutAction,
+  extractFunctionAction,
   moveFileAction,
   duplicateFolderAction,
   organizeImportsAction,

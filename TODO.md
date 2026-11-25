@@ -37,7 +37,7 @@ Not a fit: `organize-imports` (one import block), `remove-barrels`, `rename-file
 
 ### refactor
 - Extract a constant or function from an expression at `--at <path>:<line>:<col>[-<line>:<col>]`
-  (TypeScript's extract refactors).
+  (TypeScript's extract refactors). Whole statements are done: `extract-function`.
 - Promise chain → async/await for one function (TypeScript's "Convert to async function"), only where
   the result is just returned.
 

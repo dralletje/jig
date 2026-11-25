@@ -10,6 +10,7 @@ function fakeValue(flag: Flag): string {
   if (flag.type === "choice") return flag.choices[0]!.name;
   if (flag.type === "path" || flag.type === "paths" || flag.type === "globs") return "src/a.ts";
   if (flag.name === "--at") return "src/a.ts:12:20";
+  if (flag.name === "--lines") return "12-20";
   if (flag.name === "--alias") return "@/";
   if (flag.name === "--prefix") return "#/";
   return "foo";

@@ -3,6 +3,8 @@ export type { Project } from "./engine.ts";
 export { renameAction, extractAction } from "./actions.ts";
 export type { RenameParams, ExtractParams } from "./actions.ts";
 export { liftOutAction } from "./lift.ts";
+export { extractFunctionAction } from "./extract-function/extract-function.ts";
+export type { ExtractFunctionParams } from "./extract-function/extract-function.ts";
 export type { LiftParams } from "./lift.ts";
 export { moveFileAction, organizeImportsAction } from "./files.ts";
 export type { MoveFileParams, OrganizeImportsParams } from "./files.ts";

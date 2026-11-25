@@ -145,7 +145,7 @@ function closure(typescript: typeof ts, checker: ts.TypeChecker, outer: ts.Node,
  * Where `node` starts once the comments directly above it are counted as part of it (its JSDoc, say):
  * each on a line of its own, with no blank line between them and the node.
  */
-function attachedStart(typescript: typeof ts, sf: ts.SourceFile, node: ts.Node): number {
+export function attachedStart(typescript: typeof ts, sf: ts.SourceFile, node: ts.Node): number {
   const text = sf.text;
   let start = node.getStart(sf);
   const ranges = typescript.getLeadingCommentRanges(text, node.pos) ?? [];
@@ -159,7 +159,7 @@ function attachedStart(typescript: typeof ts, sf: ts.SourceFile, node: ts.Node):
 }
 
 /** Start of the statement's first line (if only indentation precedes it) through its trailing newline. */
-function lineSpan(text: string, start: number, end: number): { start: number; end: number; indent: string } {
+export function lineSpan(text: string, start: number, end: number): { start: number; end: number; indent: string } {
   const lineStart = text.lastIndexOf("\n", start - 1) + 1;
   const indent = text.slice(lineStart, start);
   const from = /^[ \t]*$/.test(indent) ? lineStart : start;

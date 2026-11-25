@@ -20,6 +20,7 @@ dist/jig localhost/jig/fs:local --help
 dist/jig --repo <repo> localhost/jig/typescript:local rename --file src/a.ts --symbol foo --to bar
 dist/jig --repo <repo> localhost/jig/typescript:local extract --file src/a.ts --symbols foo,keep --to src/foo.ts
 dist/jig --repo <repo> localhost/jig/typescript:local lift-out --file src/a.ts --in outer --symbol inner [--to src/inner.ts]
+dist/jig --repo <repo> localhost/jig/typescript:local extract-function --file src/a.ts --lines 12-20 --name buildRows --params "{ user, items }" [--returns total]
 dist/jig --repo <repo> localhost/jig/typescript:local move-file --file src/a.ts --to src/lib/a.ts
 dist/jig --repo <repo> localhost/jig/typescript:local organize-imports --files "src/**/*.ts,src/**/*.tsx"
 dist/jig --repo <repo> localhost/jig/typescript:local imports-to-alias --files "src/**" --targets "src/lib/**" --alias @/
@@ -504,7 +505,7 @@ commits:
 
 | Kind | Meaning | Actions |
 |---|---|---|
-| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
+| `refactor` | targeted, behaviour-preserving, the kind you do as part of other work | `rename`, `extract`, `lift-out`, `extract-function`, `move-file`, `duplicate-folder`, `remove-barrels`, `params-to-object`, `inline-function` (one call or the definition), `template-string`, `remove-unused-variable`, `convert-function` |
 | `sweep` | a repo-wide or many-file mechanical convention change, behaviour-preserving | `format`, `organize-imports`, `add-import-extensions`, `imports-to-relative`, `imports-to-alias`, `imports-to-subpath`, `default-to-named`, `infer-return-types`, `namespace-to-named`, `import-type`, `rename-files` |
 | `rewrite` | changes behaviour in a simple, repetitive way (removing `console.log` calls, ...) | `remove-console`, the transforms of the codemod image (their kinds are in [Published codemods](#published-codemods)), and every command of the fs image (`copy`, `move`, `remove`, `remove-matching`, `unwrap`, `wrap`) |
 
@@ -612,6 +613,26 @@ refuses (`REFACTOR_UNAVAILABLE`) when:
   would run at a different time);
 - the name already exists at module level or as a global.
 
+## extract-function
+
+Turns whole statements of one block inside a function (`--lines`) into a new function `--name` at module
+level, placing it right above the top-level declaration they are in, and replaces them with a call.
+`--params` and `--returns` are stated, not inferred, and checked to be exactly what the lines read and what
+they declare and later code uses. Each takes one of three shapes: `a, b` (positional; for `--returns` one
+name only), `{ a, b }` (one object) or `[a, b]` (one tuple, which gets a tuple return type so it
+destructures). A returned `let`/`const` keeps its keyword at the call. A parameter's type is its annotation
+as written, else the checker's. It refuses (`REFACTOR_UNAVAILABLE`) when:
+
+- the lines are not whole statements of one block inside a function;
+- `--params` or `--returns` does not match what the lines read or declare and later code uses;
+- the lines assign a local declared before them;
+- `return`, `await`, `yield`, `break` or `continue` would leave the lines;
+- they use `this`, `super`, `arguments` or `new.target`;
+- the function around them is generic;
+- `--name` already exists in scope;
+- the returned declarations mix `let` and `const`;
+- the result would introduce type errors.
+
 ## Actions
 
 Every action is `<image> <action> [flags]`. The tables give the kind, the flags and what it does, with
@@ -629,6 +650,7 @@ asking for a column), a column picks the innermost one, and none is `REFACTOR_UN
 | `rename` | `--file --symbol --to [--kind]` | renames a top-level declaration and all its references in the project; top-level only, no references across packages |
 | `extract` | `--file --symbols a,b --to [--kind]` | moves top-level declarations to another file (TS "Move to file"), imports follow; refuses `import.meta`, re-exports not rewritten |
 | `lift-out` | `--file --in --symbol [--to]` | lifts a nested function or `const` to module level, with the locals it uses ([details](#lift-out)); refuses parameters, `let`/`var`, side effects, name clashes |
+| `extract-function` | `--file --lines --name --params [--returns]` | turns whole statements inside a function into a new module-level function and a call to it ([details](#extract-function)); refuses mismatched `--params`/`--returns`, outer assignments, `return`/`await`/`break` leaving the lines |
 | `move-file` | `--file --to` | moves or renames a file, rewriting the imports of and in it (the core described below, with a group of one file); `--to` must be free |
 | `duplicate-folder` | `--from --to` | copies every file under the folder `--from` (any type: `.ts`, `.css`, images, declaration files) byte for byte to the same place under the new folder `--to` (`src/old/x/y.ts` to `<to>/x/y.ts`); the copies' imports of each other point at the copies, their other imports are adjusted to the new place, each in its own style and extension form, and files outside the copies still import the originals |
 | `remove-barrels` | `--files` | imports through a barrel (an `index.ts` that only re-exports) come from the defining module, barrels nothing imports any more are deleted; a barrel imported by non-TypeScript files stays, other packages' barrels are left, re-export cycles are refused |

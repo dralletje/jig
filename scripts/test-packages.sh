@@ -1,5 +1,6 @@
 #!/bin/sh
-# Runs the unit tests of the action packages (packages/*/test/*.test.ts) with Node's test runner.
+# Runs the unit tests of the action packages (packages/*/test/*.test.ts, and the ones next to an action in
+# packages/*/src/**/test/*.test.ts) with Node's test runner.
 # Extra arguments go to `node --test` (for example --test-name-pattern=rename).
 #
 # Node is taken from $NODE, else `node` on PATH when it is Node 26, else the Node 26 install in
@@ -33,7 +34,7 @@ case "$version" in
 esac
 
 cd "$repo_root"
-"$node" --test "$@" 'packages/*/test/*.test.ts'
+"$node" --test "$@" 'packages/*/test/*.test.ts' 'packages/*/src/**/test/*.test.ts'
 # The typescript tests again as the experimental typescript-beta image runs them, on TypeScript 7.1.0-beta.
 echo "# again with JIG_TYPESCRIPT=7.1.0-beta (the typescript-beta image)"
-JIG_TYPESCRIPT=7.1.0-beta exec "$node" --test "$@" 'packages/engine-typescript/test/*.test.ts'
+JIG_TYPESCRIPT=7.1.0-beta exec "$node" --test "$@" 'packages/engine-typescript/test/*.test.ts' 'packages/engine-typescript/src/**/test/*.test.ts'
