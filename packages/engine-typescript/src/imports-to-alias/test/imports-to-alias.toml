@@ -1,0 +1,297 @@
+# imports-to-alias: every relative or subpath import of a file that --targets matches becomes an --alias
+# import (a tsconfig paths key such as "@/*" that maps to one folder). --files says which files change. The
+# extension form (none, .ts, a folder) is kept; packages, imports that do not resolve and targets outside the
+# alias folder stay.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is the files that changed.
+
+name = "imports-to-alias"
+
+
+[[suites]]
+name = "imports-to-alias"
+
+
+[[suites.tests]]
+name = "relative and subpath imports become alias imports; alias ones stay"
+input = {}
+options = {
+	files = "src/**",
+	targets = "**",
+	alias = "@/",
+}
+output = {
+	"src/components/Invoice.ts" = '''
+import { formatDay } from "@/lib/date.ts";
+import type { Day } from "@/lib/date.ts";
+import { cents } from "@/lib/money.ts";
+
+export function invoiceLine(day: Day, amount: number): string {
+  return `${formatDay(day)}: ${cents(amount)}`;
+}
+
+export const loadLib = () => import("@/lib/index.ts");
+''',
+	"src/lib/index.ts" = '''
+export { formatDay } from "@/lib/date.ts";
+export { cents } from "@/lib/money.ts";
+''',
+	"src/main.ts" = '''
+import { invoiceLine } from "@/components/Invoice.ts";
+import { formatDay } from "@/lib/index.ts";
+
+console.log(invoiceLine({ year: 2026, month: 1, day: 2 }, 1250));
+console.log(formatDay({ year: 2026, month: 1, day: 3 }));
+''',
+}
+
+
+[[suites.tests]]
+name = "--targets limits which imports change"
+input = {}
+options = {
+	files = "src/**",
+	targets = "src/lib/money.ts",
+	alias = "@/",
+}
+output = {
+	"src/components/Invoice.ts" = '''
+import { formatDay } from "../lib/date.ts";
+import type { Day } from "@/lib/date.ts";
+import { cents } from "@/lib/money.ts";
+
+export function invoiceLine(day: Day, amount: number): string {
+  return `${formatDay(day)}: ${cents(amount)}`;
+}
+
+export const loadLib = () => import("../lib/index.ts");
+''',
+	"src/lib/index.ts" = '''
+export { formatDay } from "./date.ts";
+export { cents } from "@/lib/money.ts";
+''',
+}
+
+
+[[suites.tests]]
+name = "the extension form is kept: none, .ts, a folder for its index file"
+input = {
+	"src/extra/forms.ts" = '''
+import { formatDay } from "../lib/date";
+import { cents } from "../lib";
+import type { Day } from "../lib/date.ts";
+export const x = [formatDay, cents] as const;
+export type D = Day;
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+	alias = "@/",
+	typecheck = true,
+}
+output = {
+	"src/extra/forms.ts" = '''
+import { formatDay } from "@/lib/date";
+import { cents } from "@/lib";
+import type { Day } from "@/lib/date.ts";
+export const x = [formatDay, cents] as const;
+export type D = Day;
+''',
+}
+
+
+[[suites.tests]]
+name = "import types, re-exports, import(), import = require(), require() and import() types all change"
+input = {
+	"src/extra/forms.ts" = '''
+declare function require(id: string): unknown;
+import type { Day } from "../lib/date.ts";
+import { type Day as D2, formatDay } from "../lib/date.ts";
+export { cents } from "../lib/money.ts";
+export * from "../lib/index.ts";
+import money = require("../lib/money.ts");
+const late = require("../lib/date.ts");
+export const lazy = () => import("../lib/money.ts");
+export type DateModule = typeof import("../lib/date.ts");
+export const all = [formatDay, money, late];
+export type Both = [Day, D2];
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+	alias = "@/",
+}
+output = {
+	"src/extra/forms.ts" = '''
+declare function require(id: string): unknown;
+import type { Day } from "@/lib/date.ts";
+import { type Day as D2, formatDay } from "@/lib/date.ts";
+export { cents } from "@/lib/money.ts";
+export * from "@/lib/index.ts";
+import money = require("@/lib/money.ts");
+const late = require("@/lib/date.ts");
+export const lazy = () => import("@/lib/money.ts");
+export type DateModule = typeof import("@/lib/date.ts");
+export const all = [formatDay, money, late];
+export type Both = [Day, D2];
+''',
+}
+
+
+[[suites.tests]]
+name = "an alias missing from the importer's tsconfig paths is refused"
+input = {}
+options = {
+	files = "src/**",
+	targets = "**",
+	alias = "~/",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "a target outside the alias folder is left alone"
+input = {
+	"other/x.ts" = '''
+export const x = 1;
+''',
+	"src/extra/use.ts" = '''
+import { x } from "../../other/x.ts";
+import { cents } from "../lib/money.ts";
+export const c = [x, cents];
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+	alias = "@/",
+}
+output = {
+	"src/extra/use.ts" = '''
+import { x } from "../../other/x.ts";
+import { cents } from "@/lib/money.ts";
+export const c = [x, cents];
+''',
+}
+
+
+[[suites.tests]]
+name = "with nothing else to do, a second run on the files as the first one left them"
+input = {
+	"other/x.ts" = '''
+export const x = 1;
+''',
+	"src/extra/use.ts" = '''
+import { x } from "../../other/x.ts";
+import { cents } from "@/lib/money.ts";
+export const c = [x, cents];
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+	alias = "@/",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "--alias must end in a slash"
+input = {}
+options = {
+	files = "src/**",
+	targets = "**",
+	alias = "@",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites.tests]]
+name = "--alias must not be a subpath prefix"
+input = {}
+options = {
+	files = "src/**",
+	targets = "**",
+	alias = "#/",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites]]
+name = "edge cases"
+
+
+[[suites.tests]]
+name = "a folder whose package.json points TypeScript at a declaration file elsewhere is left alone"
+input = {
+	"src/vendor/thing/package.json" = '''
+{ "types": "dist/index.d.ts", "main": "lib/index.js" }
+''',
+	"src/vendor/thing/dist/index.d.ts" = '''
+export declare const t: number;
+''',
+	"src/vendor/thing/lib/index.js" = '''
+exports.t = 1;
+''',
+	"src/x/a.ts" = '''
+import { t } from "../vendor/thing";
+export const z = t;
+''',
+}
+options = {
+	files = "src/x/**",
+	targets = "**",
+	alias = "@/",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a template-literal import(), .js for .ts, .mjs for .mts and an extensionless .tsx keep their form and quotes"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": [],
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  }
+}
+''',
+	"src/lib/m.mts" = '''
+export const m = 1;
+''',
+	"src/lib/c.tsx" = '''
+export const c = 1;
+''',
+	"src/x/a.ts" = '''
+const l = import(`../lib/date.js`);
+import { m } from "../lib/m.mjs";
+import { c } from '../lib/c';
+export const z = [l, m, c];
+''',
+}
+options = {
+	files = "src/x/**",
+	targets = "**",
+	alias = "@/",
+}
+output = {
+	"src/x/a.ts" = '''
+const l = import(`@/lib/date.js`);
+import { m } from "@/lib/m.mjs";
+import { c } from '@/lib/c';
+export const z = [l, m, c];
+''',
+}

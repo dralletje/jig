@@ -1,0 +1,664 @@
+# add-import-extensions: relative imports, re-exports and dynamic imports get the extension of the file they
+# resolve to (`./dir` becomes `./dir/index.ts`), and the tsconfig gets allowImportingTsExtensions. Declaration
+# files, unresolved imports, packages and alias imports stay. The tsconfig must have noEmit or emitDeclarationOnly.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# options are the flags in order, output is the files that changed.
+
+name = "add-import-extensions"
+
+
+[[suites]]
+name = "add-import-extensions on examples/webapp"
+
+
+[[suites.tests]]
+name = "relative imports, re-exports and dynamic imports get the file's extension; the tsconfig allows it"
+input = {}
+options = {
+	files = "src/**",
+	typecheck = true,
+}
+output = {
+	"src/lib/index.ts" = '''
+export * from "./math.ts";
+export { formatDate, formatCurrency as currency, formatPrice } from "./format.ts";
+export * from "./strings/index.ts";
+export type { Level } from "./logger.ts";
+''',
+	"src/lib/strings/index.ts" = '''
+export * from "./slugify.ts";
+export { capitalize } from "./capitalize.ts";
+''',
+	"src/models/index.ts" = '''
+export * from "./User.ts";
+export * from "./order_item.ts";
+''',
+	"src/reports.ts" = '''
+/** Reports are rare: their math is loaded on demand. */
+export async function totalOf(values: number[]) {
+  const { sum } = await import("./lib/math.ts");
+  return sum(values);
+}
+''',
+	"src/services/index.ts" = '''
+export * from "./userService.ts";
+export { orderTotal, describeOrder, discount } from "./order-service.ts";
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models";
+import { capitalize, slugify } from "@/lib";
+import createLogger from "@/lib/logger";
+import Store from "./store.ts";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+	"src/setup/index.ts" = '''
+export * from "./register.ts";
+''',
+	"src/widgets/index.ts" = '''
+export * from "./badge.ts";
+
+export const WIDGET_PREFIX = "w-";
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a second run, on the files as the first one left them"
+input = {
+	"src/lib/index.ts" = '''
+export * from "./math.ts";
+export { formatDate, formatCurrency as currency, formatPrice } from "./format.ts";
+export * from "./strings/index.ts";
+export type { Level } from "./logger.ts";
+''',
+	"src/lib/strings/index.ts" = '''
+export * from "./slugify.ts";
+export { capitalize } from "./capitalize.ts";
+''',
+	"src/models/index.ts" = '''
+export * from "./User.ts";
+export * from "./order_item.ts";
+''',
+	"src/reports.ts" = '''
+/** Reports are rare: their math is loaded on demand. */
+export async function totalOf(values: number[]) {
+  const { sum } = await import("./lib/math.ts");
+  return sum(values);
+}
+''',
+	"src/services/index.ts" = '''
+export * from "./userService.ts";
+export { orderTotal, describeOrder, discount } from "./order-service.ts";
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models";
+import { capitalize, slugify } from "@/lib";
+import createLogger from "@/lib/logger";
+import Store from "./store.ts";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+	"src/setup/index.ts" = '''
+export * from "./register.ts";
+''',
+	"src/widgets/index.ts" = '''
+export * from "./badge.ts";
+
+export const WIDGET_PREFIX = "w-";
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+}
+options = {
+	files = "src/**",
+}
+output = {}
+
+
+[[suites.tests]]
+name = "side-effect and type-only imports stay intact, quotes are kept, template dynamic imports count"
+input = {
+	"src/extra/side.ts" = '''
+export const side = 1;
+''',
+	"src/extra/types.d.ts" = '''
+export interface T {
+  a: number;
+}
+''',
+	"src/extra/use.ts" = '''
+import './side';
+import type { T } from "./types";
+import { type Level } from "../lib/logger";
+export { sum } from "../lib/math";
+export * as strings from "../lib/strings";
+
+export const later = () => import(`../lib/format`);
+const where = "./side";
+export const dynamic = () => import(where);
+export type Both = [T, Level, typeof import("../lib/math")];
+''',
+}
+options = {
+	files = "src/extra/**",
+	typecheck = true,
+}
+output = {
+	"src/extra/use.ts" = '''
+import './side.ts';
+import type { T } from "./types";
+import { type Level } from "../lib/logger.ts";
+export { sum } from "../lib/math.ts";
+export * as strings from "../lib/strings/index.ts";
+
+export const later = () => import(`../lib/format.ts`);
+const where = "./side";
+export const dynamic = () => import(where);
+export type Both = [T, Level, typeof import("../lib/math")];
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "an unresolved relative import is left as is"
+input = {
+	"src/extra/use.ts" = '''
+// @ts-ignore
+import { x } from "./missing";
+import { sum } from "../lib/math";
+
+export const y = [x, sum];
+''',
+}
+options = {
+	files = "src/extra/**",
+}
+output = {
+	"src/extra/use.ts" = '''
+// @ts-ignore
+import { x } from "./missing";
+import { sum } from "../lib/math.ts";
+
+export const y = [x, sum];
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "the tsconfig has neither noEmit nor emitDeclarationOnly"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  }
+}
+''',
+}
+options = {
+	files = "src/**",
+}
+throws = "^REFACTOR_UNAVAILABLE: "
+
+
+[[suites.tests]]
+name = "without noEmit, nothing to rewrite is not a refusal"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  }
+}
+''',
+}
+options = {
+	files = "src/main.ts",
+}
+output = {}
+
+
+[[suites.tests]]
+name = "emitDeclarationOnly is enough"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": { "declaration": true, "emitDeclarationOnly": true, "module": "esnext", "moduleResolution": "bundler", "paths": { "@/*": ["./src/*"] } }
+}
+''',
+}
+options = {
+	files = "src/services/**",
+}
+output = {
+	"src/services/index.ts" = '''
+export * from "./userService.ts";
+export { orderTotal, describeOrder, discount } from "./order-service.ts";
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models";
+import { capitalize, slugify } from "@/lib";
+import createLogger from "@/lib/logger";
+import Store from "./store.ts";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": { "declaration": true, "emitDeclarationOnly": true, "module": "esnext", "moduleResolution": "bundler", "paths": { "@/*": ["./src/*"] }, "allowImportingTsExtensions": true }
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a flag already set leaves the tsconfig alone"
+input = {
+	"tsconfig.json" = '''
+{
+  // comments are fine
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "paths": { "@/*": ["./src/*"] },
+  },
+}
+''',
+}
+options = {
+	files = "src/services/**",
+}
+output = {
+	"src/services/index.ts" = '''
+export * from "./userService.ts";
+export { orderTotal, describeOrder, discount } from "./order-service.ts";
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models";
+import { capitalize, slugify } from "@/lib";
+import createLogger from "@/lib/logger";
+import Store from "./store.ts";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a trailing comma and comments in the tsconfig are kept"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    // no output
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "module": "esnext",
+  },
+}
+''',
+}
+options = {
+	files = "src/services/**",
+}
+output = {
+	"src/services/index.ts" = '''
+export * from "./userService.ts";
+export { orderTotal, describeOrder, discount } from "./order-service.ts";
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models";
+import { capitalize, slugify } from "@/lib";
+import createLogger from "@/lib/logger";
+import Store from "./store.ts";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    // no output
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "allowImportingTsExtensions": true,
+  },
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "globs that match no file"
+input = {}
+options = {
+	files = "nope/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites]]
+name = "add-import-extensions on other examples"
+
+
+[[suites.tests]]
+name = "examples/react-app: .tsx targets"
+input = {}
+options = {
+	fixture = "examples/react-app",
+	files = "src/**",
+}
+output = {
+	"src/App.tsx" = '''
+import React from "react";
+import Counter from "./components/Counter.tsx";
+
+export default function App() {
+  return (
+    <main>
+      <h1>Counter</h1>
+      <Counter start={5} />
+    </main>
+  );
+}
+''',
+	"src/components/Counter.tsx" = '''
+import React from "react";
+import Button from "./Button.tsx";
+
+type CounterProps = { start: number };
+type CounterState = { count: number };
+
+export default class Counter extends React.Component<CounterProps, CounterState> {
+  state: CounterState = { count: 0 };
+
+  componentWillMount() {
+    this.setState({ count: this.props.start });
+  }
+
+  componentWillReceiveProps(next: CounterProps) {
+    if (next.start !== this.props.start) this.setState({ count: next.start });
+  }
+
+  render() {
+    return (
+      <div>
+        <span>{this.state.count}</span>
+        <Button label="+1" onClick={() => this.setState({ count: this.state.count + 1 })} />
+      </div>
+    );
+  }
+}
+''',
+	"src/index.tsx" = '''
+import React from "react";
+import ReactDOM from "react-dom";
+import App from "./App.tsx";
+
+ReactDOM.render(<App />, document.getElementById("root"));
+''',
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "jsx": "react",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "examples/monorepo: each package's own tsconfig gets the flag"
+input = {}
+options = {
+	fixture = "examples/monorepo",
+	files = "**",
+	typecheck = true,
+}
+output = {
+	"packages/app/src/lib/index.ts" = '''
+export * from "./todo.ts";
+''',
+	"packages/app/src/main.ts" = '''
+import { truncate } from "@example/shared";
+import { createTodo, toggle } from "./lib/index.ts";
+
+const todo = toggle(createTodo("Write the example monorepo"));
+console.log(truncate(todo.title, 10, "..."), todo.done);
+''',
+	"packages/app/src/ui/index.ts" = '''
+export * from "./label.ts";
+export { truncate as shorten } from "@example/shared";
+''',
+	"packages/app/src/view.ts" = '''
+import { label, shorten } from "./ui/index.ts";
+
+export function view(title: string) {
+  return label(shorten(title, 12, "…"));
+}
+''',
+	"packages/app/tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "@example/shared": ["../shared/src/index.ts"]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+	"packages/shared/src/index.ts" = '''
+export * from "./ids.ts";
+export * from "./text/index.ts";
+''',
+	"packages/shared/src/text/index.ts" = '''
+export * from "./truncate.ts";
+''',
+	"packages/shared/tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"]
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "without a tsconfig to set the flag in"
+input = {
+	"scripts/a.ts" = '''
+export const a = 1;
+''',
+	"scripts/b.ts" = '''
+import { a } from "./a";
+
+export const b = a;
+''',
+}
+options = {
+	fixture = "examples/monorepo",
+	files = "scripts/**",
+}
+throws = "^REFACTOR_UNAVAILABLE: "

@@ -1,0 +1,229 @@
+# namespace-to-named: `import * as ns from "m"` plus `ns.name` uses becomes `import { name } from "m"`.
+# A name that clashes with another in the file is renamed (`add as add_1`). A namespace that is also used as a value
+# (`export { ns }`, `{ ns }`, `f(ns)`), is unused, or whose conversion would add type errors stays.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# options are the flags in order, output is the files that changed.
+
+name = "namespace-to-named"
+
+
+[[suites]]
+name = "namespace-to-named on examples/import-shapes"
+
+
+[[suites.tests]]
+name = "converts `x.name` uses, renames clashes, skips a namespace used as a value"
+input = {}
+options = {
+	files = "src/**",
+	typecheck = true,
+}
+output = {
+	"src/clash.ts" = '''
+import { add as add_1 } from "./math";
+
+const add = 10;
+
+export const total = add_1(1, 2) + add;
+''',
+	"src/sums.ts" = '''
+import { add, mul, PI, Pair } from "./math";
+
+export const sum = add(1, 2);
+export const product = mul(3, 4);
+export const again = add(sum, product);
+export const pi: typeof PI = PI;
+export const pair: Pair = { left: sum, right: product };
+''',
+}
+
+
+[[suites.tests]]
+name = "a second run, on the files as the first one left them"
+input = {
+	"src/clash.ts" = '''
+import { add as add_1 } from "./math";
+
+const add = 10;
+
+export const total = add_1(1, 2) + add;
+''',
+	"src/sums.ts" = '''
+import { add, mul, PI, Pair } from "./math";
+
+export const sum = add(1, 2);
+export const product = mul(3, 4);
+export const again = add(sum, product);
+export const pi: typeof PI = PI;
+export const pair: Pair = { left: sum, right: product };
+''',
+}
+options = {
+	files = "src/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "other bare uses (export, shorthand, default, unused) are skipped; type-only and qualified uses convert"
+input = {
+	"src/reexport.ts" = '''
+import * as math from "./math";
+
+export { math };
+export const x = math.PI;
+''',
+	"src/shorthand.ts" = '''
+import * as math from "./math";
+
+export const o = { math };
+export const x = math.PI;
+''',
+	"src/unused.ts" = '''
+import * as math from "./math";
+
+export const x = 1;
+''',
+	"src/defaults.ts" = '''
+import * as geometry from "./geometry";
+
+export const d = geometry.default;
+export const c = geometry.Circle;
+''',
+	"src/typesonly.ts" = '''
+import * as math from "./math";
+
+export type P = math.Pair;
+export const k: typeof math.PI = 3.14159;
+''',
+	"src/shadow.ts" = '''
+import * as math from "./math";
+
+export function f(math: { PI: number }) {
+  return math.PI;
+}
+export const g = math.mul(2, 3);
+''',
+	"src/side.ts" = '''
+import "./math";
+import * as math from "./math";
+
+export const s = math.add(1, 2);
+''',
+}
+options = {
+	files = "src/**",
+	typecheck = true,
+}
+output = {
+	"src/clash.ts" = '''
+import { add as add_1 } from "./math";
+
+const add = 10;
+
+export const total = add_1(1, 2) + add;
+''',
+	"src/shadow.ts" = '''
+import { mul } from "./math";
+
+export function f(math: { PI: number }) {
+  return math.PI;
+}
+export const g = mul(2, 3);
+''',
+	"src/side.ts" = '''
+import "./math";
+import { add } from "./math";
+
+export const s = add(1, 2);
+''',
+	"src/sums.ts" = '''
+import { add, mul, PI, Pair } from "./math";
+
+export const sum = add(1, 2);
+export const product = mul(3, 4);
+export const again = add(sum, product);
+export const pi: typeof PI = PI;
+export const pair: Pair = { left: sum, right: product };
+''',
+	"src/typesonly.ts" = '''
+import { Pair, PI } from "./math";
+
+export type P = Pair;
+export const k: typeof PI = 3.14159;
+''',
+}
+
+
+[[suites.tests]]
+name = "several namespace imports in one file are converted one by one"
+input = {
+	"src/two.ts" = '''
+import * as math from "./math";
+import * as geometry from "./geometry";
+
+export const a = math.add(1, 2);
+export const b = geometry.area(new geometry.Circle(1));
+''',
+}
+options = {
+	files = "src/two.ts",
+}
+output = {
+	"src/two.ts" = '''
+import { add } from "./math";
+import { area, Circle } from "./geometry";
+
+export const a = add(1, 2);
+export const b = area(new Circle(1));
+''',
+}
+
+
+[[suites.tests]]
+name = "a file that would gain errors is not handled and is left as it was; the other files are still converted"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true, "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["src"]
+}
+''',
+	"src/onlytypes.ts" = '''
+import * as math from "./math";
+
+export type P = math.Pair;
+''',
+	"src/values.ts" = '''
+import * as math from "./math";
+
+export const x = math.add(1, 2);
+''',
+}
+options = {
+	files = "src/onlytypes.ts,src/values.ts",
+}
+output = {
+	"src/values.ts" = '''
+import { add } from "./math";
+
+export const x = add(1, 2);
+''',
+}
+
+
+[[suites.tests]]
+name = "globs that match no file"
+input = {}
+options = {
+	files = "nope/**",
+}
+throws = "^NO_CHANGES: "
