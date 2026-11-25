@@ -11,6 +11,8 @@
 # output  = src/a.ts afterwards
 # throws  = "^<ERROR_CODE>: ..." (the test throws a RefactorError again as "<code>: <message>")
 
+name = "replace-same-behavior"
+
 
 [[suites]]
 name = "fold-guard"

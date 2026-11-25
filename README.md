@@ -620,7 +620,7 @@ level, placing it right above the top-level declaration they are in, and replace
 `--params` and `--returns` are stated, not inferred, and checked to be exactly what the lines read and what
 they declare and later code uses. Each takes one of three shapes: `a, b` (positional; for `--returns` one
 name only), `{ a, b }` (one object) or `[a, b]` (one tuple, which gets a tuple return type so it
-destructures). A returned `let`/`const` keeps its keyword at the call. A parameter's type is its annotation
+destructures). A returned `let`/`const` keeps its keyword at the call; when the lines are one `const d = E` (or `let`, without a type) and `--returns d`, the new function is `return E;`. A parameter's type is its annotation
 as written, else the checker's. It refuses (`REFACTOR_UNAVAILABLE`) when:
 
 - the lines are not whole statements of one block inside a function;

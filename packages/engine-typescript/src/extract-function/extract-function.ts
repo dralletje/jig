@@ -405,7 +405,23 @@ export const extractFunctionAction: Action<ExtractFunctionParams, TsEngine> = {
       .replace(/\n$/, "")
       .split("\n")
       .map((l) => (l.trim() === "" ? "" : `${unit}${l.startsWith(indent) ? l.slice(indent.length) : l.trimStart()}`));
-    const body = [...moved, ...(returnStatement ? [`${unit}${returnStatement}`] : [])].join("\n");
+    // One `const d = E;` (or let) returning d: the function returns E itself.
+    const only = statements.length === 1 ? statements[0] : undefined;
+    const single =
+      only &&
+      typescript.isVariableStatement(only) &&
+      only.declarationList.declarations.length === 1 &&
+      p.returns.kind === "positional" &&
+      p.returns.names.length === 1
+        ? (only.declarationList.declarations[0] as ts.VariableDeclaration)
+        : undefined;
+    const direct =
+      single && typescript.isIdentifier(single.name) && single.name.text === p.returns.names[0] && !single.type && single.initializer
+        ? single.initializer
+        : undefined;
+    const body = direct
+      ? `${unit}return ${text.slice(direct.getStart(sf), direct.getEnd()).split("\n").map((l, i) => (i === 0 ? l : `${unit}${l.startsWith(indent) ? l.slice(indent.length) : l.trimStart()}`)).join("\n")};`
+      : [...moved, ...(returnStatement ? [`${unit}${returnStatement}`] : [])].join("\n");
     const declaration = `function ${p.name}(${signature})${returnType} {\n${body}\n}\n\n`;
 
     const insertAt = lineSpan(text, attachedStart(typescript, sf, outer), outer.getEnd()).start;

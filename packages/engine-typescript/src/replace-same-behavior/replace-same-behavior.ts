@@ -338,7 +338,19 @@ export const replaceSameBehaviorAction: Action<ReplaceParams, TsEngine> = {
       description: "The code to replace, as <path>:<line>:<column>-<line>:<column> (1-based; the end is the position just after its last character).",
     },
     { name: "--before", type: "text", required: true, description: "The code at --at, exactly as it is in the file." },
-    { name: "--after", type: "text", required: true, description: "The code to put there instead." },
+    {
+      name: "--after",
+      type: "text",
+      required: true,
+      description:
+        "The code to put there instead. It is kept only when a rule proves it behaves the same as --before; the rules so far:\n" +
+        "- fold-guard: `if (C) return R;` and the statement after it, which uses an expression E, become\n" +
+        "  `const d = C ? null : E;`, `if (d === null) return R;` and that statement with d in place of E.\n" +
+        "  It needs: d a new name; strictNullChecks on and E never null; E only reads (names, property reads\n" +
+        "  that are not getters, literals, operators that do not assign, conditionals); E runs exactly once\n" +
+        "  (not behind &&, ||, ??, ?: or ?.), with only reads before it in its statement.\n" +
+        "The result must not introduce type errors (a narrowing the old code had is often what goes).",
+    },
   ],
   parseParams(raw) {
     return { ...parseRange(required(raw, "at")), before: required(raw, "before"), after: required(raw, "after") };

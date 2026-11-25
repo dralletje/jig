@@ -9,6 +9,8 @@
 # --params and --returns are checked, never inferred: they name exactly the locals the lines read
 # from the function around them, and exactly the locals the lines declare that later code uses.
 
+name = "extract-function"
+
 
 [[suites]]
 name = "params"
@@ -263,6 +265,75 @@ export function stats(values: number[]) {
 '''
 
 
+[[suites.tests]]
+name = "one const returned: the function returns its value itself"
+input = """
+export function f(n: number) {
+  const size = n > 10 ? "big" : "small";
+  console.log(size);
+}
+"""
+options = { lines = "2", name = "pickSize", params = "n", returns = "size" }
+output = """
+function pickSize(n: number) {
+  return n > 10 ? "big" : "small";
+}
+
+export function f(n: number) {
+  const size = pickSize(n);
+  console.log(size);
+}
+"""
+
+
+[[suites.tests]]
+name = "one const over several lines, returned"
+input = """
+export function f(n: number) {
+  const size =
+    n > 10
+      ? "big"
+      : "small";
+  console.log(size);
+}
+"""
+options = { lines = "2-5", name = "pickSize", params = "n", returns = "size" }
+output = """
+function pickSize(n: number) {
+  return n > 10
+      ? "big"
+      : "small";
+}
+
+export function f(n: number) {
+  const size = pickSize(n);
+  console.log(size);
+}
+"""
+
+
+[[suites.tests]]
+name = "one const with a type annotation keeps it"
+input = """
+export function f(n: number) {
+  const size: string = n > 10 ? "big" : "small";
+  console.log(size);
+}
+"""
+options = { lines = "2", name = "pickSize", params = "n", returns = "size" }
+output = """
+function pickSize(n: number) {
+  const size: string = n > 10 ? "big" : "small";
+  return size;
+}
+
+export function f(n: number) {
+  const size = pickSize(n);
+  console.log(size);
+}
+"""
+
+
 [[suites]]
 name = "where the lines are"
 
@@ -370,10 +441,9 @@ options = {
 }
 output = '''
 function increment(xs: number[]) {
-  const ys = xs.map((x) => {
+  return xs.map((x) => {
     return x + 1;
   });
-  return ys;
 }
 
 export function f(xs: number[]) {
@@ -439,8 +509,7 @@ output = '''
 import type { State } from "./state.ts";
 
 function double(outcome: number) {
-  const doubled = outcome * 2;
-  return doubled;
+  return outcome * 2;
 }
 
 export function f(state: State) {
@@ -469,8 +538,7 @@ options = {
 }
 output = '''
 function makeBox(a: number) {
-  const box = { value: a };
-  return box;
+  return { value: a };
 }
 
 export function f(a: number) {
