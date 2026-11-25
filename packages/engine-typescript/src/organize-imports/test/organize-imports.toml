@@ -1,0 +1,241 @@
+# organize-imports: merges, sorts and drops unused imports in the files --files (comma-separated globs,
+# matched from the repo root) selects.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
+
+name = "organize-imports"
+
+
+[[suites]]
+name = "organize-imports"
+
+
+[[suites.tests]]
+name = "merges, sorts and drops unused imports in matching files"
+input = {
+	"messy.ts" = '''
+import { keep, foo } from "./a";
+import { helper } from "./a";
+
+export const m = foo() + keep;
+''',
+}
+options = {
+	files = "messy.ts",
+}
+output = {
+	"messy.ts" = '''
+import { foo, keep } from "./a";
+
+export const m = foo() + keep;
+''',
+}
+
+
+[[suites.tests]]
+name = "a file with nothing to organize is left as is"
+input = {}
+options = {
+	files = "*.tsx",
+}
+output = {}
+
+
+[[suites.tests]]
+name = "globs that match no file are NO_CHANGES"
+input = {}
+options = {
+	files = "nope/**",
+}
+throws = "^NO_CHANGES: No TypeScript file matches nope/\\*\\*"
+
+
+[[suites]]
+name = "organize-imports --files matching"
+
+
+[[suites.tests]]
+name = "src/** selects every TypeScript file under src, dotfiles included"
+input = {
+	"a.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"b.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"c.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"lib/w.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	".dot/z.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"node_modules/m.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+}
+options = {
+	fixture = "fs",
+	files = "src/**",
+}
+output = {
+	"src/.hidden.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"src/deep/y.tsx" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+}
+
+
+[[suites.tests]]
+name = "**/*.ts selects every .ts file at any depth, outside node_modules"
+input = {
+	"a.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"b.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"c.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"lib/w.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	".dot/z.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"node_modules/m.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+}
+options = {
+	fixture = "fs",
+	files = "**/*.ts",
+}
+output = {
+	".dot/z.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"a.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"b.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"lib/w.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"src/.hidden.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+}
+
+
+[[suites.tests]]
+name = "a.ts,c.tsx selects exactly those two"
+input = {
+	"a.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"b.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"c.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"lib/w.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/x.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/deep/y.tsx" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"src/.hidden.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	".dot/z.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+	"node_modules/m.ts" = '''
+import { b, a } from "x";
+export const v = a + b;
+''',
+}
+options = {
+	fixture = "fs",
+	files = "a.ts,c.tsx",
+}
+output = {
+	"a.ts" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+	"c.tsx" = '''
+import { a, b } from "x";
+export const v = a + b;
+''',
+}
