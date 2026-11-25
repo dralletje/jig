@@ -1,0 +1,387 @@
+# imports-to-relative: every alias (tsconfig paths) or subpath (package.json imports) import of a file that
+# --targets matches becomes a relative import. --files says which files change. Packages, relative imports,
+# imports that do not resolve, targets outside the importer's project folder and exact (non-wildcard) keys stay.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is the files that changed.
+
+name = "imports-to-relative"
+
+
+[[suites]]
+name = "imports-to-relative"
+
+
+[[suites.tests]]
+name = "alias and subpath imports become relative imports; relative ones stay"
+input = {}
+options = {
+	files = "src/**",
+	targets = "**",
+}
+output = {
+	"src/components/Invoice.ts" = '''
+import { formatDay } from "../lib/date.ts";
+import type { Day } from "../lib/date.ts";
+import { cents } from "../lib/money.ts";
+
+export function invoiceLine(day: Day, amount: number): string {
+  return `${formatDay(day)}: ${cents(amount)}`;
+}
+
+export const loadLib = () => import("../lib/index.ts");
+''',
+	"src/main.ts" = '''
+import { invoiceLine } from "./components/Invoice.ts";
+import { formatDay } from "./lib/index.ts";
+
+console.log(invoiceLine({ year: 2026, month: 1, day: 2 }, 1250));
+console.log(formatDay({ year: 2026, month: 1, day: 3 }));
+''',
+}
+
+
+[[suites.tests]]
+name = "a .js specifier for a .ts file stays .js"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}
+''',
+	"src/extra/forms.ts" = '''
+import { formatDay } from "@/lib/date.js";
+export const f = formatDay;
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+}
+output = {
+	"src/extra/forms.ts" = '''
+import { formatDay } from "../lib/date.js";
+export const f = formatDay;
+''',
+}
+
+
+[[suites.tests]]
+name = "import types, re-exports, import(), import = require(), require() and import() types all change"
+input = {
+	"src/extra/forms.ts" = '''
+declare function require(id: string): unknown;
+import type { Day } from "@/lib/date.ts";
+import { type Day as D2, formatDay } from "@/lib/date.ts";
+export { cents } from "@/lib/money.ts";
+export * from "@/lib/index.ts";
+import money = require("@/lib/money.ts");
+const late = require("@/lib/date.ts");
+export const lazy = () => import("@/lib/money.ts");
+export type DateModule = typeof import("@/lib/date.ts");
+export const all = [formatDay, money, late];
+export type Both = [Day, D2];
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+}
+output = {
+	"src/extra/forms.ts" = '''
+declare function require(id: string): unknown;
+import type { Day } from "../lib/date.ts";
+import { type Day as D2, formatDay } from "../lib/date.ts";
+export { cents } from "../lib/money.ts";
+export * from "../lib/index.ts";
+import money = require("../lib/money.ts");
+const late = require("../lib/date.ts");
+export const lazy = () => import("../lib/money.ts");
+export type DateModule = typeof import("../lib/date.ts");
+export const all = [formatDay, money, late];
+export type Both = [Day, D2];
+''',
+}
+
+
+[[suites.tests]]
+name = "packages, relative imports and a file without other styles are untouched"
+input = {
+	"src/extra/pkg.ts" = '''
+import { thing } from "some-package";
+import { cents } from "../lib/money.ts";
+export const x = [thing, cents];
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a target outside the importer's project folder is left alone"
+input = {
+	"app/tsconfig.json" = '''
+{ "compilerOptions": { "module": "esnext", "moduleResolution": "bundler", "allowImportingTsExtensions": true, "noEmit": true, "paths": { "@shared/*": ["../shared/*"], "@app/*": ["./src/*"] } } }
+''',
+	"app/src/a.ts" = '''
+import { s } from "@shared/s.ts";
+import { b } from "@app/b.ts";
+export const a = [s, b];
+''',
+	"app/src/b.ts" = '''
+export const b = 1;
+''',
+	"shared/s.ts" = '''
+export const s = 1;
+''',
+}
+options = {
+	files = "app/**",
+	targets = "**",
+}
+output = {
+	"app/src/a.ts" = '''
+import { s } from "@shared/s.ts";
+import { b } from "./b.ts";
+export const a = [s, b];
+''',
+}
+
+
+[[suites.tests]]
+name = "an import that does not resolve, and one through an exact paths key, are left alone"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "skipLibCheck": true,
+    "types": [],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@money": ["./src/lib/money.ts"]
+    }
+  },
+  "include": ["src"]
+}
+''',
+	"src/extra/use.ts" = '''
+import { nope } from "@/lib/nope.ts";
+import { cents } from "@money";
+import { formatDay } from "@/lib/date.ts";
+export const x = [nope, cents, formatDay];
+''',
+}
+options = {
+	files = "src/extra/**",
+	targets = "**",
+}
+output = {
+	"src/extra/use.ts" = '''
+import { nope } from "@/lib/nope.ts";
+import { cents } from "@money";
+import { formatDay } from "../lib/date.ts";
+export const x = [nope, cents, formatDay];
+''',
+}
+
+
+[[suites.tests]]
+name = "--targets matching nothing"
+input = {}
+options = {
+	files = "src/**",
+	targets = "nothing/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a second run, on the files as the first one left them"
+input = {
+	"src/components/Invoice.ts" = '''
+import { formatDay } from "../lib/date.ts";
+import type { Day } from "../lib/date.ts";
+import { cents } from "../lib/money.ts";
+
+export function invoiceLine(day: Day, amount: number): string {
+  return `${formatDay(day)}: ${cents(amount)}`;
+}
+
+export const loadLib = () => import("../lib/index.ts");
+''',
+	"src/main.ts" = '''
+import { invoiceLine } from "./components/Invoice.ts";
+import { formatDay } from "./lib/index.ts";
+
+console.log(invoiceLine({ year: 2026, month: 1, day: 2 }, 1250));
+console.log(formatDay({ year: 2026, month: 1, day: 3 }));
+''',
+}
+options = {
+	files = "src/**",
+	targets = "**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "--targets is required"
+input = {}
+options = {
+	files = "src/**",
+}
+throws = "^INVALID_ARGS: "
+
+
+[[suites]]
+name = "edge cases"
+
+
+[[suites.tests]]
+name = "a package reached through a catch-all \"*\" paths key is a package: never rewritten into node_modules"
+input = {
+	"tsconfig.json" = '''
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "*": [
+        "./types/*"
+      ],
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  }
+}
+''',
+	"node_modules/@types/dep/index.d.ts" = '''
+export declare const x: number;
+''',
+	"node_modules/@types/dep/package.json" = '''
+{ "name": "@types/dep", "types": "index.d.ts" }
+''',
+	"node_modules/dep/package.json" = '''
+{ "name": "dep", "main": "index.js" }
+''',
+	"node_modules/dep/index.js" = '''
+exports.x = 1;
+''',
+	"src/x/a.ts" = '''
+import { x } from "dep";
+import { formatDay } from "@/lib/date";
+export const z = [x, formatDay];
+''',
+}
+options = {
+	files = "src/x/**",
+	targets = "**",
+}
+output = {
+	"src/x/a.ts" = '''
+import { x } from "dep";
+import { formatDay } from "../lib/date";
+export const z = [x, formatDay];
+''',
+}
+
+
+[[suites.tests]]
+name = "a subpath key mapped to a package (\"#dep\": \"dep\") is a package: untouched"
+input = {
+	"package.json" = '''
+{ "type": "module", "imports": { "#/*": "./src/*", "#dep": "dep" } }
+''',
+	"node_modules/dep/package.json" = '''
+{ "name": "dep", "types": "index.d.ts" }
+''',
+	"node_modules/dep/index.d.ts" = '''
+export declare const x: number;
+''',
+	"src/x/a.ts" = '''
+import { x } from "#dep";
+import { cents } from "#/lib/money.ts";
+export const z = [x, cents];
+''',
+}
+options = {
+	files = "src/x/**",
+	targets = "**",
+}
+output = {
+	"src/x/a.ts" = '''
+import { x } from "#dep";
+import { cents } from "../lib/money.ts";
+export const z = [x, cents];
+''',
+}
+
+
+[[suites.tests]]
+name = "an exact subpath key to an index file is left alone, whatever its target"
+input = {
+	"package.json" = '''
+{ "type": "module", "imports": { "#/*": "./src/*", "#config": "./src/config/index.ts" } }
+''',
+	"src/config/index.ts" = '''
+export const c = 1;
+''',
+	"src/x/a.ts" = '''
+import { c } from "#config";
+export const z = c;
+''',
+}
+options = {
+	files = "src/x/**",
+	targets = "**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "a relative path to a sibling whose name starts with \"..\" gets \"./\""
+input = {
+	"src/x/..foo.ts" = '''
+export const f = 1;
+''',
+	"src/x/a.ts" = '''
+import { f } from "@/x/..foo.ts";
+export const z = f;
+''',
+}
+options = {
+	files = "src/x/a.ts",
+	targets = "**",
+}
+output = {
+	"src/x/a.ts" = '''
+import { f } from "./..foo.ts";
+export const z = f;
+''',
+}

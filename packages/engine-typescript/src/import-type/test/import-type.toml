@@ -1,0 +1,163 @@
+# import-type: imports (or single specifiers) used only as types become `import type`. Value names, classes
+# (a type-only import of a class would drop the module's runtime import), side-effect imports, imports that are
+# already type-only, and a default import beside named ones stay. `verbatimModuleSyntax` need not be set.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# options are the flags in order, output is the files that changed.
+
+name = "import-type"
+
+
+[[suites]]
+name = "import-type on examples/import-shapes"
+
+
+[[suites.tests]]
+name = "whole imports and individual specifiers become type-only; value names and side-effect imports stay"
+input = {}
+options = {
+	files = "src/**",
+	typecheck = true,
+}
+output = {
+	"src/mixed.ts" = '''
+import "./side";
+import describe, { Circle, type Shape, type Unit, area } from "./geometry";
+
+export const unit: Unit = "m";
+export const shape: Shape = new Circle(2);
+
+export const text = describe(shape) + area(new Circle(1));
+''',
+	"src/types-only.ts" = '''
+import type { Shape, Unit } from "./geometry";
+
+export const unit: Unit = "cm";
+
+export function label(shape: Shape): string {
+  return shape.name;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a second run, on the files as the first one left them"
+input = {
+	"src/mixed.ts" = '''
+import "./side";
+import describe, { Circle, type Shape, type Unit, area } from "./geometry";
+
+export const unit: Unit = "m";
+export const shape: Shape = new Circle(2);
+
+export const text = describe(shape) + area(new Circle(1));
+''',
+	"src/types-only.ts" = '''
+import type { Shape, Unit } from "./geometry";
+
+export const unit: Unit = "cm";
+
+export function label(shape: Shape): string {
+  return shape.name;
+}
+''',
+}
+options = {
+	files = "src/**",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "imports already type-only and classes used as types are left as they are"
+input = {
+	"src/keep.ts" = '''
+import type { Shape } from './geometry';
+import { type Unit, Circle } from './geometry';
+import { area } from './geometry';
+
+export const a = (s: Shape, u: Unit, c: Circle): number => area(c);
+''',
+}
+options = {
+	files = "src/keep.ts",
+}
+throws = "^NO_CHANGES: "
+
+
+[[suites.tests]]
+name = "quotes are kept"
+input = {
+	"src/quotes.ts" = '''
+import { Shape, Unit } from './geometry';
+
+export type Both = [Shape, Unit];
+''',
+}
+options = {
+	files = "src/quotes.ts",
+}
+output = {
+	"src/quotes.ts" = '''
+import type { Shape, Unit } from './geometry';
+
+export type Both = [Shape, Unit];
+''',
+}
+
+
+[[suites.tests]]
+name = "`verbatimModuleSyntax` need not be set in the project"
+input = {
+	"tsconfig.json" = '''
+{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "noEmit": true } }
+''',
+}
+options = {
+	files = "src/types-only.ts",
+}
+output = {
+	"src/types-only.ts" = '''
+import type { Shape, Unit } from "./geometry";
+
+export const unit: Unit = "cm";
+
+export function label(shape: Shape): string {
+  return shape.name;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a default import used only as a type becomes `import type D`; with named imports beside it, it is not handled"
+input = {
+	"src/kind.ts" = '''
+export default interface Kind {
+  id: number;
+}
+
+export const make = (): number => 1;
+''',
+	"src/default-type.ts" = '''
+import Kind from "./kind";
+
+export const k = (x: Kind): number => x.id;
+''',
+	"src/default-mixed.ts" = '''
+import Kind, { make } from "./kind";
+
+export const k = (x: Kind): number => x.id + make();
+''',
+}
+options = {
+	files = "src/default-type.ts,src/default-mixed.ts",
+	typecheck = true,
+}
+output = {
+	"src/default-type.ts" = '''
+import type Kind from "./kind";
+
+export const k = (x: Kind): number => x.id;
+''',
+}
