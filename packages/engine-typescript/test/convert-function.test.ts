@@ -88,3 +88,41 @@ describe("convert-function round trip", () => {
     assert.equal(await read(dir, "src/math.ts"), original);
   });
 });
+
+describe("convert-function two conversions in one file", () => {
+  test("an anonymous function expression converts, with parentheses where syntax needs them", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "src/a.ts": [
+        "export function go(xs: number[], f?: () => number) {",
+        "  const g = f || function () { return 1; };",
+        "  return xs.map(function (x) { return x * g(); });",
+        "}",
+        "",
+      ].join("\n"),
+    });
+    await convert(dir, "src/a.ts:2", "arrow");
+    await convert(dir, "src/a.ts:3", "arrow");
+    assert.equal(
+      await read(dir, "src/a.ts"),
+      [
+        "export function go(xs: number[], f?: () => number) {",
+        "  const g = f || (() => { return 1; });",
+        "  return xs.map((x) => { return x * g(); });",
+        "}",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("--to function keeps a comment between => and an expression body", async () => {
+    const dir = await workspace(EXAMPLE, {
+      "src/c.ts": "export const f = (n: number) => // keep me\n  n * 2;\nexport const g = (n: number) => /* and me */ n + 1;\n",
+    });
+    await convert(dir, "src/c.ts:3", "function");
+    await convert(dir, "src/c.ts:1", "function");
+    assert.equal(
+      await read(dir, "src/c.ts"),
+      "export function f(n: number) {\n  // keep me\n  return n * 2;\n}\nexport function g(n: number) {\n  /* and me */\n  return n + 1;\n}\n",
+    );
+  });
+});
