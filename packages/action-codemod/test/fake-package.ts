@@ -22,10 +22,7 @@ export async function fakePackage(kinds: Record<string, ActionKind>, sources: Re
   return { image: "codemod-fake", name: "fake-codemods", version: "1.2.3", dir, transforms };
 }
 
-/**
- * The run function of the TOML cases: `main` with `pkg` as the carried package. The cases pass the
- * globs as `globs`, because `files` is the key for extra files, not a flag.
- */
+/** The run function of the TOML cases: `main` with `pkg` as the carried package. */
 export function runWith(pkg: CodemodPackage): (argv: string[], dir: string) => Promise<unknown> {
-  return (argv, dir) => main(argv.map((arg) => (arg === "--globs" ? "--files" : arg)), dir, pkg);
+  return (argv, dir) => main(argv, dir, pkg);
 }

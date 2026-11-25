@@ -3,8 +3,8 @@
 # skipped.
 #
 # The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
-# The input is a table of files and `globs` is --files (the key `files` is for extra files, not a
-# flag): output lists every file that changed.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
 
 name = "format"
 
@@ -23,7 +23,7 @@ export const   x = {a:1,
 }
 options = {
 	fixture = "simple",
-	globs = "ugly.ts",
+	files = "ugly.ts",
 }
 output = {
 	"ugly.ts" = '''
@@ -40,7 +40,7 @@ const a = 'x'
 ''',
 }
 options = {
-	globs = "q.ts",
+	files = "q.ts",
 }
 output = {
 	"q.ts" = '''
@@ -60,7 +60,7 @@ const a = 'x'
 ''',
 }
 options = {
-	globs = "q.ts",
+	files = "q.ts",
 }
 output = {
 	"q.ts" = '''
@@ -80,7 +80,7 @@ const a = "x"
 ''',
 }
 options = {
-	globs = "q.ts",
+	files = "q.ts",
 }
 output = {
 	"q.ts" = '''
@@ -103,7 +103,7 @@ const a = 'x'
 ''',
 }
 options = {
-	globs = "*.ts",
+	files = "*.ts",
 }
 output = {
 	"do.ts" = '''
@@ -120,7 +120,7 @@ a   =   'b'
 ''',
 }
 options = {
-	globs = "data.bin",
+	files = "data.bin",
 }
 output = {}
 
@@ -136,7 +136,7 @@ throws = "INVALID_ARGS: Missing --files"
 name = "empty --files"
 input = {}
 options = {
-	globs = " , ",
+	files = " , ",
 }
 throws = "INVALID_ARGS: Missing --files"
 
@@ -188,7 +188,7 @@ export const v = a + b
 ''',
 }
 options = {
-	globs = "src/**",
+	files = "src/**",
 }
 output = {
 	"src/.hidden.ts" = '''
@@ -247,7 +247,7 @@ export const v = a + b
 ''',
 }
 options = {
-	globs = "**/*.ts",
+	files = "**/*.ts",
 }
 output = {
 	".dot/z.ts" = '''
@@ -318,7 +318,7 @@ export const v = a + b
 ''',
 }
 options = {
-	globs = "a.ts,c.tsx",
+	files = "a.ts,c.tsx",
 }
 output = {
 	"a.ts" = '''

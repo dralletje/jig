@@ -1,8 +1,8 @@
 # flowy: a stand-in transform that renames the identifier x to y and declares the parser flow.
 #
 # The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
-# The input is a table of files and `globs` is --files (the key `files` is for extra files, not a
-# flag): output lists every file that changed.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
 
 name = "flowy"
 
@@ -19,7 +19,7 @@ const x = (1: number);
 ''',
 }
 options = {
-	globs = "a.js",
+	files = "a.js",
 }
 output = {
 	"a.js" = '''

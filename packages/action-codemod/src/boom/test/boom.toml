@@ -1,8 +1,8 @@
 # boom: a stand-in transform that always throws. The run still succeeds; the files stay as they were.
 #
 # The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
-# The input is a table of files and `globs` is --files (the key `files` is for extra files, not a
-# flag): output lists every file that changed.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
 
 name = "boom"
 
@@ -24,6 +24,6 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "*.ts",
+	files = "*.ts",
 }
 output = {}

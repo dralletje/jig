@@ -3,8 +3,8 @@
 # files, declaration files excepted, and leaves a file it cannot parse alone.
 #
 # The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils.
-# The input is a table of files and `globs` is --files (the key `files` is for extra files, not a
-# flag): output lists every file that changed.
+# The input is a table of files and `files` is --files (extra files go in
+# `extra_files`): output lists every file that changed.
 
 name = "rename"
 
@@ -28,7 +28,7 @@ foo
 ''',
 }
 options = {
-	globs = "*.ts,*.tsx,*.md",
+	files = "*.ts,*.tsx,*.md",
 }
 output = {
 	"a.ts" = '''
@@ -53,7 +53,7 @@ export const keep = 2;
 ''',
 }
 options = {
-	globs = "*.ts",
+	files = "*.ts",
 }
 output = {
 	"a.ts" = '''
@@ -75,7 +75,7 @@ export const = ;
 ''',
 }
 options = {
-	globs = "*.ts",
+	files = "*.ts",
 }
 output = {
 	"a.ts" = '''
@@ -100,7 +100,7 @@ export declare const foo: number;
 ''',
 }
 options = {
-	globs = "**/*.ts,**/*.mts",
+	files = "**/*.ts,**/*.mts",
 }
 output = {
 	"a.ts" = '''
@@ -123,7 +123,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "a.ts",
+	files = "a.ts",
 	parser = "tsx",
 }
 output = {
@@ -143,7 +143,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "a.ts",
+	files = "a.ts",
 	parser = "ts",
 }
 output = {
@@ -163,7 +163,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "a.ts",
+	files = "a.ts",
 	parser = "babel",
 }
 output = {
@@ -182,7 +182,7 @@ const foo = (1: number);
 ''',
 }
 options = {
-	globs = "a.js",
+	files = "a.js",
 	parser = "flow",
 }
 output = {
@@ -201,7 +201,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "a.ts",
+	files = "a.ts",
 	parser = "bogus",
 }
 throws = 'INVALID_ARGS: Unknown --parser "bogus"'
@@ -232,7 +232,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = " , ",
+	files = " , ",
 }
 throws = "INVALID_ARGS: Missing --files"
 
@@ -246,7 +246,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "a.ts",
+	files = "a.ts",
 	force = true,
 }
 throws = "INVALID_ARGS: Unknown option '--force'"
@@ -293,7 +293,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "src/**",
+	files = "src/**",
 }
 output = {
 	"src/.hidden.ts" = '''
@@ -348,7 +348,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "**/*.ts",
+	files = "**/*.ts",
 }
 output = {
 	".dot/z.ts" = '''
@@ -411,7 +411,7 @@ export const keep = foo;
 ''',
 }
 options = {
-	globs = "a.ts,c.tsx",
+	files = "a.ts,c.tsx",
 }
 output = {
 	"a.ts" = '''
