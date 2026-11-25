@@ -1,0 +1,465 @@
+# remove-barrels: rewrites every import through a barrel (an index file that only re-exports) in the files
+# matching --files to import from where the name is defined, and deletes the barrels nothing imports any more.
+# A namespace import, a side-effect import and a barrel that declares code are kept, and so is a barrel that
+# a file outside --files, or something that is not an import, still names.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is files by path, options are the flags in order, output is every changed file, a deleted
+# one is false.
+# A second run changing nothing needs two runs: barrels.test.ts.
+
+name = "remove-barrels"
+
+
+[[suites]]
+name = "examples/webapp"
+
+
+[[suites.tests]]
+name = "rewrites every import through a barrel and deletes the barrels nothing imports any more"
+input = {}
+options = {
+	files = "src/**",
+	typecheck = true,
+}
+output = {
+	"src/components/RoleBadge.ts" = '''
+import "@/setup";
+import type { Role } from "@/models/User";
+import { badge, WIDGET_PREFIX } from "@/widgets";
+import { slugify } from "@/lib/strings/slugify";
+import { formatDate as toDateString } from "@/lib/format";
+import { type Role as UserRole } from "@/models/User";
+import { capitalize as cap } from "@/lib/strings/capitalize";
+import { type Level } from "@/lib/logger";
+
+export function renderRoleBadge(role: Role, since: Date, level: Level) {
+  const kind: UserRole = role;
+  return `${WIDGET_PREFIX}${slugify(kind, 16)} ${badge(cap(role))} ${toDateString(since, false)} (${level})`;
+}
+''',
+	"src/components/UserCard.ts" = '''
+import { User } from "@/models/User";
+import { formatDate } from "@/lib/format";
+import { capitalize } from "@/lib/strings/capitalize";
+
+export function renderUserCard(user: User, compact: boolean) {
+  const since = formatDate(user.createdAt, false);
+  if (compact) return `${user.name} (${user.role})`;
+  return `${user.name} <${user.email}>, ${capitalize(user.role)} since ${since}`;
+}
+''',
+	"src/components/order-summary.ts" = '''
+import { Order } from "@/models/order_item";
+import { describeOrder, discount } from "@/services/order-service";
+import { formatPrice } from "@/lib/format";
+import { percentage } from "@/lib/math";
+import config from "@/config";
+
+export function renderOrderSummary(order: Order, percent: number) {
+  const off = discount(order, percent);
+  return `${describeOrder(order, config.locale)}, ${formatPrice(off)} off (${percentage(percent, 100)}%)`;
+}
+''',
+	"src/lib/index.ts" = false,
+	"src/main.ts" = '''
+import config from "@/config";
+import { createUser, isAdmin } from "@/services/userService";
+import { renderUserCard } from "@/components/UserCard";
+import { renderOrderSummary } from "@/components/order-summary";
+import * as strings from "@/lib/strings";
+import { distance } from "@/lib/math";
+
+const admin = createUser("ada lovelace", "ada@example.com", "admin");
+console.log(`${config.appName}: ${renderUserCard(admin, false)}`);
+console.log(isAdmin(admin) ? "admin" : "not admin", strings.isSlug(admin.id));
+
+const order = {
+  id: "o-1",
+  userId: admin.id,
+  items: [
+    { sku: "book", quantity: 2, unitPrice: 12.5 },
+    { sku: "pen", quantity: 10, unitPrice: 1.2 },
+  ],
+};
+console.log(renderOrderSummary(order, 15));
+console.log(distance(0, 0, 3, 4));
+''',
+	"src/models/index.ts" = false,
+	"src/services/index.ts" = false,
+	"src/services/order-service.ts" = '''
+import { Order, OrderItem } from "@/models/order_item";
+import * as math from "@/lib/math";
+import { formatCurrency as currency } from "@/lib/format";
+import config from "@/config";
+
+function lineTotal(item: OrderItem) {
+  return item.quantity * item.unitPrice;
+}
+
+export function orderTotal(order: Order) {
+  return math.sum(order.items.map(lineTotal));
+}
+
+export function describeOrder(order: Order, locale: string) {
+  const total = orderTotal(order);
+  console.log("describing order", order.id);
+  return `${order.items.length} items, ${currency(total, config.currency, locale)}`;
+}
+
+export function discount(order: Order, percent: number) {
+  return orderTotal(order) * (math.clamp(percent, 0, 100) / 100);
+}
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models/User";
+import { capitalize } from "@/lib/strings/capitalize";
+import { slugify } from "@/lib/strings/slugify";
+import createLogger from "@/lib/logger";
+import Store from "./store";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+	"src/utils/index.ts" = false,
+}
+
+
+[[suites.tests]]
+name = "a barrel still imported by files outside --files is kept"
+input = {}
+options = {
+	files = "src/components/UserCard.ts",
+}
+output = {
+	"src/components/UserCard.ts" = '''
+import { User } from "@/models/User";
+import { formatDate } from "@/lib/format";
+import { capitalize } from "@/lib/strings/capitalize";
+
+export function renderUserCard(user: User, compact: boolean) {
+  const since = formatDate(user.createdAt, false);
+  if (compact) return `${user.name} (${user.role})`;
+  return `${user.name} <${user.email}>, ${capitalize(user.role)} since ${since}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "type-only, mixed, default and re-export declarations keep their meaning"
+input = {
+	"src/geo/shapes.ts" = '''
+export interface Shape {
+  size: number;
+}
+
+export function area(shape: Shape) {
+  return shape.size * shape.size;
+}
+''',
+	"src/geo/index.ts" = '''
+export * from "./shapes";
+''',
+	"src/stores/index.ts" = '''
+export { default as Store } from "@/services/store";
+''',
+	"src/extra/mixed.ts" = '''
+import type { Level } from "@/lib";
+import { area, type Shape } from "@/geo";
+import { Store as S } from "@/stores";
+export { currency, type Level as Lvl } from "@/lib";
+
+export const level: Level = "info";
+export const store = new S<{ id: string }>();
+export const big = (shape: Shape) => area(shape) > 10;
+''',
+}
+options = {
+	files = "src/extra/**",
+}
+output = {
+	"src/extra/mixed.ts" = '''
+import type { Level } from "@/lib/logger";
+import { area, type Shape } from "@/geo/shapes";
+import S from "@/services/store";
+export { formatCurrency as currency } from "@/lib/format";
+export { type Level as Lvl } from "@/lib/logger";
+
+export const level: Level = "info";
+export const store = new S<{ id: string }>();
+export const big = (shape: Shape) => area(shape) > 10;
+''',
+	"src/geo/index.ts" = false,
+	"src/stores/index.ts" = false,
+}
+
+
+[[suites.tests]]
+name = "the same name reached through two `export *` paths resolves to its one definition"
+input = {
+	"src/dia/a.ts" = '''
+export const x = 1;
+''',
+	"src/dia/c.ts" = '''
+export * from "./a";
+
+export const c = 3;
+''',
+	"src/dia/index.ts" = '''
+export * from "./a";
+export * from "./c";
+''',
+	"src/use.ts" = '''
+import { x, c } from './dia';
+
+export const y = x + c;
+''',
+}
+options = {
+	files = "src/use.ts",
+}
+output = {
+	"src/dia/index.ts" = false,
+	"src/use.ts" = '''
+import { x } from './dia/a';
+import { c } from './dia/c';
+
+export const y = x + c;
+''',
+}
+
+
+[[suites.tests]]
+name = "a name two `export *` give different definitions of is REFACTOR_UNAVAILABLE"
+input = {
+	"src/amb/a.ts" = '''
+export const x = 1;
+''',
+	"src/amb/b.ts" = '''
+export const x = 2;
+''',
+	"src/amb/index.ts" = '''
+export * from "./a";
+export * from "./b";
+''',
+	"src/use.ts" = '''
+import { x } from "./amb";
+
+export const y = x;
+''',
+}
+options = {
+	files = "src/use.ts",
+}
+throws = "^REFACTOR_UNAVAILABLE: src/amb/index\\.ts exports x from more than one module through export \\*"
+
+
+[[suites.tests]]
+name = "a barrel still named elsewhere (a JavaScript importer, a mock path) is kept"
+input = {
+	"src/legacy.js" = '''
+import { Order } from "./models/index.js";
+''',
+	"src/mocks.ts" = '''
+export const mocked = ["@/services"];
+''',
+}
+options = {
+	files = "src/**",
+}
+output = {
+	"src/components/RoleBadge.ts" = '''
+import "@/setup";
+import type { Role } from "@/models/User";
+import { badge, WIDGET_PREFIX } from "@/widgets";
+import { slugify } from "@/lib/strings/slugify";
+import { formatDate as toDateString } from "@/lib/format";
+import { type Role as UserRole } from "@/models/User";
+import { capitalize as cap } from "@/lib/strings/capitalize";
+import { type Level } from "@/lib/logger";
+
+export function renderRoleBadge(role: Role, since: Date, level: Level) {
+  const kind: UserRole = role;
+  return `${WIDGET_PREFIX}${slugify(kind, 16)} ${badge(cap(role))} ${toDateString(since, false)} (${level})`;
+}
+''',
+	"src/components/UserCard.ts" = '''
+import { User } from "@/models/User";
+import { formatDate } from "@/lib/format";
+import { capitalize } from "@/lib/strings/capitalize";
+
+export function renderUserCard(user: User, compact: boolean) {
+  const since = formatDate(user.createdAt, false);
+  if (compact) return `${user.name} (${user.role})`;
+  return `${user.name} <${user.email}>, ${capitalize(user.role)} since ${since}`;
+}
+''',
+	"src/components/order-summary.ts" = '''
+import { Order } from "@/models/order_item";
+import { describeOrder, discount } from "@/services/order-service";
+import { formatPrice } from "@/lib/format";
+import { percentage } from "@/lib/math";
+import config from "@/config";
+
+export function renderOrderSummary(order: Order, percent: number) {
+  const off = discount(order, percent);
+  return `${describeOrder(order, config.locale)}, ${formatPrice(off)} off (${percentage(percent, 100)}%)`;
+}
+''',
+	"src/lib/index.ts" = false,
+	"src/main.ts" = '''
+import config from "@/config";
+import { createUser, isAdmin } from "@/services/userService";
+import { renderUserCard } from "@/components/UserCard";
+import { renderOrderSummary } from "@/components/order-summary";
+import * as strings from "@/lib/strings";
+import { distance } from "@/lib/math";
+
+const admin = createUser("ada lovelace", "ada@example.com", "admin");
+console.log(`${config.appName}: ${renderUserCard(admin, false)}`);
+console.log(isAdmin(admin) ? "admin" : "not admin", strings.isSlug(admin.id));
+
+const order = {
+  id: "o-1",
+  userId: admin.id,
+  items: [
+    { sku: "book", quantity: 2, unitPrice: 12.5 },
+    { sku: "pen", quantity: 10, unitPrice: 1.2 },
+  ],
+};
+console.log(renderOrderSummary(order, 15));
+console.log(distance(0, 0, 3, 4));
+''',
+	"src/services/order-service.ts" = '''
+import { Order, OrderItem } from "@/models/order_item";
+import * as math from "@/lib/math";
+import { formatCurrency as currency } from "@/lib/format";
+import config from "@/config";
+
+function lineTotal(item: OrderItem) {
+  return item.quantity * item.unitPrice;
+}
+
+export function orderTotal(order: Order) {
+  return math.sum(order.items.map(lineTotal));
+}
+
+export function describeOrder(order: Order, locale: string) {
+  const total = orderTotal(order);
+  console.log("describing order", order.id);
+  return `${order.items.length} items, ${currency(total, config.currency, locale)}`;
+}
+
+export function discount(order: Order, percent: number) {
+  return orderTotal(order) * (math.clamp(percent, 0, 100) / 100);
+}
+''',
+	"src/services/userService.ts" = '''
+import { User, Role } from "@/models/User";
+import { capitalize } from "@/lib/strings/capitalize";
+import { slugify } from "@/lib/strings/slugify";
+import createLogger from "@/lib/logger";
+import Store from "./store";
+
+const log = createLogger("users", "info");
+const users = new Store<User>();
+
+export function createUser(name: string, email: string, role: Role) {
+  const user: User = { id: slugify(name, 32), name: capitalize(name), email, role, createdAt: new Date() };
+  console.log("created user", user.id);
+  log.info(`created ${user.id}`);
+  return users.add(user);
+}
+
+export function findUser(id: string) {
+  return users.get(id);
+}
+
+export function isAdmin(user: User) {
+  return user.role === "admin";
+}
+''',
+	"src/utils/index.ts" = false,
+}
+
+
+[[suites.tests]]
+name = "relative specifiers stay relative and keep their extension style"
+input = {
+	"src/rel.ts" = '''
+import { slugify } from "./lib/index";
+import { orderTotal } from "./services";
+
+export const r = [slugify, orderTotal];
+''',
+}
+options = {
+	files = "src/rel.ts",
+}
+output = {
+	"src/rel.ts" = '''
+import { slugify } from "./lib/strings/slugify";
+import { orderTotal } from "./services/order-service";
+
+export const r = [slugify, orderTotal];
+''',
+}
+
+
+[[suites.tests]]
+name = "globs that match no file are NO_CHANGES"
+input = {}
+options = {
+	files = "nope/**",
+}
+throws = "^NO_CHANGES: No TypeScript file matches nope/\\*\\*"
+
+
+[[suites]]
+name = "examples/monorepo"
+options = {
+	fixture = "examples/monorepo",
+}
+
+
+[[suites.tests]]
+name = "barrels across a package boundary and re-exports from another package are left as is"
+input = {}
+options = {
+	files = "**",
+	typecheck = true,
+}
+output = {
+	"packages/app/src/lib/index.ts" = false,
+	"packages/app/src/main.ts" = '''
+import { truncate } from "@example/shared";
+import { createTodo, toggle } from "./lib/todo";
+
+const todo = toggle(createTodo("Write the example monorepo"));
+console.log(truncate(todo.title, 10, "..."), todo.done);
+''',
+	"packages/app/src/view.ts" = '''
+import { label } from "./ui/label";
+import { shorten } from "./ui";
+
+export function view(title: string) {
+  return label(shorten(title, 12, "…"));
+}
+''',
+}

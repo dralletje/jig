@@ -1,0 +1,431 @@
+# rename-files: renames the files matching --files to the --case (kebab, camel, pascal or snake) and
+# rewrites every import of them. Index files keep their name; a file whose new name is taken, or that two files
+# would share, is left as it is. Declaration files are renamed with the file they declare.
+#
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is files by path, options are the flags in order, output is every changed file, a deleted
+# one is false.
+#
+# The example holds Helpers.ts next to helpers.ts on purpose, and TypeScript complains about that pair; the
+# typecheck leaves that complaint out.
+# A second run finding nothing to rename (NO_CHANGES) needs two runs: rename-files.test.ts.
+
+name = "rename-files"
+
+
+[[suites]]
+name = "the examples/rename-files folder"
+
+
+[[suites.tests]]
+name = "kebab splits acronyms and keeps digits with the word before them"
+input = {
+	"src/HTTPServer.ts" = '''
+export const server = 1;
+''',
+	"src/v2Api.ts" = '''
+import { server } from "./HTTPServer";
+
+export const api = server;
+''',
+}
+options = {
+	files = "src/HTTPServer.ts,src/v2Api.ts",
+	case = "kebab",
+}
+output = {
+	"src/HTTPServer.ts" = false,
+	"src/http-server.ts" = '''
+export const server = 1;
+''',
+	"src/v2-api.ts" = '''
+import { server } from "./http-server";
+
+export const api = server;
+''',
+	"src/v2Api.ts" = false,
+}
+
+
+[[suites.tests]]
+name = "kebab: renames, rewrites importers, leaves names that are taken or clash alone"
+input = {}
+options = {
+	files = "src/**",
+	case = "kebab",
+	typecheck = true,
+}
+output = {
+	"src/Footer.ts" = false,
+	"src/UserCard.ts" = false,
+	"src/footer.ts" = '''
+export const footer = "bye";
+''',
+	"src/index.ts" = '''
+export * from "./user-card";
+export * from "./order-item";
+''',
+	"src/main.ts" = '''
+import { footer } from "./footer";
+import { lower } from "./helpers";
+import { endOfDay } from "./date-utils";
+import { startOfDay } from "./date_utils";
+import { orderTotal } from "./order-service";
+import { userCard } from "./user-card";
+import { ButtonGroup } from "./ui/button-group";
+
+export const page = [footer, lower("X"), endOfDay, startOfDay, orderTotal(1), userCard("a"), ButtonGroup];
+''',
+	"src/order-item.ts" = '''
+export const orderItem = { sku: "a-1", quantity: 2 };
+''',
+	"src/order-service.test.ts" = '''
+import { orderTotal } from "./order-service";
+
+export const checked = orderTotal(3) === 6;
+''',
+	"src/order-service.ts" = '''
+import { orderItem } from "./order-item";
+
+export function orderTotal(price: number): number {
+  return price * orderItem.quantity;
+}
+''',
+	"src/orderService.test.ts" = false,
+	"src/orderService.ts" = false,
+	"src/order_item.ts" = false,
+	"src/ui/ButtonGroup.ts" = false,
+	"src/ui/button-group.ts" = '''
+import { userCard } from "../user-card";
+
+export const ButtonGroup = userCard("buttons");
+''',
+	"src/user-card.ts" = '''
+export function userCard(name: string): string {
+  return `<card>${name}</card>`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a case-only rename (Footer.ts to footer.ts) is made, with its importers"
+input = {}
+options = {
+	files = "src/Footer.ts",
+	case = "kebab",
+	typecheck = true,
+}
+output = {
+	"src/Footer.ts" = false,
+	"src/footer.ts" = '''
+export const footer = "bye";
+''',
+	"src/main.ts" = '''
+import { footer } from "./footer";
+import { lower } from "./helpers";
+import { endOfDay } from "./date-utils";
+import { startOfDay } from "./date_utils";
+import { orderTotal } from "./orderService";
+import { userCard } from "./UserCard";
+import { ButtonGroup } from "./ui/ButtonGroup";
+
+export const page = [footer, lower("X"), endOfDay, startOfDay, orderTotal(1), userCard("a"), ButtonGroup];
+''',
+}
+
+
+[[suites.tests]]
+name = "camel"
+input = {}
+options = {
+	files = "src/**",
+	case = "camel",
+	typecheck = true,
+}
+output = {
+	"src/Footer.ts" = false,
+	"src/UserCard.ts" = false,
+	"src/footer.ts" = '''
+export const footer = "bye";
+''',
+	"src/index.ts" = '''
+export * from "./userCard";
+export * from "./orderItem";
+''',
+	"src/main.ts" = '''
+import { footer } from "./footer";
+import { lower } from "./helpers";
+import { endOfDay } from "./date-utils";
+import { startOfDay } from "./date_utils";
+import { orderTotal } from "./orderService";
+import { userCard } from "./userCard";
+import { ButtonGroup } from "./ui/buttonGroup";
+
+export const page = [footer, lower("X"), endOfDay, startOfDay, orderTotal(1), userCard("a"), ButtonGroup];
+''',
+	"src/orderItem.ts" = '''
+export const orderItem = { sku: "a-1", quantity: 2 };
+''',
+	"src/orderService.ts" = '''
+import { orderItem } from "./orderItem";
+
+export function orderTotal(price: number): number {
+  return price * orderItem.quantity;
+}
+''',
+	"src/order_item.ts" = false,
+	"src/ui/ButtonGroup.ts" = false,
+	"src/ui/buttonGroup.ts" = '''
+import { userCard } from "../userCard";
+
+export const ButtonGroup = userCard("buttons");
+''',
+	"src/userCard.ts" = '''
+export function userCard(name: string): string {
+  return `<card>${name}</card>`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "pascal: index files keep their name; two files that would get one name are both left"
+input = {}
+options = {
+	files = "src/**",
+	case = "pascal",
+	typecheck = true,
+}
+output = {
+	"src/Main.ts" = '''
+import { footer } from "./Footer";
+import { lower } from "./helpers";
+import { endOfDay } from "./date-utils";
+import { startOfDay } from "./date_utils";
+import { orderTotal } from "./OrderService";
+import { userCard } from "./UserCard";
+import { ButtonGroup } from "./ui/ButtonGroup";
+
+export const page = [footer, lower("X"), endOfDay, startOfDay, orderTotal(1), userCard("a"), ButtonGroup];
+''',
+	"src/OrderItem.ts" = '''
+export const orderItem = { sku: "a-1", quantity: 2 };
+''',
+	"src/OrderService.test.ts" = '''
+import { orderTotal } from "./OrderService";
+
+export const checked = orderTotal(3) === 6;
+''',
+	"src/OrderService.ts" = '''
+import { orderItem } from "./OrderItem";
+
+export function orderTotal(price: number): number {
+  return price * orderItem.quantity;
+}
+''',
+	"src/index.ts" = '''
+export * from "./UserCard";
+export * from "./OrderItem";
+''',
+	"src/main.ts" = false,
+	"src/orderService.test.ts" = false,
+	"src/orderService.ts" = false,
+	"src/order_item.ts" = false,
+}
+
+
+[[suites.tests]]
+name = "snake"
+input = {}
+options = {
+	files = "src/**",
+	case = "snake",
+	typecheck = true,
+}
+output = {
+	"src/Footer.ts" = false,
+	"src/UserCard.ts" = false,
+	"src/footer.ts" = '''
+export const footer = "bye";
+''',
+	"src/index.ts" = '''
+export * from "./user_card";
+export * from "./order_item";
+''',
+	"src/main.ts" = '''
+import { footer } from "./footer";
+import { lower } from "./helpers";
+import { endOfDay } from "./date-utils";
+import { startOfDay } from "./date_utils";
+import { orderTotal } from "./order_service";
+import { userCard } from "./user_card";
+import { ButtonGroup } from "./ui/button_group";
+
+export const page = [footer, lower("X"), endOfDay, startOfDay, orderTotal(1), userCard("a"), ButtonGroup];
+''',
+	"src/orderService.test.ts" = false,
+	"src/orderService.ts" = false,
+	"src/order_service.test.ts" = '''
+import { orderTotal } from "./order_service";
+
+export const checked = orderTotal(3) === 6;
+''',
+	"src/order_service.ts" = '''
+import { orderItem } from "./order_item";
+
+export function orderTotal(price: number): number {
+  return price * orderItem.quantity;
+}
+''',
+	"src/ui/ButtonGroup.ts" = false,
+	"src/ui/button_group.ts" = '''
+import { userCard } from "../user_card";
+
+export const ButtonGroup = userCard("buttons");
+''',
+	"src/user_card.ts" = '''
+export function userCard(name: string): string {
+  return `<card>${name}</card>`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "only the files matching --files are renamed"
+input = {}
+options = {
+	files = "src/ui/**",
+	case = "kebab",
+}
+output = {
+	"src/main.ts" = '''
+import { footer } from "./Footer";
+import { lower } from "./helpers";
+import { endOfDay } from "./date-utils";
+import { startOfDay } from "./date_utils";
+import { orderTotal } from "./orderService";
+import { userCard } from "./UserCard";
+import { ButtonGroup } from "./ui/button-group";
+
+export const page = [footer, lower("X"), endOfDay, startOfDay, orderTotal(1), userCard("a"), ButtonGroup];
+''',
+	"src/ui/ButtonGroup.ts" = false,
+	"src/ui/button-group.ts" = '''
+import { userCard } from "../UserCard";
+
+export const ButtonGroup = userCard("buttons");
+''',
+}
+
+
+[[suites]]
+name = "declaration files"
+
+
+[[suites.tests]]
+name = "the file a declaration file declares is renamed with it, once"
+input = {
+	"src/widgets/myWidget.js" = '''
+export const w = 1;
+''',
+	"src/widgets/myWidget.d.ts" = '''
+export declare const w: number;
+''',
+	"src/widgets/use.ts" = '''
+import { w } from "./myWidget.js";
+
+export const x = w;
+''',
+	"src/widgets/themeColors.css" = '''
+.a { color: red; }
+''',
+	"src/widgets/themeColors.d.css.ts" = '''
+declare const styles: { a: string };
+export default styles;
+''',
+}
+options = {
+	files = "src/widgets/**",
+	case = "kebab",
+}
+output = {
+	"src/widgets/my-widget.d.ts" = '''
+export declare const w: number;
+''',
+	"src/widgets/my-widget.js" = '''
+export const w = 1;
+''',
+	"src/widgets/myWidget.d.ts" = false,
+	"src/widgets/myWidget.js" = false,
+	"src/widgets/theme-colors.css" = '''
+.a { color: red; }
+''',
+	"src/widgets/theme-colors.d.css.ts" = '''
+declare const styles: { a: string };
+export default styles;
+''',
+	"src/widgets/themeColors.css" = false,
+	"src/widgets/themeColors.d.css.ts" = false,
+	"src/widgets/use.ts" = '''
+import { w } from "./my-widget.js";
+
+export const x = w;
+''',
+}
+
+
+[[suites.tests]]
+name = "refuses when the new name of the declared file is taken"
+input = {
+	"src/widgets/myWidget.js" = '''
+export const w = 1;
+''',
+	"src/widgets/myWidget.d.ts" = '''
+export declare const w: number;
+''',
+	"src/widgets/use.ts" = '''
+import { w } from "./myWidget.js";
+
+export const x = w;
+''',
+	"src/widgets/themeColors.css" = '''
+.a { color: red; }
+''',
+	"src/widgets/themeColors.d.css.ts" = '''
+declare const styles: { a: string };
+export default styles;
+''',
+	"src/widgets/my-widget.js" = '''
+export const other = 2;
+''',
+}
+options = {
+	files = "src/widgets/**",
+	case = "kebab",
+}
+throws = "^INVALID_ARGS: src/widgets/my-widget\\.js already exists, and src/widgets/myWidget\\.js, the file src/widgets/myWidget\\.d\\.ts declares"
+
+
+[[suites]]
+name = "arguments"
+
+
+[[suites.tests]]
+name = "refuses an unknown case"
+input = {}
+options = {
+	files = "src/**",
+	case = "title",
+}
+throws = "^INVALID_ARGS: --case title is not known"
+
+
+[[suites.tests]]
+name = "refuses a missing case"
+input = {}
+options = {
+	files = "src/**",
+}
+throws = "^INVALID_ARGS: Missing --case"
