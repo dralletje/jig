@@ -1,0 +1,244 @@
+# lift-out: lifts a function or const nested in --in up to module level, above its parent, taking the
+# locals it uses along; with --to it moves on to another file. It refuses what cannot move (a parameter
+# it uses, a const whose initializer may have side effects, import.meta into another file).
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is a set of files by path, options are the flags in order (fixture picks the example
+# folder), output lists every changed file by path (false for a deleted one).
+
+name = "lift-out"
+
+
+[[suites]]
+name = "lift-out"
+
+
+[[suites.tests]]
+name = "lifts a nested function to module level, dedented, above its parent"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "double",
+}
+output = {
+	"nested.ts" = '''
+import { keep } from "./a";
+
+function double(x: number) {
+  return x * 2 + keep;
+}
+
+export function outer(n: number) {
+  const LIMIT = 10;
+  const clamp = (x: number) => Math.min(x, LIMIT);
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  const here = () => import.meta;
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "doc comments stay with what they describe"
+input = {
+	"documented.ts" = '''
+// file header
+
+/** Does X. */
+export function outer() {
+  const a = 1; // trailing note on a
+  /** Helps. */
+  function helper() {
+    return 2;
+  }
+  return a + helper();
+}
+''',
+}
+options = {
+	file = "documented.ts",
+	in = "outer",
+	symbol = "helper",
+}
+output = {
+	"documented.ts" = '''
+// file header
+
+/** Helps. */
+function helper() {
+  return 2;
+}
+
+/** Does X. */
+export function outer() {
+  const a = 1; // trailing note on a
+  return a + helper();
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "takes the locals it uses along, in source order"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "clamp",
+}
+output = {
+	"nested.ts" = '''
+import { keep } from "./a";
+
+const LIMIT = 10;
+
+const clamp = (x: number) => Math.min(x, LIMIT);
+
+export function outer(n: number) {
+  function double(x: number) {
+    return x * 2 + keep;
+  }
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  const here = () => import.meta;
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "refuses when it uses a local that cannot move (a parameter)"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "scaled",
+}
+throws = "^REFACTOR_UNAVAILABLE:"
+
+
+[[suites.tests]]
+name = "import.meta: refused when moving to another file"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "here",
+	to = "meta.ts",
+}
+throws = "^REFACTOR_UNAVAILABLE:"
+
+
+[[suites.tests]]
+name = "import.meta: fine within the file"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "here",
+}
+output = {
+	"nested.ts" = '''
+import { keep } from "./a";
+
+const here = () => import.meta;
+
+export function outer(n: number) {
+  function double(x: number) {
+    return x * 2 + keep;
+  }
+  const LIMIT = 10;
+  const clamp = (x: number) => Math.min(x, LIMIT);
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "refuses a const whose initializer may have side effects"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "started",
+}
+throws = "^REFACTOR_UNAVAILABLE:"
+
+
+[[suites.tests]]
+name = "--to lifts and moves to another file"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "double",
+	to = "math.ts",
+}
+output = {
+	"math.ts" = '''
+import { keep } from "./a";
+
+export function double(x: number) {
+    return x * 2 + keep;
+}
+''',
+	"nested.ts" = '''
+import { double } from "./math";
+
+export function outer(n: number) {
+  const LIMIT = 10;
+  const clamp = (x: number) => Math.min(x, LIMIT);
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  const here = () => import.meta;
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "--to takes the locals along into the other file"
+input = {}
+options = {
+	file = "nested.ts",
+	in = "outer",
+	symbol = "clamp",
+	to = "clamp.ts",
+}
+output = {
+	"clamp.ts" = '''
+export const LIMIT = 10;
+export const clamp = (x: number) => Math.min(x, LIMIT);
+''',
+	"nested.ts" = '''
+import { keep } from "./a";
+import { clamp } from "./clamp";
+
+export function outer(n: number) {
+  function double(x: number) {
+    return x * 2 + keep;
+  }
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  const here = () => import.meta;
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+}

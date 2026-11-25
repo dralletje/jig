@@ -1,0 +1,96 @@
+# extract: moves top-level symbols (--symbols, comma-separated) to --to, a new or existing file, and
+# rewires every importer. It refuses before moving anything when a symbol is missing or ambiguous.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is a set of files by path, options are the flags in order (fixture picks the example
+# folder), output lists every changed file by path (false for a deleted one).
+
+name = "extract"
+
+
+[[suites]]
+name = "extract"
+
+
+[[suites.tests]]
+name = "an ambiguous later symbol refuses before anything moves"
+input = {}
+options = {
+	file = "a.ts",
+	symbols = ["helper", "shared"],
+	to = "lib.ts",
+}
+throws = "^AMBIGUOUS_SYMBOL:"
+
+
+[[suites.tests]]
+name = "a missing later symbol refuses before anything moves"
+input = {}
+options = {
+	file = "a.ts",
+	symbols = ["helper", "nope"],
+	to = "lib.ts",
+}
+throws = "^SYMBOL_NOT_FOUND:"
+
+
+[[suites.tests]]
+name = "moves two symbols to a new file and rewires importers"
+input = {}
+options = {
+	file = "a.ts",
+	symbols = ["helper", "keep"],
+	to = "lib.ts",
+}
+output = {
+	"a.ts" = '''
+import { helper } from "./lib";
+
+export function foo() {
+  return helper() + 1;
+}
+
+export interface Shape {}
+
+export type Shape2 = Shape;
+
+export const shared = 1;
+
+export interface shared {}
+''',
+	"b.ts" = '''
+import { foo } from "./a";
+import { keep } from "./lib";
+
+export { foo as renamedFoo } from "./a";
+
+const o = { foo };
+
+export const total = foo() + keep;
+
+export default o;
+''',
+	"lib.ts" = '''
+
+export function helper() {
+    return 41;
+}
+export const keep = 1;
+''',
+	"nested.ts" = '''
+import { keep } from "./lib";
+
+export function outer(n: number) {
+  function double(x: number) {
+    return x * 2 + keep;
+  }
+  const LIMIT = 10;
+  const clamp = (x: number) => Math.min(x, LIMIT);
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  const here = () => import.meta;
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+}

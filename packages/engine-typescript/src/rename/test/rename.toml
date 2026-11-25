@@ -1,0 +1,303 @@
+# rename: renames a top-level symbol and every reference to it, across the whole project (all
+# the tsconfigs, and files outside a tsconfig's include that still belong to its project).
+# --kind picks between declarations that share a name (a variable and an interface merge into one symbol).
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is a set of files by path, options are the flags in order (fixture picks the example
+# folder), output lists every changed file by path (false for a deleted one).
+
+name = "rename"
+
+
+[[suites]]
+name = "rename"
+
+
+[[suites.tests]]
+name = "renames across .ts/.tsx, keeping shorthand properties and re-exports, also in files outside the tsconfig's include"
+input = {}
+options = {
+	file = "a.ts",
+	symbol = "foo",
+	to = "bar",
+}
+output = {
+	"a.ts" = '''
+export function bar() {
+  return helper() + 1;
+}
+
+export function helper() {
+  return 41;
+}
+
+export const keep = 1;
+
+export interface Shape {}
+
+export type Shape2 = Shape;
+
+export const shared = 1;
+
+export interface shared {}
+''',
+	"b.ts" = '''
+import { bar, keep } from "./a";
+
+export { bar as renamedFoo } from "./a";
+
+const o = { foo: bar };
+
+export const total = bar() + keep;
+
+export default o;
+''',
+	"c.tsx" = '''
+import { bar } from "./a";
+
+export const view = <div>{bar()}</div>;
+''',
+	"scripts/tool.ts" = '''
+import { bar } from "../a";
+
+console.log(bar());
+''',
+}
+
+
+[[suites.tests]]
+name = "a rename in one monorepo package leaves other packages as is"
+input = {}
+options = {
+	fixture = "monorepo",
+	file = "packages/core/src/util.ts",
+	symbol = "formatName",
+	to = "formatFullName",
+}
+output = {
+	"packages/core/src/util.ts" = '''
+export function formatFullName(first: string, last: string): string {
+  return `${last}, ${first}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "uses its own TypeScript, whatever TypeScript the repo has in node_modules"
+input = {
+	"node_modules/typescript/package.json" = '{"name":"typescript","version":"5.9.0","main":"main.cjs"}',
+	"node_modules/typescript/main.cjs" = '''
+throw new Error("must not load");
+''',
+}
+options = {
+	file = "a.ts",
+	symbol = "foo",
+	to = "bar",
+}
+output = {
+	"a.ts" = '''
+export function bar() {
+  return helper() + 1;
+}
+
+export function helper() {
+  return 41;
+}
+
+export const keep = 1;
+
+export interface Shape {}
+
+export type Shape2 = Shape;
+
+export const shared = 1;
+
+export interface shared {}
+''',
+	"b.ts" = '''
+import { bar, keep } from "./a";
+
+export { bar as renamedFoo } from "./a";
+
+const o = { foo: bar };
+
+export const total = bar() + keep;
+
+export default o;
+''',
+	"c.tsx" = '''
+import { bar } from "./a";
+
+export const view = <div>{bar()}</div>;
+''',
+	"scripts/tool.ts" = '''
+import { bar } from "../a";
+
+console.log(bar());
+''',
+}
+
+
+[[suites.tests]]
+name = "works in a folder without a tsconfig"
+input = {
+	"src/a.ts" = '''
+export function foo() {
+  return 1;
+}
+''',
+	"src/b.ts" = '''
+import { foo } from "./a";
+
+export const x = foo();
+''',
+}
+options = {
+	fixture = "fs",
+	file = "src/a.ts",
+	symbol = "foo",
+	to = "bar",
+}
+output = {
+	"src/a.ts" = '''
+export function bar() {
+  return 1;
+}
+''',
+	"src/b.ts" = '''
+import { bar } from "./a";
+
+export const x = bar();
+''',
+}
+
+
+[[suites.tests]]
+name = "works with a tsconfig whose extends cannot be resolved"
+input = {}
+options = {
+	fixture = "extends-npm",
+	file = "a.ts",
+	symbol = "foo",
+	to = "bar",
+}
+output = {
+	"a.ts" = '''
+export function bar() {
+  return 1;
+}
+''',
+	"b.ts" = '''
+import { bar } from "./a";
+
+export const x = bar();
+''',
+}
+
+
+[[suites.tests]]
+name = "a missing symbol is SYMBOL_NOT_FOUND"
+input = {}
+options = {
+	file = "a.ts",
+	symbol = "nope",
+	to = "bar",
+}
+throws = "^SYMBOL_NOT_FOUND:"
+
+
+[[suites.tests]]
+name = "--kind variable picks one of a variable and an interface of the same name (they merge, so both are renamed)"
+input = {}
+options = {
+	file = "a.ts",
+	symbol = "shared",
+	kind = "variable",
+	to = "x",
+}
+output = {
+	"a.ts" = '''
+export function foo() {
+  return helper() + 1;
+}
+
+export function helper() {
+  return 41;
+}
+
+export const keep = 1;
+
+export interface Shape {}
+
+export type Shape2 = Shape;
+
+export const x = 1;
+
+export interface x {}
+''',
+}
+
+
+[[suites.tests]]
+name = "--kind interface picks one of a variable and an interface of the same name (they merge, so both are renamed)"
+input = {}
+options = {
+	file = "a.ts",
+	symbol = "shared",
+	kind = "interface",
+	to = "x",
+}
+output = {
+	"a.ts" = '''
+export function foo() {
+  return helper() + 1;
+}
+
+export function helper() {
+  return 41;
+}
+
+export const keep = 1;
+
+export interface Shape {}
+
+export type Shape2 = Shape;
+
+export const x = 1;
+
+export interface x {}
+''',
+}
+
+
+[[suites.tests]]
+name = "--kind interface looks at interfaces only: keep is only a const, so there is none to pick"
+input = {}
+options = {
+	file = "a.ts",
+	symbol = "keep",
+	kind = "interface",
+	to = "x",
+}
+throws = "^SYMBOL_NOT_FOUND:"
+
+
+[[suites.tests]]
+name = "a name with several declarations is AMBIGUOUS_SYMBOL"
+input = {}
+options = {
+	file = "a.ts",
+	symbol = "shared",
+	to = "x",
+}
+throws = "^AMBIGUOUS_SYMBOL:"
+
+
+[[suites.tests]]
+name = "an unknown flag is INVALID_ARGS"
+input = {}
+options = {
+	nope = "x",
+}
+throws = "^INVALID_ARGS:"

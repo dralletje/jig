@@ -1,0 +1,377 @@
+# move-file: moves --file to --to, rewriting every import of it and its own relative imports. A
+# declaration file moves along with the file it declares. It refuses to leave a tsconfig's include,
+# to move a tsconfig, or to overwrite an existing file.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a table input is a set of files by path, options are the flags in order (fixture picks the example
+# folder), output lists every changed file by path (false for a deleted one).
+
+name = "move-file"
+
+
+[[suites]]
+name = "move-file"
+
+
+[[suites.tests]]
+name = "moves a file, rewriting its own relative imports"
+input = {
+	"tsconfig.json" = '{"compilerOptions":{"strict":true,"noEmit":true,"jsx":"preserve","module":"esnext","moduleResolution":"bundler","target":"esnext","skipLibCheck":true,"types":[]},"include":["**/*.ts","**/*.tsx"]}',
+}
+options = {
+	file = "b.ts",
+	to = "sub/b.ts",
+}
+output = {
+	"b.ts" = false,
+	"sub/b.ts" = '''
+import { foo, keep } from "../a";
+
+export { foo as renamedFoo } from "../a";
+
+const o = { foo };
+
+export const total = foo() + keep;
+
+export default o;
+''',
+}
+
+
+[[suites.tests]]
+name = "refuses to move a file out of its tsconfig's include"
+input = {}
+options = {
+	file = "b.ts",
+	to = "sub/b.ts",
+}
+throws = "^REFACTOR_UNAVAILABLE:"
+
+
+[[suites.tests]]
+name = "importers follow a moved module"
+input = {
+	"tsconfig.json" = '{"compilerOptions":{"strict":true,"noEmit":true,"jsx":"preserve","module":"esnext","moduleResolution":"bundler","target":"esnext","skipLibCheck":true,"types":[]},"include":["**/*.ts","**/*.tsx"]}',
+}
+options = {
+	file = "a.ts",
+	to = "lib/a.ts",
+}
+output = {
+	"a.ts" = false,
+	"b.ts" = '''
+import { foo, keep } from "./lib/a";
+
+export { foo as renamedFoo } from "./lib/a";
+
+const o = { foo };
+
+export const total = foo() + keep;
+
+export default o;
+''',
+	"c.tsx" = '''
+import { foo } from "./lib/a";
+
+export const view = <div>{foo()}</div>;
+''',
+	"lib/a.ts" = '''
+export function foo() {
+  return helper() + 1;
+}
+
+export function helper() {
+  return 41;
+}
+
+export const keep = 1;
+
+export interface Shape {}
+
+export type Shape2 = Shape;
+
+export const shared = 1;
+
+export interface shared {}
+''',
+	"nested.ts" = '''
+import { keep } from "./lib/a";
+
+export function outer(n: number) {
+  function double(x: number) {
+    return x * 2 + keep;
+  }
+  const LIMIT = 10;
+  const clamp = (x: number) => Math.min(x, LIMIT);
+  function scaled() {
+    return n * 3;
+  }
+  const started = Date.now();
+  const here = () => import.meta;
+  return clamp(double(n)) + scaled() + started + (here() ? 0 : 1);
+}
+''',
+	"scripts/tool.ts" = '''
+import { foo } from "../lib/a";
+
+console.log(foo());
+''',
+}
+
+
+[[suites.tests]]
+name = "paths aliases inside the project are rewritten"
+input = {}
+options = {
+	fixture = "paths",
+	file = "src/util.ts",
+	to = "src/lib/util.ts",
+}
+output = {
+	"src/lib/util.ts" = '''
+export function util() {}
+''',
+	"src/main.ts" = '''
+import { util } from "@/lib/util";
+
+util();
+''',
+	"src/util.ts" = false,
+}
+
+
+[[suites.tests]]
+name = "keeps each import's extension form in a file that mixes them"
+input = {
+	"src/other.ts" = '''
+export const other = 2;
+''',
+	"src/lib/sub/b.ts" = '''
+export const b = 3;
+''',
+	"src/lib/a.ts" = '''
+import { shared } from "../shared";
+import { other } from "../other.ts";
+import { b } from "./sub/b";
+
+export const a = shared + other + b;
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/lib/a.ts",
+	to = "src/lib/deep/a.ts",
+}
+output = {
+	"src/lib/a.ts" = false,
+	"src/lib/deep/a.ts" = '''
+import { shared } from "../../shared";
+import { other } from "../../other.ts";
+import { b } from "../sub/b";
+
+export const a = shared + other + b;
+''',
+}
+
+
+[[suites.tests]]
+name = "a file's declaration file moves along, renamed the same way"
+input = {
+	"src/lib/plain.js" = '''
+export const p = 1;
+''',
+	"src/lib/plain.d.ts" = '''
+export declare const p: number;
+''',
+	"src/use-plain.ts" = '''
+import { p } from "./lib/plain.js";
+
+export const q = p;
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/lib/plain.js",
+	to = "src/lib2/bar.js",
+}
+output = {
+	"src/lib/plain.d.ts" = false,
+	"src/lib/plain.js" = false,
+	"src/lib2/bar.d.ts" = '''
+export declare const p: number;
+''',
+	"src/lib2/bar.js" = '''
+export const p = 1;
+''',
+	"src/use-plain.ts" = '''
+import { p } from "./lib2/bar.js";
+
+export const q = p;
+''',
+}
+
+
+[[suites.tests]]
+name = "a declaration file brings the file it declares along"
+input = {
+	"src/lib/plain.js" = '''
+export const p = 1;
+''',
+	"src/lib/plain.d.ts" = '''
+export declare const p: number;
+''',
+	"src/use-plain.ts" = '''
+import { p } from "./lib/plain.js";
+
+export const q = p;
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/lib/plain.d.ts",
+	to = "src/lib2/bar.d.ts",
+}
+output = {
+	"src/lib/plain.d.ts" = false,
+	"src/lib/plain.js" = false,
+	"src/lib2/bar.d.ts" = '''
+export declare const p: number;
+''',
+	"src/lib2/bar.js" = '''
+export const p = 1;
+''',
+	"src/use-plain.ts" = '''
+import { p } from "./lib2/bar.js";
+
+export const q = p;
+''',
+}
+
+
+[[suites.tests]]
+name = "a typed CSS module's declaration file moves along"
+input = {
+	"src/feature/x.css" = '''
+.a { color: red; }
+''',
+	"src/feature/x.d.css.ts" = '''
+declare const styles: { a: string };
+export default styles;
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/feature/x.css",
+	to = "src/feature/y.css",
+}
+output = {
+	"src/feature/x.css" = false,
+	"src/feature/x.d.css.ts" = false,
+	"src/feature/y.css" = '''
+.a { color: red; }
+''',
+	"src/feature/y.d.css.ts" = '''
+declare const styles: { a: string };
+export default styles;
+''',
+}
+
+
+[[suites.tests]]
+name = "refuses when the declaration file's new place is taken"
+input = {
+	"src/lib/plain.js" = '''
+export const p = 1;
+''',
+	"src/lib/plain.d.ts" = '''
+export declare const p: number;
+''',
+	"src/use-plain.ts" = '''
+import { p } from "./lib/plain.js";
+
+export const q = p;
+''',
+	"src/lib2/bar.d.ts" = '''
+export {};
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/lib/plain.js",
+	to = "src/lib2/bar.js",
+}
+throws = "^INVALID_ARGS:"
+
+
+[[suites.tests]]
+name = "refuses to leave a second declared file behind"
+input = {
+	"src/lib/plain.js" = '''
+export const p = 1;
+''',
+	"src/lib/plain.jsx" = '''
+export const p = 1;
+''',
+	"src/lib/plain.d.ts" = '''
+export declare const p: number;
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/lib/plain.jsx",
+	to = "src/lib2/bar.jsx",
+}
+throws = "^INVALID_ARGS:"
+
+
+[[suites.tests]]
+name = "refuses to move a tsconfig"
+input = {}
+options = {
+	file = "tsconfig.json",
+	to = "sub/tsconfig.json",
+}
+throws = "^INVALID_ARGS:"
+
+
+[[suites.tests]]
+name = "refuses an extension change its declaration file could not follow"
+input = {
+	"src/lib/plain.js" = '''
+export const p = 1;
+''',
+	"src/lib/plain.d.ts" = '''
+export declare const p: number;
+''',
+	"src/use-plain.ts" = '''
+import { p } from "./lib/plain.js";
+
+export const q = p;
+''',
+}
+options = {
+	fixture = "examples/duplicate-folder",
+	file = "src/lib/plain.js",
+	to = "src/lib/plain.ts",
+}
+throws = "^INVALID_ARGS:"
+
+
+[[suites.tests]]
+name = "refuses an existing target"
+input = {}
+options = {
+	file = "b.ts",
+	to = "a.ts",
+}
+throws = "^REFACTOR_UNAVAILABLE:"
+
+
+[[suites.tests]]
+name = "a flag of another action is INVALID_ARGS"
+input = {}
+options = {
+	file = "a.ts",
+	to = "b.ts",
+	symbol = "foo",
+}
+throws = "^INVALID_ARGS:"
