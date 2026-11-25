@@ -1,0 +1,1389 @@
+# inline-function: replaces calls of a function by its body ("unpacks" them) and, in definition mode,
+# removes the declaration once every call is unpacked.
+#
+#   --file <path> --symbol <name>            every call of the function in --file, then the declaration
+#   --file <path> --symbol <name> --at <path>:<line>[:<column>]
+#                                            only the call that starts there; the declaration stays
+#
+# Cases with `typecheck = true` must leave no type errors in the changed TypeScript files.
+# Most cases run on the fixture examples/inline-function (the files named by --file); the edge cases
+# bring their own source as a string input, which is src/a.ts.
+# The case shape (input, options, output, throws) is described at actionToml in @jig/test-utils:
+# a string input is src/a.ts, options are the flags in order, output is src/a.ts afterwards (or every
+# changed file by path), and a refusal is a `throws` pattern for "<CODE>: <message>".
+
+name = "inline-function"
+
+
+[[suites]]
+name = "single-expression functions"
+
+
+[[suites.tests]]
+name = "definition mode unpacks every call, adds parentheses where needed, and removes the declaration"
+input = {}
+options = {
+	file = 'src/single.ts',
+	symbol = 'square',
+	typecheck = true,
+}
+output = {
+	"src/single.ts" = '''
+const area = (width: number, height: number) => {
+  return width * height;
+};
+
+const plus = (a: number, b: number) => a + b;
+
+export function describe(side: number, w: number, h: number): string {
+  const s = side * side;
+  const a = area(w, h);
+  return `${s + (w * w)}:${a}`;
+}
+
+export const scaled = (v: number) => 1 + (v * v) * 2;
+
+export const doubled = (w: number) => plus(w, 1) * 2;
+''',
+}
+
+
+[[suites.tests]]
+name = "a block with only a return is a single expression"
+input = {}
+options = {
+	file = 'src/single.ts',
+	symbol = 'area',
+	typecheck = true,
+}
+output = {
+	"src/single.ts" = '''
+// Single-expression functions: inlined anywhere, parameters substituted.
+const square = (n: number) => n * n;
+
+const plus = (a: number, b: number) => a + b;
+
+export function describe(side: number, w: number, h: number): string {
+  const s = square(side);
+  const a = w * h;
+  return `${s + square(w)}:${a}`;
+}
+
+export const scaled = (v: number) => 1 + square(v) * 2;
+
+export const doubled = (w: number) => plus(w, 1) * 2;
+''',
+}
+
+
+[[suites.tests]]
+name = "a sum becomes (w + 1) * 2"
+input = {}
+options = {
+	file = 'src/single.ts',
+	symbol = 'plus',
+	typecheck = true,
+}
+output = {
+	"src/single.ts" = '''
+// Single-expression functions: inlined anywhere, parameters substituted.
+const square = (n: number) => n * n;
+
+const area = (width: number, height: number) => {
+  return width * height;
+};
+
+export function describe(side: number, w: number, h: number): string {
+  const s = square(side);
+  const a = area(w, h);
+  return `${s + square(w)}:${a}`;
+}
+
+export const scaled = (v: number) => 1 + square(v) * 2;
+
+export const doubled = (w: number) => (w + 1) * 2;
+''',
+}
+
+
+[[suites.tests]]
+name = "one call: only that call is unpacked and the declaration stays"
+input = {}
+options = {
+	file = 'src/single.ts',
+	symbol = 'square',
+	at = 'src/single.ts:11',
+	typecheck = true,
+}
+output = {
+	"src/single.ts" = '''
+// Single-expression functions: inlined anywhere, parameters substituted.
+const square = (n: number) => n * n;
+
+const area = (width: number, height: number) => {
+  return width * height;
+};
+
+const plus = (a: number, b: number) => a + b;
+
+export function describe(side: number, w: number, h: number): string {
+  const s = side * side;
+  const a = area(w, h);
+  return `${s + square(w)}:${a}`;
+}
+
+export const scaled = (v: number) => 1 + square(v) * 2;
+
+export const doubled = (w: number) => plus(w, 1) * 2;
+''',
+}
+
+
+[[suites]]
+name = "multi-statement functions"
+
+
+[[suites.tests]]
+name = "unpacked at const x = f(...), an expression statement and return f(...); every local clash is renamed"
+input = {}
+options = {
+	file = 'src/multi.ts',
+	symbol = 'summarize',
+	typecheck = true,
+}
+output = {
+	"src/multi.ts" = '''
+function logSize(items: number[]): void {
+  const size = items.length;
+  sizes.push(size);
+}
+
+const sizes: number[] = [];
+
+export function report(items: number[]): string {
+  const items2: number[] = items;
+  const label: string = "average";
+  const total = items2.reduce((a, b) => a + b, 0);
+  const average = total / items2.length;
+  const first = `${label}: ${average}`;
+  logSize(items);
+  const items3: number[] = items;
+  const label2: string = first;
+  const total2 = items3.reduce((a, b) => a + b, 0);
+  const average2 = total2 / items3.length;
+  return `${label2}: ${average2}`;
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a void function unpacked as an expression statement"
+input = {}
+options = {
+	file = 'src/multi.ts',
+	symbol = 'logSize',
+	typecheck = true,
+}
+output = {
+	"src/multi.ts" = '''
+// Multi-statement functions: unpacked as a whole statement, a const initializer or a return.
+function summarize(items: number[], label: string): string {
+  const total = items.reduce((a, b) => a + b, 0);
+  const average = total / items.length;
+  return `${label}: ${average}`;
+}
+
+const sizes: number[] = [];
+
+export function report(items: number[]): string {
+  const first = summarize(items, "average");
+  const items2: number[] = items;
+  const size = items2.length;
+  sizes.push(size);
+  return summarize(items, first);
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "body locals and parameters that clash at the call site are renamed"
+input = {}
+options = {
+	file = 'src/clash.ts',
+	symbol = 'normalize',
+	typecheck = true,
+}
+output = {
+	"src/clash.ts" = '''
+export function shares(values: number[], total: number): number[] {
+  const values2: number[] = values;
+  const total2 = values2.reduce((a, b) => a + b, 0);
+  const parts = values2.map((v) => v / total2);
+  return parts.map((p) => p * total);
+}
+''',
+}
+
+
+[[suites]]
+name = "argument evaluation"
+
+
+[[suites.tests]]
+name = "a side-effecting argument used twice is hoisted into one const"
+input = {}
+options = {
+	file = 'src/hoist.ts',
+	symbol = 'twice',
+	typecheck = true,
+}
+output = {
+	"src/hoist.ts" = '''
+// A side-effecting argument is evaluated once: hoisted into a const.
+declare function next(): number;
+declare function a(): number;
+declare function b(): number;
+
+function bump(n: number): number {
+  return n + 1;
+}
+
+export function ids(): number {
+  const n: number = next();
+  return n + n;
+}
+
+export function mixed(): number {
+  return a() + bump(b());
+}
+''',
+}
+
+
+[[suites.tests]]
+name = "a call in a + f(b()) with a non-simple argument is refused in definition mode"
+input = {}
+options = {
+	file = 'src/hoist.ts',
+	symbol = 'bump',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `bump` everywhere and remove it[\s\S]*not a plain identifier or literal'
+
+
+[[suites.tests]]
+name = "a call in a + f(b()) with a non-simple argument is refused for the one call"
+input = {}
+options = {
+	file = 'src/hoist.ts',
+	symbol = 'bump',
+	at = 'src/hoist.ts:19',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack the call to `bump` at src/hoist.ts:19:16: its argument `b\(\)` is not a plain identifier or literal'
+
+
+[[suites.tests]]
+name = "an argument that a variable inside the body would capture is refused"
+input = {}
+options = {
+	file = 'src/capture.ts',
+	symbol = 'addAll',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `addAll` everywhere and remove it[\s\S]*would be captured by a variable named `i`'
+
+
+[[suites]]
+name = "free variables"
+
+
+[[suites.tests]]
+name = "a call where a free variable is shadowed is refused in definition mode"
+input = {}
+options = {
+	file = 'src/shadow.ts',
+	symbol = 'withTax',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `withTax` everywhere and remove it[\s\S]*`rate`, which `withTax` uses, means something else'
+
+
+[[suites.tests]]
+name = "the shadowed call is refused on its own"
+input = {}
+options = {
+	file = 'src/shadow.ts',
+	symbol = 'withTax',
+	at = 'src/shadow.ts:13',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack the call to `withTax` at src/shadow.ts:13:10: `rate`, which `withTax` uses, means something else'
+
+
+[[suites.tests]]
+name = "the other call can be unpacked on its own"
+input = {}
+options = {
+	file = 'src/shadow.ts',
+	symbol = 'withTax',
+	at = 'src/shadow.ts:9',
+	typecheck = true,
+}
+output = {
+	"src/shadow.ts" = '''
+// A free variable of the function that is shadowed at a call site.
+const rate = 0.2;
+
+function withTax(price: number): number {
+  return price * (1 + rate);
+}
+
+export function net(price: number): number {
+  return price * (1 + rate);
+}
+
+export function shadowed(price: number, rate: number): number {
+  return withTax(price) + rate;
+}
+''',
+}
+
+
+[[suites]]
+name = "refusals"
+
+
+[[suites.tests]]
+name = "fact: one call refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'fact',
+	at = 'src/refusals.ts:30',
+}
+throws = '^REFACTOR_UNAVAILABLE: `fact` cannot be unpacked at all:[\s\S]*`fact` is recursive'
+
+
+[[suites.tests]]
+name = "fact: definition mode refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'fact',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `fact` everywhere and remove it[\s\S]*`fact` is recursive'
+
+
+[[suites.tests]]
+name = "whoAmI: one call refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'whoAmI',
+	at = 'src/refusals.ts:31',
+}
+throws = '^REFACTOR_UNAVAILABLE: `whoAmI` cannot be unpacked at all:[\s\S]*`whoAmI` uses `this`'
+
+
+[[suites.tests]]
+name = "whoAmI: definition mode refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'whoAmI',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `whoAmI` everywhere and remove it[\s\S]*`whoAmI` uses `this`'
+
+
+[[suites.tests]]
+name = "count: one call refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'count',
+	at = 'src/refusals.ts:32',
+}
+throws = '^REFACTOR_UNAVAILABLE: `count` cannot be unpacked at all:[\s\S]*`count` uses `arguments`'
+
+
+[[suites.tests]]
+name = "count: definition mode refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'count',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `count` everywhere and remove it[\s\S]*`count` uses `arguments`'
+
+
+[[suites.tests]]
+name = "sign: one call refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'sign',
+	at = 'src/refusals.ts:33',
+}
+throws = '^REFACTOR_UNAVAILABLE: `sign` cannot be unpacked at all:[\s\S]*`sign` has an early return'
+
+
+[[suites.tests]]
+name = "sign: definition mode refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'sign',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `sign` everywhere and remove it[\s\S]*`sign` has an early return'
+
+
+[[suites.tests]]
+name = "load: one call refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'load',
+	at = 'src/refusals.ts:34',
+}
+throws = '^REFACTOR_UNAVAILABLE: `load` cannot be unpacked at all:[\s\S]*`load` is async'
+
+
+[[suites.tests]]
+name = "load: definition mode refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'load',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `load` everywhere and remove it[\s\S]*`load` is async'
+
+
+[[suites.tests]]
+name = "gen: one call refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'gen',
+	at = 'src/refusals.ts:35',
+}
+throws = '^REFACTOR_UNAVAILABLE: `gen` cannot be unpacked at all:[\s\S]*`gen` is a generator'
+
+
+[[suites.tests]]
+name = "gen: definition mode refuses"
+input = {}
+options = {
+	file = 'src/refusals.ts',
+	symbol = 'gen',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `gen` everywhere and remove it[\s\S]*`gen` is a generator'
+
+
+[[suites.tests]]
+name = "exported: definition mode refuses"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'format',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `format` everywhere and remove it[\s\S]*`format` is exported'
+
+
+[[suites.tests]]
+name = "exported: one call works"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'format',
+	at = 'src/shared.ts:10',
+	typecheck = true,
+}
+output = {
+	"src/shared.ts" = '''
+// Exported, and used as a value: only single calls can be unpacked.
+export function format(n: number): string {
+  return `#${n}`;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(3, "0");
+}
+
+export const label = (n: number) => `#${n}` + pad(n);
+
+export const handlers = [pad];
+''',
+}
+
+
+[[suites.tests]]
+name = "used as a value: definition mode refuses"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'pad',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `pad` everywhere and remove it[\s\S]*`pad` is used as a value'
+
+
+[[suites.tests]]
+name = "used as a value: one call works"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'pad',
+	at = 'src/shared.ts:10',
+	typecheck = true,
+}
+output = {
+	"src/shared.ts" = '''
+// Exported, and used as a value: only single calls can be unpacked.
+export function format(n: number): string {
+  return `#${n}`;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(3, "0");
+}
+
+export const label = (n: number) => format(n) + String(n).padStart(3, "0");
+
+export const handlers = [pad];
+''',
+}
+
+
+[[suites.tests]]
+name = "--at errors: no call there"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'pad',
+	at = 'src/shared.ts:1',
+}
+throws = '^REFACTOR_UNAVAILABLE: There is no call to `pad` starting on line src/shared.ts:1\.'
+
+
+[[suites.tests]]
+name = "--at errors: ambiguous line"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'pad',
+	at = 'src/shared.ts:12',
+}
+throws = '^REFACTOR_UNAVAILABLE: There is no call to `pad` starting on line src/shared.ts:12\.'
+
+
+[[suites.tests]]
+name = "--at errors: two calls on one line"
+input = {
+	"src/two.ts" = '''
+const id = (n: number) => n;
+export const x = [id(1), id(2)];
+''',
+}
+options = {
+	file = 'src/two.ts',
+	symbol = 'id',
+	at = 'src/two.ts:2',
+}
+throws = '^INVALID_ARGS'
+
+
+[[suites.tests]]
+name = "--at with a column picks one of two calls on a line"
+input = {
+	"src/two.ts" = '''
+const id = (n: number) => n;
+export const x = [id(1), id(2)];
+''',
+}
+options = {
+	file = 'src/two.ts',
+	symbol = 'id',
+	at = 'src/two.ts:2:26',
+}
+output = {
+	"src/two.ts" = '''
+const id = (n: number) => n;
+export const x = [id(1), 2];
+''',
+}
+
+
+[[suites.tests]]
+name = "--at errors: another file"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'format',
+	at = 'src/main.ts:3',
+}
+throws = '^REFACTOR_UNAVAILABLE: --at is in src/main.ts but `format` is declared in src/shared.ts'
+
+
+[[suites.tests]]
+name = "--at errors: bad syntax"
+input = {}
+options = {
+	file = 'src/shared.ts',
+	symbol = 'pad',
+	at = 'nope',
+}
+throws = '^INVALID_ARGS'
+
+
+[[suites]]
+name = "precedence and meaning at the call site"
+
+
+[[suites.tests]]
+name = "optional chains are wrapped so the chain does not swallow the rest"
+input = '''
+const pick = (o: { a?: { b: number } }) => o.a?.b;
+export const f = (o: { a?: { b: number } }) => pick(o)?.toFixed();
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'pick',
+	typecheck = true,
+}
+output = '''
+export const f = (o: { a?: { b: number } }) => (o.a?.b)?.toFixed();
+'''
+
+
+[[suites.tests]]
+name = "a result that is called directly is refused when it is a property access (this would change)"
+input = '''
+const obj = { m() { return 1; } };
+const get = () => obj.m;
+export const r = get()();
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'get',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `get` everywhere and remove it[\s\S]*calling it would pass a different `this`'
+
+
+[[suites.tests]]
+name = "an object literal at the start of a statement is parenthesized"
+input = '''
+declare function sink(x: unknown): void;
+const make = (n: number) => ({ n });
+const both = (a: number, b: number) => (sink(a), b);
+const pick = (c: boolean, a: number, b: number) => (c ? a : b);
+export function run(c: boolean, x: number) {
+  make(x);
+  sink(both(x, 2));
+  return pick(c, x, 1) + 1;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'make',
+	typecheck = true,
+}
+output = '''
+declare function sink(x: unknown): void;
+const both = (a: number, b: number) => (sink(a), b);
+const pick = (c: boolean, a: number, b: number) => (c ? a : b);
+export function run(c: boolean, x: number) {
+  ({ n: x });
+  sink(both(x, 2));
+  return pick(c, x, 1) + 1;
+}
+'''
+
+
+[[suites.tests]]
+name = "a comma expression is parenthesized"
+input = '''
+declare function sink(x: unknown): void;
+const both = (a: number, b: number) => (sink(a), b);
+export function run(x: number) {
+  return both(x, 2) * 2;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'both',
+	typecheck = true,
+}
+output = '''
+declare function sink(x: unknown): void;
+export function run(x: number) {
+  return (sink(x), 2) * 2;
+}
+'''
+
+
+[[suites.tests]]
+name = "a ternary is parenthesized"
+input = '''
+const pick = (c: boolean, a: number, b: number) => (c ? a : b);
+export function run(c: boolean, x: number) {
+  return pick(c, x, 1) + 1;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'pick',
+	typecheck = true,
+}
+output = '''
+export function run(c: boolean, x: number) {
+  return (c ? x : 1) + 1;
+}
+'''
+
+
+[[suites.tests]]
+name = "a numeric literal argument is parenthesized as an object"
+input = '''
+const show = (n: number) => n.toFixed(1);
+const neg = (n: number) => 2 ** n;
+export const a = show(5);
+export const b = neg(-1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'show',
+	typecheck = true,
+}
+output = '''
+const neg = (n: number) => 2 ** n;
+export const a = (5).toFixed(1);
+export const b = neg(-1);
+'''
+
+
+[[suites.tests]]
+name = "a negative literal argument is parenthesized as an operand"
+input = '''
+const neg = (n: number) => 2 ** n;
+export const b = neg(-1) + 1;
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'neg',
+	typecheck = true,
+}
+output = '''
+export const b = (2 ** (-1)) + 1;
+'''
+
+
+[[suites.tests]]
+name = "shorthand properties get an explicit name"
+input = '''
+const box = (n: number) => ({ n });
+export const b = (x: number) => box(x);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'box',
+	typecheck = true,
+}
+output = '''
+export const b = (x: number) => ({ n: x });
+'''
+
+
+[[suites.tests]]
+name = "shorthand properties get an explicit name when the argument is hoisted"
+input = '''
+declare function next(): number;
+const box = (n: number) => ({ n });
+export function b() {
+  return box(next());
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'box',
+	typecheck = true,
+}
+output = '''
+declare function next(): number;
+export function b() {
+  const n: number = next();
+  return ({ n });
+}
+'''
+
+
+[[suites.tests]]
+name = "a mutable identifier argument counts as non-simple: hoisted where possible"
+input = '''
+const add = (n: number) => n + 1;
+export function run() {
+  let a = 1;
+  a++;
+  return add(a);
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'add',
+	typecheck = true,
+}
+output = '''
+export function run() {
+  let a = 1;
+  a++;
+  const n: number = a;
+  return n + 1;
+}
+'''
+
+
+[[suites.tests]]
+name = "a mutable identifier argument counts as non-simple: refused in the middle of an expression"
+input = '''
+const add = (n: number) => n + 1;
+export function run() {
+  let a = 1;
+  a++;
+  return 2 * add(a);
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'add',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `add` everywhere and remove it[\s\S]*its argument `a` is not a plain identifier or literal'
+
+
+[[suites.tests]]
+name = "calls nested in the arguments of another call are refused in definition mode"
+input = '''
+const inc = (n: number) => n + 1;
+export function run(x: number) {
+  const y = inc(inc(x));
+  return y;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'inc',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `inc` everywhere and remove it[\s\S]*inside the arguments of another call to `inc`'
+
+
+[[suites.tests]]
+name = "calls nested in the arguments of another call: --at takes the outer one"
+input = '''
+const inc = (n: number) => n + 1;
+export function run(x: number) {
+  const y = inc(inc(x));
+  return y;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'inc',
+	at = 'src/a.ts:3:13',
+	typecheck = true,
+}
+output = '''
+const inc = (n: number) => n + 1;
+export function run(x: number) {
+  const n: number = inc(x);
+  const y = n + 1;
+  return y;
+}
+'''
+
+
+[[suites.tests]]
+name = "an unbraced if body, an arrow body and a template cannot take several statements"
+input = '''
+const log: string[] = [];
+function note(s: string) {
+  const t = s.trim();
+  log.push(t);
+}
+export function run(c: boolean, s: string) {
+  if (c) note(s);
+  const f = () => note(s);
+  return f;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'note',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `note` everywhere and remove it[\s\S]*unbraced body of an if/else/loop/label[\s\S]*not a whole expression statement'
+
+
+[[suites.tests]]
+name = "function expressions, void functions and multi-line template literals"
+input = '''
+const out: string[] = [];
+const emit = function (s: string): void {
+  const t = `line one
+    line two ${s}`;
+  out.push(t);
+};
+export function run(s: string) {
+  if (s) {
+    emit(s);
+  }
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'emit',
+	typecheck = true,
+}
+output = '''
+const out: string[] = [];
+export function run(s: string) {
+  if (s) {
+    const s2: string = s;
+    const t = `line one
+    line two ${s2}`;
+    out.push(t);
+  }
+}
+'''
+
+
+[[suites.tests]]
+name = "a void function whose result is used is refused"
+input = '''
+const out: number[] = [];
+function push(n: number): void {
+  out.push(n);
+}
+export const r = push(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'push',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `push` everywhere and remove it[\s\S]*`push` returns nothing but its result is used here'
+
+
+[[suites.tests]]
+name = "not unpackable: a generic function"
+input = '''
+function id<T>(x: T) { return x; }
+export const a = id(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'id',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `id` everywhere and remove it[\s\S]*`id` is generic'
+
+
+[[suites.tests]]
+name = "not unpackable: a parameter with a default value"
+input = '''
+function d(x = 1) { return x; }
+export const a = d();
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'd',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `d` everywhere and remove it[\s\S]*`d` has a default value for parameter `x`'
+
+
+[[suites.tests]]
+name = "not unpackable: a reassigned parameter"
+input = '''
+function w(x: number) { x = x + 1; return x; }
+export const a = w(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'w',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `w` everywhere and remove it[\s\S]*`w` assigns to its parameter `x`'
+
+
+[[suites.tests]]
+name = "not unpackable: a var in the body"
+input = '''
+function v(x: number) { var y = x; return y; }
+export const a = v(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'v',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `v` everywhere and remove it[\s\S]*`v` declares a `var`'
+
+
+[[suites.tests]]
+name = "not unpackable: a nested function"
+input = '''
+function n(x: number) { function inner() { return x; } return inner(); }
+export const a = n(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'n',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `n` everywhere and remove it[\s\S]*`n` declares a function, class or type inside its body'
+
+
+[[suites.tests]]
+name = "not unpackable: a let-bound arrow function"
+input = '''
+let l = (x: number) => x;
+export const a = l(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'l',
+}
+throws = '^REFACTOR_UNAVAILABLE: `l` is declared with let or var in src/a.ts'
+
+
+[[suites.tests]]
+name = "not unpackable: an optional parameter"
+input = '''
+function o(x?: number) { return x; }
+export const a = o(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'o',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `o` everywhere and remove it[\s\S]*`o` has an optional parameter `x`'
+
+
+[[suites.tests]]
+name = "not unpackable: a rest parameter"
+input = '''
+function r(...xs: number[]) { return xs; }
+export const a = r(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'r',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `r` everywhere and remove it[\s\S]*`r` has a rest parameter `xs`'
+
+
+[[suites.tests]]
+name = "not unpackable: a destructured parameter"
+input = '''
+function p({ a }: { a: number }) { return a; }
+export const x = p({ a: 1 });
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'p',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `p` everywhere and remove it[\s\S]*`p` has a destructured parameter'
+
+
+[[suites.tests]]
+name = "not unpackable: an empty arrow function"
+input = '''
+const e = () => {};
+export const a = e();
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'e',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `e` everywhere and remove it[\s\S]*`e` has an empty body'
+
+
+[[suites.tests]]
+name = "not unpackable: a call with fewer arguments than parameters"
+input = '''
+function two(a: number, b: number) { return a + b; }
+export const x = two(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'two',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `two` everywhere and remove it[\s\S]*it passes 1 argument but `two` takes 2'
+
+
+[[suites.tests]]
+name = "a script (no import/export) is refused in definition mode"
+input = '''
+function s(x: number) { return x + 1; }
+const a = s(1);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 's',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `s` everywhere and remove it[\s\S]*declared in a script'
+
+
+[[suites.tests]]
+name = "an unused function is refused in definition mode"
+input = '''
+const u = (x: number) => x;
+export const a = 1;
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'u',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `u` everywhere and remove it[\s\S]*`u` has no calls in src/a.ts'
+
+
+[[suites.tests]]
+name = "two calls in one block introduce no duplicate names; calls in sibling blocks reuse them"
+input = '''
+declare function use(n: number): void;
+function calc(n: number): number {
+  const half = n / 2;
+  use(half);
+  return half + 1;
+}
+export function run(x: number, c: boolean) {
+  const a = calc(x);
+  const b = calc(a);
+  if (c) {
+    const d = calc(b);
+    return d;
+  }
+  return b;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'calc',
+	typecheck = true,
+}
+output = '''
+declare function use(n: number): void;
+export function run(x: number, c: boolean) {
+  const n: number = x;
+  const half = n / 2;
+  use(half);
+  const a = half + 1;
+  const n2: number = a;
+  const half2 = n2 / 2;
+  use(half2);
+  const b = half2 + 1;
+  if (c) {
+    const n3: number = b;
+    const half3 = n3 / 2;
+    use(half3);
+    const d = half3 + 1;
+    return d;
+  }
+  return b;
+}
+'''
+
+
+[[suites.tests]]
+name = "a free variable declared later or imported still resolves"
+input = '''
+import { format } from "./shared";
+type Box = { n: number };
+const show = (b: Box) => format(b.n);
+export function run(b: Box) {
+  return show(b);
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'show',
+	typecheck = true,
+}
+output = '''
+import { format } from "./shared";
+type Box = { n: number };
+export function run(b: Box) {
+  return format(b.n);
+}
+'''
+
+
+[[suites.tests]]
+name = "a type used by a parameter is checked: a shadowing type at the call is refused"
+input = '''
+type Box = { n: number };
+const show = (b: Box) => b.n;
+export function run(b: { n: number }) {
+  type Box = string;
+  return show(b);
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'show',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `show` everywhere and remove it[\s\S]*`Box`, which `show` uses, means something else at this call'
+
+
+[[suites]]
+name = "doc comments"
+
+
+[[suites.tests]]
+name = "a function declaration keeps its doc comment out of the way: comments attached to it are removed with it"
+input = '''
+/** Doubles. */
+function twice(n: number) {
+  return n * 2;
+}
+
+export const a = (x: number) => twice(x);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'twice',
+	typecheck = true,
+}
+output = '''
+export const a = (x: number) => x * 2;
+'''
+
+
+[[suites]]
+name = "stability of identifier arguments"
+
+
+[[suites.tests]]
+name = "a let of a script file (global) is hoisted too"
+input = '''
+let shared = 1;
+declare function bump(): number;
+const f = (n: number) => bump() + n;
+const result = f(shared);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'f',
+	at = 'src/a.ts:4',
+}
+output = '''
+let shared = 1;
+declare function bump(): number;
+const f = (n: number) => bump() + n;
+const n: number = shared;
+const result = bump() + n;
+'''
+
+
+[[suites]]
+name = "syntax and grammar at the call"
+
+
+[[suites.tests]]
+name = "a label inside the function that clashes with an enclosing label is refused"
+input = '''
+const f = (n: number) => {
+  outer: for (let i = 0; i < n; i++) {
+    if (i > 1) break outer;
+  }
+};
+export function run() {
+  let c = 0;
+  outer: for (;;) {
+    f(3);
+    c++;
+    break outer;
+  }
+  return c;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'f',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `f` everywhere and remove it[\s\S]*`f` has a label `outer`'
+
+
+[[suites]]
+name = "comments and directives"
+
+
+[[suites.tests]]
+name = "a @ts-ignore above the final return is not dropped silently"
+input = '''
+const f = (n: number) => {
+  const m = n + 1;
+  // @ts-ignore
+  return m * 2;
+};
+export function run() {
+  return f(3);
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'f',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `f` everywhere and remove it[\s\S]*`f` has a `@ts-ignore` comment above its final return'
+
+
+[[suites.tests]]
+name = "a @ts-expect-error above the only return is not dropped silently"
+input = '''
+const f = (n: number) => {
+  // @ts-expect-error
+  return n * 2;
+};
+export const r = f(3);
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'f',
+}
+throws = '^REFACTOR_UNAVAILABLE: Cannot unpack `f` everywhere and remove it[\s\S]*`f` has a `@ts-expect-error` comment above its final return'
+
+
+[[suites.tests]]
+name = "a string literal at the start of a function body does not become a directive"
+input = '''
+const label = () => 'use strict';
+export function run() {
+  label();
+  label();
+  return 1;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'label',
+	typecheck = true,
+}
+output = '''
+export function run() {
+  ('use strict');
+  'use strict';
+  return 1;
+}
+'''
+
+
+[[suites.tests]]
+name = "a string literal after other statements stays a plain statement"
+input = '''
+const label = () => 'x';
+export function run() {
+  const a = 1;
+  label();
+  return a;
+}
+'''
+options = {
+	file = 'src/a.ts',
+	symbol = 'label',
+	typecheck = true,
+}
+output = '''
+export function run() {
+  const a = 1;
+  'x';
+  return a;
+}
+'''
